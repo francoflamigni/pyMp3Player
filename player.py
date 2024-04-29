@@ -3,18 +3,40 @@ import sys
 import os
 import platform
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QFrame, QPushButton, QVBoxLayout,
-        QFileDialog, QApplication, QDial, QStyle)
+            QFileDialog, QApplication, QDial, QStyle, QLabel)
 from PyQt6.QtGui import QPalette, QColor, QAction
 from PyQt6.QtCore import Qt, QTimer
 
-from mp3_tag import music_index
-import multiprocessing
-from config import ConfPath, iniConf
+from utils import iniConf
+
+from mp3_tag import music
+
+from dialogs import RadioDlg
+
+def ConfDir():
+    baseDir = os.path.join(os.getenv('APPDATA'), 'MySoft')
+    if os.path.exists(baseDir) is False:
+        os.mkdir(baseDir)
+
+    confDir = path = os.path.join(baseDir, 'music_player')
+    if os.path.exists(confDir) is False:
+        os.mkdir(confDir)
+    return confDir
+
+
+def ConfName(user=''):
+    dir = ConfDir()
+    base = 'music_player'
+    if user != '':
+        base += '_' + user
+    name = os.path.join(dir, base + '.ini')
+    return name
 
 class Player(QMainWindow):
     def __init__(self, master=None):
         QMainWindow.__init__(self, master)
         self.setWindowTitle("Media Player")
+        self.ini = iniConf(ConfName())
 
         cwd = os.getcwd()
         os.environ["PATH"] += os.pathsep + os.path.join(cwd, 'exe')
@@ -146,6 +168,7 @@ class Player(QMainWindow):
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
+
     def play_pause(self):
         """Toggle play/pause status
         """
@@ -184,15 +207,18 @@ class Player(QMainWindow):
         a = 1
 
     def crea_index(self):
-        folder = QFileDialog.getExistingDirectory(self, 'Select Folder', options=QFileDialog.Option.DontUseNativeDialog)
-        if folder != '':
-            mp3 = index_mp3()
-            mp3.index(folder)
+        #start_folder = 'E:\Musica'
+        mp3 = music(self)
+        #folder = QFileDialog.getExistingDirectory(self, 'Select Folder', start_folder, options=QFileDialog.Option.DontUseNativeDialog)
+        #if folder != '':
+        #    mp3 = music_index(self.folder)
+
 
     def open_radio(self):
-        a = iniConf(ConfPath())
+        a = iniConf(ConfName())
         radios = a.get('radio')
-        url = radios['abba']
+        qq = RadioDlg.run(self, radios)
+        url = radios[qq]
 
         # Set the title of the track as window title
         self.media = self.instance.media_new(url)
@@ -201,18 +227,20 @@ class Player(QMainWindow):
             a = 1
         a = 2
 
-    def open_file(self):
+    def open_file(self, filename=''):
         """Open a media file in a MediaPlayer
         """
-        ini = iniConf(ConfPath())
-        dir = ini.get('mp3', 'dir')
-        dialog_txt = "Choose Media File"
-        filename = QFileDialog.getOpenFileName(self, dialog_txt, dir)
-        if not filename:
-            return
+        if filename == '':
+            ini = iniConf(ConfName())
+            dir = ini.get('mp3', 'dir')
+            dialog_txt = "Choose Media File"
+            filename = QFileDialog.getOpenFileName(self, dialog_txt, dir)
+            if not filename:
+                return
+            filename = filename[0]
 
         # getOpenFileName returns a tuple, so use only the actual file name
-        self.media = self.instance.media_new(filename[0])
+        self.media = self.instance.media_new(filename)
         self._play()
 
     def _play(self):
@@ -281,7 +309,7 @@ class Player(QMainWindow):
                 self.stop()
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
+    #multiprocessing.freeze_support()
 
     app = QApplication(sys.argv)
     player = Player()
