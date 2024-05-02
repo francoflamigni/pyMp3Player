@@ -2,16 +2,15 @@ import os.path
 import time
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLineEdit,
-                             QDateEdit, QListWidget, QApplication, QPushButton, QPlainTextEdit,
-                             QStyle, QRadioButton, QLabel, QProgressBar, QCalendarWidget, QTabWidget)
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
+                             QListWidget, QApplication, QPushButton)
 from PyQt6.QtGui import QPixmap
 
 from utils import exitBtn, center_in_parent
 class MusicIndexDlg(QDialog):
-    #dialogReady = pyqtSignal()
     def __init__(self, parent, music, last_folder):
         super(MusicIndexDlg, self).__init__(parent)
+        self.parent = parent
 
         self.setWindowTitle('Catalogo MP3')
         center_in_parent(self, parent, 700, 500)
@@ -57,10 +56,13 @@ class MusicIndexDlg(QDialog):
         h.addWidget(self.tracks)
         wd = QWidget()
         wd.setLayout(h)
-        splitter2.addWidget(wd)  #self.tracks)
+        splitter2.addWidget(wd)
 
         v.addLayout(h0)
         v.addWidget(splitter2)
+        if music.init(last_folder) is True:
+            self.set_artists()
+            self.print(last_folder)
 
     def artist_changed(self):
         items = self.artists.selectedItems()
@@ -86,26 +88,28 @@ class MusicIndexDlg(QDialog):
             #for a in tracks:
             #    self.tracks.addItem(a)
 
-    '''
-    def showEvent(self, event):
-        super(MusicIndexDlg, self).showEvent(event)
-        while self.isVisible() is False:
-            time.sleep(0.1)
-        QApplication.processEvents()
-        time.sleep(2)
-
-        self.dialogReady.emit()
-    '''
-
+    def set_artists(self):
+        self.artists.clear()
+        self.artists.addItems(a for a in self.music.get_artists())
+        '''
+        v = self.music.get_artists()
+        for a in v:
+            self.artists.addItem(a)
+        '''
 
     def index(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder, options=QFileDialog.Option.DontUseNativeDialog)
         if folder != '':
             self.music.index(self.print, folder)
+            self.set_artists()
+            '''
             v = self.music.get_artists()
             self.artists.clear()
             for a in v:
                 self.artists.addItem(a)
+            '''
+
+        '''
         return
 
         self.music.index(self.print)
@@ -113,6 +117,7 @@ class MusicIndexDlg(QDialog):
         v = self.music.get_artists()
         for a in v:
             self.artists.addItem(a)
+        '''
 
     def print(self, t):
         self.prog.setText(t)
@@ -123,10 +128,11 @@ class MusicIndexDlg(QDialog):
         trk = self.tracks.selectedItems()[0].text()
         t = trk + '@' + alb
         tt = self.music.tracks.name[t]
-        self.parent().open_file(tt['file'])
+        self.parent.open_file([tt])
 
         a = 0
 
+    '''
     @staticmethod
     def run(parent, music=None, last_folder=''):
         dlg = MusicIndexDlg(parent, music, last_folder)
@@ -140,21 +146,40 @@ class MusicIndexDlg(QDialog):
 
     def Annulla(self):
         self.done(0)
+    '''
 
 class RadioDlg(QDialog):
     def __init__(self, parent, dict):
         super(RadioDlg, self).__init__(parent)
+        self.radios = dict
+        self.parent = parent
 
+        #self.lab = QLabel('', self)
         v = QVBoxLayout(self)
+        #v.addWidget(self.lab)
         self.list = QListWidget(self)
+        self.list.doubleClicked.connect(self.play)
         v.addWidget(self.list)
 
-        h = exitBtn(self)
-        v.addLayout(h)
+        #h = exitBtn(self)
+        #v.addLayout(h)
 
-        for d in dict.keys():
-            self.list.addItem(d)
+        if dict is not None:
+            for d in dict.keys():
+                self.list.addItem(d)
 
+    '''
+    def print(self, mes):
+        self.lab.setText(mes)
+        QApplication.processEvents()
+    '''
+
+    def play(self):
+        rad = self.list.selectedItems()[0].text()
+        url = self.radios[rad]
+        self.parent.open_radio(url)
+
+    '''
     def Ok(self):
         self.done(1)
 
@@ -169,3 +194,4 @@ class RadioDlg(QDialog):
             if len(items) > 0:
                 return items[0].text()
         return 0
+    '''

@@ -1,18 +1,28 @@
+import time
+
 import vlc
 import sys
 import os
-import platform
-from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QFrame, QPushButton, QVBoxLayout,
-            QFileDialog, QApplication, QDial, QStyle, QLabel)
+import re
+import struct
+import urllib.request as urllib2
+
+from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
+            QFileDialog, QApplication, QDial, QStyle, QTabWidget)
 from PyQt6.QtGui import QPalette, QColor, QAction
 from PyQt6.QtCore import Qt, QTimer
 
 from utils import iniConf
-
 from mp3_tag import music
+from dialogs import RadioDlg, MusicIndexDlg
 
-from dialogs import RadioDlg
-
+'''
+https://streamurl.link/ per trovare stazioni radio
+'''
+def get_tm(secs):
+    min = int(secs / 60)
+    sec = int(secs) - int(min * 60)
+    return "{:02.0F}:{:02.0F}".format(min, sec)
 def ConfDir():
     baseDir = os.path.join(os.getenv('APPDATA'), 'MySoft')
     if os.path.exists(baseDir) is False:
@@ -33,10 +43,16 @@ def ConfName(user=''):
     return name
 
 class Player(QMainWindow):
+    Mode_None = 0
+    Mode_Music = 1
+    Mode_Radio = 2
+    Mode_Play = 3
+    Mode_Pause = 4
     def __init__(self, master=None):
         QMainWindow.__init__(self, master)
         self.setWindowTitle("Media Player")
         self.ini = iniConf(ConfName())
+        self.mode = Player.Mode_None
 
         cwd = os.getcwd()
         os.environ["PATH"] += os.pathsep + os.path.join(cwd, 'exe')
@@ -85,35 +101,57 @@ class Player(QMainWindow):
         return he
 
     def create_ui(self):
-        """Set up the user interface, signals & slots
-        """
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
+        last_folder = self.ini.get('CONF', 'last_folder')
+        self.tab = QTabWidget(self)
+        dlg = MusicIndexDlg(self, music(self), last_folder)
+        self.tab.addTab(dlg, 'Mp3')
+
+        radios = self.ini.get('radio')
+        if radios == '':
+            radios = None
+        self.rd = RadioDlg(self, radios)
+        self.tab.addTab(self.rd, 'Radio')
         # In this widget, the video will be drawn
+
+        #self.videoframe = QFrame()
+
+        '''
         if platform.system() == "Darwin":  # for MacOS
             self.videoframe = QFrame()
         else:
             self.videoframe = QFrame()
 
+
         self.palette = self.videoframe.palette()
         self.palette.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0))
         self.videoframe.setPalette(self.palette)
         self.videoframe.setAutoFillBackground(True)
+        '''
 
+        self.note = QLabel('', self)
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
         self.positionslider.setObjectName('slipos')
         styles = "QSlider#slipos::handle  { background: red; border-radius: 5px }"
         self.positionslider.setStyleSheet(styles)
 
+        hs = QHBoxLayout()
         self.positionslider.setToolTip("Position")
         self.positionslider.setMaximum(1000)
         self.positionslider.sliderMoved.connect(self.set_position)
         self.positionslider.sliderPressed.connect(self.set_position)
+        self.rt_time = QLabel('', self)
+        hs.addWidget(self.rt_time)
+        hs.addWidget(self.positionslider)
+        self.t_time = QLabel('', self)
+        hs.addWidget(self.t_time)
 
         self.hbuttonbox = QHBoxLayout()
         self.playbutton = QPushButton(self)
-        self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+        #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+        self.set_play_icon(Player.Mode_Play)
         self.hbuttonbox.addWidget(self.playbutton)
         self.playbutton.clicked.connect(self.play_pause)
 
@@ -137,45 +175,40 @@ class Player(QMainWindow):
         h2.addWidget(self.volumeDial)
 
         self.vboxlayout = QVBoxLayout()
-        self.vboxlayout.addWidget(self.videoframe)
-        self.vboxlayout.addWidget(self.positionslider)
+        #dlg.show()
+        self.vboxlayout.addWidget(self.tab)
+        self.vboxlayout.addWidget(self.note)
+        #self.vboxlayout.addWidget(self.videoframe)
+        self.vboxlayout.addLayout(hs)
         self.vboxlayout.addLayout(self.hbuttonbox)
         self.vboxlayout.addLayout(h2)
 
         self.widget.setLayout(self.vboxlayout)
 
-        menu_bar = self.menuBar()
-
-        # File menu
-        file_menu = menu_bar.addMenu("File")
-
-        # Add actions to file menu
-        index_action = QAction('Indice', self)
-        open_action = QAction("play Mp3", self)
-        radio_action = QAction('play radio', self)
-        close_action = QAction("Close App", self)
-        file_menu.addAction(index_action)
-        file_menu.addAction(open_action)
-        file_menu.addAction(radio_action)
-        file_menu.addAction(close_action)
-
-        open_action.triggered.connect(self.open_file)
-        radio_action.triggered.connect(self.open_radio)
-        index_action.triggered.connect(self.crea_index)
-        close_action.triggered.connect(sys.exit)
+        #menu_bar = self.menuBar()
 
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
 
+    def set_play_icon(self, type):
+        if type == Player.Mode_Play:
+            ic = 'SP_MediaPlay'
+            tp = 'Play'
+        else:
+            ic = 'SP_MediaPause'
+            tp = 'Pause'
+        self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, ic)))
+        self.playbutton.setToolTip(tp)
+
     def play_pause(self):
         """Toggle play/pause status
         """
         if self.mediaplayer.is_playing():
             self.mediaplayer.pause()
-            self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
-            #self.playbutton.setText("Play")
+            #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+            self.set_play_icon(Player.Mode_Play)
             self.is_paused = True
             self.timer.stop()
         else:
@@ -184,8 +217,8 @@ class Player(QMainWindow):
                 return
 
             self.mediaplayer.play()
-            self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPause')))
-            #self.playbutton.setText("Pause")
+            #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPause')))
+            self.set_play_icon(Player.Mode_Pause)
             self.timer.start()
             self.is_paused = False
 
@@ -193,7 +226,9 @@ class Player(QMainWindow):
         """Stop player
         """
         self.mediaplayer.stop()
-        self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+        #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+        self.set_play_icon(Player.Mode_Play)
+        self.mode = Player.Mode_None
 
     def equal(self, wid):
         if isinstance(wid, QSlider) is True:
@@ -204,33 +239,33 @@ class Player(QMainWindow):
             self.equalizer.set_amp_at_index(v, i)
             v1 = self.equalizer.get_amp_at_index(i)
 
-        a = 1
+    def open_radio(self, url=''):
+        if self.mode != Player.Mode_None:
+            self.stop()
 
-    def crea_index(self):
-        #start_folder = 'E:\Musica'
-        mp3 = music(self)
-        #folder = QFileDialog.getExistingDirectory(self, 'Select Folder', start_folder, options=QFileDialog.Option.DontUseNativeDialog)
-        #if folder != '':
-        #    mp3 = music_index(self.folder)
+        if url == '':
+            a = iniConf(ConfName())
+            radios = a.get('radio')
+            qq = RadioDlg.run(self, radios)
+            url = radios[qq]
 
-
-    def open_radio(self):
-        a = iniConf(ConfName())
-        radios = a.get('radio')
-        qq = RadioDlg.run(self, radios)
-        url = radios[qq]
+        self.url = url
 
         # Set the title of the track as window title
         self.media = self.instance.media_new(url)
         self._play()
+        self.mode = Player.Mode_Radio
+        self.timer.setInterval(5000)
+
         while not self.mediaplayer.is_playing():
-            a = 1
+            pass
         a = 2
 
-    def open_file(self, filename=''):
-        """Open a media file in a MediaPlayer
-        """
-        if filename == '':
+    def open_file(self, tracks=None):
+        if self.mode != Player.Mode_None:
+            self.stop()
+
+        if tracks is None:
             ini = iniConf(ConfName())
             dir = ini.get('mp3', 'dir')
             dialog_txt = "Choose Media File"
@@ -238,12 +273,21 @@ class Player(QMainWindow):
             if not filename:
                 return
             filename = filename[0]
+        else:
+            filename = tracks[0].file
 
+        self.tm = tracks[0].tm_sec
+        self.t_time.setText(get_tm(self.tm))
         # getOpenFileName returns a tuple, so use only the actual file name
         self.media = self.instance.media_new(filename)
         self._play()
+        self.mode = Player.Mode_Music
+        self.timer.setInterval(100)
+        self.note.setText(tracks[0].artist + ' - ' + tracks[0].album + ' - ' + tracks[0].title)
+
 
     def _play(self):
+        self.update_ui()
         # Put the media in the media player
         self.mediaplayer.set_media(self.media)
 
@@ -258,26 +302,45 @@ class Player(QMainWindow):
         # specific, so we must give the ID of the QFrame (or similar object) to
         # vlc. Different platforms have different functions for this
 
+        '''
         if platform.system() == "Linux":  # for Linux using the X Server
             self.mediaplayer.set_xwindow(int(self.videoframe.winId()))
         elif platform.system() == "Windows":  # for Windows
             self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
         elif platform.system() == "Darwin":  # for MacOS
             self.mediaplayer.set_nsobject(int(self.videoframe.winId()))
+        '''
 
 
-        self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
+        self.mediaplayer.set_hwnd(self.winId()) #int(self.videoframe.winId()))
 
         self.play_pause()
 
+    def radio_metadata(self):
+        encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
+        request = urllib2.Request(self.url, headers={'Icy-MetaData': 1})  # request metadata
+        response = urllib2.urlopen(request)
+        metaint = int(response.headers['icy-metaint'])
+        title = ''
+        for _ in range(10):  # # title may be empty initially, try several times
+            response.read(metaint)  # skip to metadata
+            metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte
+            metadata = response.read(metadata_length).rstrip(b'\0')
+            # extract title from the metadata
+            m = re.search(br"StreamTitle='([^']*)';", metadata)
+            if m:
+                title = m.group(1)
+                if title:
+                    break
+
+        self.note.setText(title.decode(encoding, errors='replace'))
+
     def set_volume(self, volume):
-        """Set the volume
-        """
+        # Set the volume
         self.mediaplayer.audio_set_volume(volume)
 
     def set_position(self):
-        """Set the movie position according to the position slider.
-        """
+        # Set the movie position according to the position slider.
 
         # The vlc MediaPlayer needs a float value between 0 and 1, Qt uses
         # integer variables, so you need a factor; the higher the factor, the
@@ -290,7 +353,7 @@ class Player(QMainWindow):
         self.timer.start()
 
     def update_ui(self):
-        """Updates the user interface"""
+        # Updates the user interface
 
         # Set the slider's position to its corresponding media position
         # Note that the setValue function only takes values of type int,
@@ -307,10 +370,14 @@ class Player(QMainWindow):
             # This fixes that "bug".
             if not self.is_paused:
                 self.stop()
+        if self.mode == player.Mode_Radio:
+            self.radio_metadata()
+        elif self.mode == player.Mode_Music:
+            tm = (self.tm * media_pos) / 1000
+            self.rt_time.setText(get_tm(tm))
+
 
 if __name__ == "__main__":
-    #multiprocessing.freeze_support()
-
     app = QApplication(sys.argv)
     player = Player()
     player.show()

@@ -4,10 +4,9 @@ from threading import Thread, Lock
 from queue import Empty, Queue
 import json
 import glob
-from dialogs import MusicIndexDlg
 from utils import ts_date2
 import hashlib
-from PyQt6.QtWidgets import QFileDialog
+import time
 
 def find_last(path):
     f = os.path.join(path, '**')
@@ -22,37 +21,69 @@ class music:
         self.parent = parent
         self.path = path
         self.print = None
+        self.clear()
+
+        self.nth = 12
+        self.inp = Queue(self.nth)
+        self.lock = Lock()
+
+    def clear(self):
         self.artists = artists()
         self.albums = albums()
         self.tracks = tracks()
         self.album_artist = album_artist()
         self.album_track = album_track()
-        self.path = path
-        self.nth = 12
-        self.inp = Queue(self.nth)
-        self.lock = Lock()
-        last_folder = self.parent.ini.get('CONF', 'last_folder')
 
-        MusicIndexDlg.run(parent, self, last_folder)
+    def init(self, folder):
+        if folder == '':
+            return False
+        self.parent.ini.set('CONF', 'last_folder', folder)
+        self.parent.ini.save()
+        hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
+
+        self.clear()
+        jf = os.path.join(folder, 'index.json')
+        if os.path.isfile(jf) is False:
+            return False
+        lst = list(find_last(folder).values())
+        if len(lst) == 0:
+            return False
+        lst = lst[0]
+        lst_t = self.parent.ini.get('CONF', hash)
+        if lst_t == '':
+            return False
+        if float(lst) > float(lst_t):
+            return False
+        self.load(jf)
+        self.path = folder
+        return True
 
     def index(self, print, folder):
-        #folder = QFileDialog.getExistingDirectory(self.parent, 'Select Folder', last_folder, options=QFileDialog.Option.DontUseNativeDialog)
+        if self.init(folder) is True:
+            return
+        if folder == '':
+            return
+        self.path = folder
+        '''
         if folder == '':
             return
         self.path = folder
         self.parent.ini.set('CONF', 'last_folder', folder)
         self.parent.ini.save()
-        jf = os.path.join(self.path, 'index.json')
-
-        lst = list(find_last(self.path).values())
-        if len(lst) > 0:
-            lst = lst[0]
         hash = hashlib.md5(self.path.encode('utf-8')).hexdigest()
-        lst_t = self.parent.ini.get('CONF', hash)
-        if lst_t != '':
-            if float(lst) <= float(lst_t):
-                self.load(os.path.join(self.path, 'index.json'))
-                return
+
+        self.clear()
+        jf = os.path.join(self.path, 'index.json')
+        if os.path.isfile(jf) is True:
+            lst = list(find_last(self.path).values())
+            if len(lst) > 0:
+                lst = lst[0]
+            lst_t = self.parent.ini.get('CONF', hash)
+            if lst_t != '':
+                if float(lst) <= float(lst_t):
+                    self.load(jf)
+                    return
+        '''
 
         self.print = print
         self.searchers = []
@@ -64,6 +95,7 @@ class music:
 
         self.print('Start')
 
+        t0 = time.monotonic()
         self.get_mp3(self.path)
 
         for searcher in self.searchers:
@@ -72,10 +104,13 @@ class music:
         for searcher in self.searchers:
             searcher.join()
 
-        self.print('end')
+        t1 = time.monotonic()
+        self.print('end ' + str(t1 - t0))
 
+        jf = os.path.join(folder, 'index.json')
         self.save(jf)
         v = os.path.getctime(jf)
+        hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
         self.parent.ini.set('CONF', hash, str(v))
         self.parent.ini.save()
 
@@ -88,37 +123,36 @@ class music:
                 if t[0] == 'kill':
                     break
                 path = os.path.join(t[0], t[1])
-                brano = eyed3.load(path)
+                try:
+                    brano = eyed3.load(path)
+                    qq = brano.info.time_secs
+                except:
+                    continue
                 if brano is not None and brano.tag is not None:
                     if brano.tag.title is None:
                         brano.tag.title, _ = os.path.splitext(t[1])
                     if brano.tag.album is None:
                         brano.tag.album = os.path.basename(t[0])
-                    self.add_track(brano.tag, path)
+                    self.add_track(brano.tag, path, brano.info.time_secs)
                     count += 1
             except Empty:
                 continue
         a = 0
     def get_mp3(self, path):
         for root, dirs, files in os.walk(path):
-            if self.tracks.size() > 200:
-                return
+            #if self.tracks.size() > 200:
+            #    return
             self.print(root)
             for file in files:
-                a = 0
                 self.inp.put((root, file))
 
-            #for dir in dirs:
-            #    self.get_mp3(os.path.join(root, dir))
-
-    def add_track(self, tag, path):
+    def add_track(self, tag, path, time_secs):
         with self.lock:
             id_artist = self.artists.add(tag.artist)
             id_album = self.albums.add(tag.album, path)
             self.album_artist.add(id_album, id_artist)
-            id_track = self.tracks.add(tag.title, tag.album, tag.file_info.name)
+            id_track = self.tracks.add(tag, time_secs)
             self.album_track.add(id_album, id_track)
-
 
     def get_artists(self):
         v = [a for a in self.artists.name.keys()]
@@ -175,6 +209,7 @@ class artists:
     def __init__(self):
         self.name = {}
         self.id = 0
+
     def add(self, nome):
         if nome in self.name.keys():
             return self.name[nome]
@@ -184,7 +219,6 @@ class artists:
         return self.id
 
     def save(self):
-        #return json.dumps({'Artists': self.name}, indent=4)
         return json.dumps(self.name, indent=4)
 
     def load(self, dic):
@@ -192,60 +226,68 @@ class artists:
         a = 0
 
 class track:
-    def __init__(self, title, album, id, file):
+    def __init__(self, title='', album='', artist='', id=0, file='', num=0, tm_sec=0.):
         self.title = title
         self.album = album
+        self.artist = artist
         self.id = id
         self.file = file
+        self.num = num
+        self.tm_sec = tm_sec
 
     def set(self, value):
         self.title = value['title']
+        self.album = value['album']
+        self.artist = value['artist']
         self.id = value['id']
-        self.path = value['path']
+        self.file = value['file']
+        self.num = value['num']
+        self.tm_sec = value['tm_sec']
+
 
 class tracks:
     def __init__(self):
         self.name = {}
         self.id = 0
 
-    def add (self, title, album, filename):
-        if title is None or album is None:
-            a = 0
-        nome = title + '@' + album
+    def add(self, tag, time_secs):
+        #tag.title, tag.album, tag.artist, tag.file_info.name, tag.track_num.count, time_secs
+        #if title is None or album is None:
+        #    a = 0
+        nome = tag.title + '@' + tag.album
         if nome in self.name.keys():
             return self.name[nome].id
 
         self.id += 1
-        self.name[nome] = track(title, album, self.id, filename)
+        self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs)
         return self.id
 
     def find(self, ids):
-        tracks = [k.split('@')[0] for k, v in self.name.items() if v['id'] in ids]
-        return tracks
+        tr = [v for v in self.name.values() if v.id in ids]
+        if tr[0].num is not None:
+            tr.sort(key=lambda x: x.num)
+        return [t.title for t in tr]
     def size(self):
         return len(self.name)
 
     def save(self):
-        aa = json.dumps({i:j.__dict__ for i, j in self.name.items()}, indent=4)
-        return json.dumps({i:j.__dict__ for i, j in self.name.items()}, indent=4)
-        #return json.dumps(self.name, indent=4)
-
+        return json.dumps({i: j.__dict__ for i, j in self.name.items()}, indent=4)
 
     def load(self, dic):
         dd = json.loads(dic)
         for key, value in dd.items():
             trk = track()
             trk.set(value)
-            self.title[key] = trk
+            self.name[key] = trk
         a = 0
-    def load(self, dic):
-        self.name = json.loads(dic)
+
 
 class album:
     def __init__(self, title='', id=0, path=''):
         self.title = title
         self.id = id
         self.path = path
+
     def set(self, value):
         self.title = value['title']
         self.id = value['id']
@@ -253,10 +295,13 @@ class album:
 
     def save(self, fp):
         jstr = json.dumps({'title': self.title, 'id': self.id, 'path': self.path})
+
+
 class albums:
     def __init__(self):
         self.title = {}
         self.id = 0
+
     def add(self, title, path):
         if title in self.title.keys():
             return self.title[title].id
@@ -278,12 +323,12 @@ class albums:
             alb = album()
             alb.set(value)
             self.title[key] = alb
-        a = 0
 
 
 class album_artist:
     def __init__(self):
         self.a_a = []
+
     def add(self, album, artist):
         t = (album, artist)
         if t not in self.a_a:
@@ -298,15 +343,18 @@ class album_artist:
 
     def load(self, lst):
         self.a_a = json.loads(lst)
-        a = 0
+
+
 
 class album_track:
     def __init__(self):
         self.a_t = []
+
     def add(self, album, trck):
         t = (album, trck)
         if t not in self.a_t:
             self.a_t.append(t)
+
     def find_tracks(self, album_id):
         v = [t[1] for t in self.a_t if t[0] == album_id]
         return v
@@ -317,9 +365,10 @@ class album_track:
     def load(self, lst):
         self.a_t = json.loads(lst)
 
-
+'''
 def music_index(folderpath):
     m = music(folderpath)
     MusicIndexDlg.run(None, m)
 
     a = 0
+'''
