@@ -1,20 +1,21 @@
-import time
-
+import os
+vlc_path = os.path.join(os.getcwd(), 'exe/VLC')
+#os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
+os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 import sys
-import os
 import re
 import struct
 import urllib.request as urllib2
 
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
-            QFileDialog, QApplication, QDial, QStyle, QTabWidget)
-from PyQt6.QtGui import QPalette, QColor, QAction
+            QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QSizePolicy)
+from PyQt6.QtGui import QIcon, QPainter, QPen
 from PyQt6.QtCore import Qt, QTimer
 
 from utils import iniConf
 from mp3_tag import music
-from dialogs import RadioDlg, MusicIndexDlg
+from dialogs import RadioDlg, MusicIndexDlg, slider_style, eq_slider_style
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -42,6 +43,28 @@ def ConfName(user=''):
     name = os.path.join(dir, base + '.ini')
     return name
 
+class eqSlider(QSlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        qp = QPainter(self)
+        sz = self.size()
+        ti = self.tickInterval()
+        interval = self.maximum() - self.minimum()
+        nt = interval / ti
+
+        len = 3
+
+        bd = 5
+
+        dy = (sz.height() - 2 * bd) / nt
+        y = int(bd + (nt / 2) * dy)
+
+        qp.setPen(QPen(Qt.GlobalColor.red, 3))
+        qp.drawLine(0, y, len, y)
+        qp.drawLine(sz.width(), y, sz.width() - len, y)
+
 class Player(QMainWindow):
     Mode_None = 0
     Mode_Music = 1
@@ -50,55 +73,92 @@ class Player(QMainWindow):
     Mode_Pause = 4
     def __init__(self, master=None):
         QMainWindow.__init__(self, master)
+        cwd = os.getcwd()
+
         self.setWindowTitle("Media Player")
+        self.setWindowIcon(QIcon(os.path.join(cwd, 'icone/pentagram.ico')))
+
         self.ini = iniConf(ConfName())
         self.mode = Player.Mode_None
 
-        cwd = os.getcwd()
-        os.environ["PATH"] += os.pathsep + os.path.join(cwd, 'exe')
+        #vlc_path = os.path.join(cwd, 'exe/VLC')
+        #os.environ["PATH"] += os.pathsep + vlc_path
+        #os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
+        # import vlc
 
         # Create a basic vlc instance
-        self.instance = vlc.Instance(['--gain=8.0'])
+        self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
 
         self.media = None
+
+        self.tracks = []
+        self.index = -1
 
         # Create an empty vlc media player
         self.mediaplayer = self.instance.media_player_new()
 
         self.is_paused = False
 
-        self.equalizer = vlc.AudioEqualizer()
-        self.equalizer.set_amp_at_index(0, 0)  # 60 Hz
-        self.equalizer.set_amp_at_index(5, 1)  # 170 Hz
-        self.equalizer.set_amp_at_index(0, 2)  # 310 Hz
-        self.equalizer.set_amp_at_index(0, 3)  # 600 Hz
-        self.equalizer.set_amp_at_index(0, 4)  # 1 kHz
-        self.equalizer.set_amp_at_index(-5, 5)  # 3 kHz
-        self.equalizer.set_amp_at_index(0, 6)  # 6 kHz
-        self.equalizer.set_amp_at_index(0, 7)  # 12 kHz
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
+
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
+        self.freq = [self.get_band(i) for i in range(nf)]
         self.mediaplayer.set_equalizer(self.equalizer)
 
         self.create_ui()
 
+    def get_band(self, i):
+        f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
+        s = str(int(f / 1000.)) + 'kHz' if f >= 1000. else str(int(f)) + 'Hz'
+        return s
+
     def add_slider(self, i, he):
-        eq = QSlider(Qt.Orientation.Vertical, self)
+        eq = eqSlider(Qt.Orientation.Vertical, self)
         eq.setObjectName('eq' + str(i))
+        eq.setToolTip(str(self.freq[i]))
         eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
         eq.sliderPressed.connect(lambda widget=eq: self.equal(widget))
+        eq.setStyleSheet(eq_slider_style())
         eq.setMaximumHeight(110)
         eq.setRange(-20, 20)
+        eq.setTickInterval(5)
+        eq.setTickPosition(QSlider.TickPosition.TicksBothSides)
         v = self.equalizer.get_amp_at_index(i)
-        eq.setValue(v)
+        eq.setValue(int(v))
         he.addWidget(eq)
         return eq
 
     def create_equalizer(self):
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
         self.eq = []
         he = QHBoxLayout()
-        for i in range(8):
+        he.setContentsMargins(5, 5, 5, 5)
+        for i in range(nf):
             eq = self.add_slider(i, he)
+            #sz = eq.size()
             self.eq.append(eq)
-        return he
+
+        #m = he.sizeConstraint()
+        he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
+
+        wd = QFrame()
+        wd.setStyleSheet("QFrame {background-color: rgb(220, 255, 255);"
+                            "border-width: 1;"
+                            "border-radius: 8;"
+                            "border-style: solid;"
+                            "border-color: rgb(10, 10, 10)}"
+                        )
+        wd.setLayout(he)
+        return wd
+
+    def currentIndexChanged(self, v):
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(v)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            v = self.equalizer.get_amp_at_index(i)
+            self.eq[i].setValue(int(v))
+            a = 0
+
 
     def create_ui(self):
         self.widget = QWidget(self)
@@ -107,7 +167,9 @@ class Player(QMainWindow):
         last_folder = self.ini.get('CONF', 'last_folder')
         self.tab = QTabWidget(self)
         dlg = MusicIndexDlg(self, music(self), last_folder)
+        dlg.setMinimumWidth(500)
         self.tab.addTab(dlg, 'Mp3')
+        self.tab. currentChanged.connect(self.currentChanged)
 
         radios = self.ini.get('radio')
         if radios == '':
@@ -116,82 +178,139 @@ class Player(QMainWindow):
         self.tab.addTab(self.rd, 'Radio')
         # In this widget, the video will be drawn
 
-        #self.videoframe = QFrame()
-
-        '''
-        if platform.system() == "Darwin":  # for MacOS
-            self.videoframe = QFrame()
-        else:
-            self.videoframe = QFrame()
-
-
-        self.palette = self.videoframe.palette()
-        self.palette.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0))
-        self.videoframe.setPalette(self.palette)
-        self.videoframe.setAutoFillBackground(True)
-        '''
-
+        v1 = QVBoxLayout()
         self.note = QLabel('', self)
+        v1.addWidget(self.tab)
+        v1.addWidget(self.note)
+
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
         self.positionslider.setObjectName('slipos')
-        styles = "QSlider#slipos::handle  { background: red; border-radius: 5px }"
-        self.positionslider.setStyleSheet(styles)
-
-        hs = QHBoxLayout()
+        self.positionslider.setStyleSheet(slider_style())
         self.positionslider.setToolTip("Position")
         self.positionslider.setMaximum(1000)
         self.positionslider.sliderMoved.connect(self.set_position)
         self.positionslider.sliderPressed.connect(self.set_position)
         self.rt_time = QLabel('', self)
+        self.rt_time.setMaximumHeight(self.positionslider.height())
+        self.rt_time.setMinimumWidth(30)
+        self.t_time = QLabel('', self)
+        self.t_time.setMaximumHeight(self.positionslider.height())
+        self.t_time.setMinimumWidth(30)
+
+
+        hs = QHBoxLayout()
+        hs.setContentsMargins(1, 1, 1, 1)
         hs.addWidget(self.rt_time)
         hs.addWidget(self.positionslider)
-        self.t_time = QLabel('', self)
         hs.addWidget(self.t_time)
 
-        self.hbuttonbox = QHBoxLayout()
         self.playbutton = QPushButton(self)
-        #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+        self.playbutton.setMaximumWidth(30)
         self.set_play_icon(Player.Mode_Play)
-        self.hbuttonbox.addWidget(self.playbutton)
         self.playbutton.clicked.connect(self.play_pause)
 
         self.stopbutton = QPushButton(self)
+        self.stopbutton.setMaximumWidth(30)
         self.stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
-        self.hbuttonbox.addWidget(self.stopbutton)
         self.stopbutton.clicked.connect(self.stop)
-        self.hbuttonbox.addStretch(1)
 
-        h = self.create_equalizer()
-        h2 = QHBoxLayout()
+        hbt = QHBoxLayout()
+        hbt.addStretch()
+        hbt.setContentsMargins(1, 1, 1, 1)
+        hbt.addWidget(self.playbutton)
+        hbt.addWidget(self.stopbutton)
+        hbt.addStretch()
+
+        vl0 = QVBoxLayout()
+        vl0.setContentsMargins(0, 0, 0, 0)
+        #vl0.addStretch()
+        vl0.addLayout(hs)
+        vl0.addLayout(hbt)
+        #vl0.addStretch()
+        vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
+        wdd = QFrame()
+        wdd.setObjectName('slFrame')
+
+        wdd.setStyleSheet("QFrame#slFrame {background-color: rgb(220, 220, 220);"
+                            "border-width: 1;"
+                            "border-radius: 8;"
+                            "border-style: solid;"
+                            "border-color: rgb(10, 10, 10)}"
+                        )
+
+        wdd.setLayout(vl0)
+
+        heq = self.create_equalizer()
+
+        cmb = QComboBox(self)
+        n = vlc.libvlc_audio_equalizer_get_preset_count()
+        a = vlc.libvlc_audio_equalizer_get_preset_name(0)
+        cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
+                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
+        cmb.currentIndexChanged.connect(self.currentIndexChanged)
 
         self.volumeDial = QDial(self)
         self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
         self.volumeDial.setToolTip("Volume")
         self.volumeDial.setNotchesVisible(True)
         self.volumeDial.setMaximumHeight(80)
-
         self.volumeDial.valueChanged.connect(self.set_volume)
-        h2.addLayout(h)
-        h2.addWidget(self.volumeDial)
+        v3 = QVBoxLayout()
+        v3.addWidget(cmb)
+        v3.addWidget(self.volumeDial)
 
-        self.vboxlayout = QVBoxLayout()
-        #dlg.show()
-        self.vboxlayout.addWidget(self.tab)
-        self.vboxlayout.addWidget(self.note)
-        #self.vboxlayout.addWidget(self.videoframe)
-        self.vboxlayout.addLayout(hs)
-        self.vboxlayout.addLayout(self.hbuttonbox)
-        self.vboxlayout.addLayout(h2)
+        h2 = QHBoxLayout()
+        h2.addWidget(heq)  #)addLayout(heq)
+        h2.addLayout(v3)
 
-        self.widget.setLayout(self.vboxlayout)
+        v4 = QHBoxLayout()
+        self.videoframe = QFrame()
+        self.videoframe.setMinimumHeight(200)
+        self.videoframe.setMinimumWidth(200)
 
-        #menu_bar = self.menuBar()
+
+        p = self.sizePolicy()
+        p.setHeightForWidth(True)
+        self.setSizePolicy(p)
+        v4.addStretch()
+        v4.addWidget(self.videoframe)
+        v4.addStretch()
+
+        v2 = QVBoxLayout()
+        v2.addLayout(v4)
+        v2.addWidget(wdd)
+        v2.addLayout(h2)
+
+        ht = QSplitter()
+        wd1 = QWidget()
+        wd1.setLayout(v1)
+        wd2 = QWidget()
+        wd2.setLayout(v2)
+        ht.addWidget(wd1)
+        ht.addWidget(wd2)
+
+        vt = QVBoxLayout()
+        vt.addWidget(ht)
+
+        self.widget.setLayout(vt)
 
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
+        self.resize(1000, 400)
 
+    def currentChanged (self, index):
+        if index == 1:
+            self.positionslider.hide()
+            self.rt_time.hide()
+            self.t_time.hide()
+        else:
+            self.positionslider.show()
+            self.rt_time.show()
+            self.t_time.show()
+
+        a = 0
     def set_play_icon(self, type):
         if type == Player.Mode_Play:
             ic = 'SP_MediaPlay'
@@ -203,11 +322,9 @@ class Player(QMainWindow):
         self.playbutton.setToolTip(tp)
 
     def play_pause(self):
-        """Toggle play/pause status
-        """
+        # Toggle play/pause status
         if self.mediaplayer.is_playing():
             self.mediaplayer.pause()
-            #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
             self.set_play_icon(Player.Mode_Play)
             self.is_paused = True
             self.timer.stop()
@@ -217,18 +334,16 @@ class Player(QMainWindow):
                 return
 
             self.mediaplayer.play()
-            #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPause')))
             self.set_play_icon(Player.Mode_Pause)
             self.timer.start()
             self.is_paused = False
 
     def stop(self):
-        """Stop player
-        """
+        # Stop player
         self.mediaplayer.stop()
-        #self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
         self.set_play_icon(Player.Mode_Play)
         self.mode = Player.Mode_None
+        self.index = -1
 
     def equal(self, wid):
         if isinstance(wid, QSlider) is True:
@@ -237,7 +352,8 @@ class Player(QMainWindow):
             #v1 = self.equalizer.get_amp_at_index(i)
             v = wid.value()
             self.equalizer.set_amp_at_index(v, i)
-            v1 = self.equalizer.get_amp_at_index(i)
+            self.mediaplayer.set_equalizer(self.equalizer)
+            #v1 = self.equalizer.get_amp_at_index(i)
 
     def open_radio(self, url=''):
         if self.mode != Player.Mode_None:
@@ -257,37 +373,33 @@ class Player(QMainWindow):
         self.mode = Player.Mode_Radio
         self.timer.setInterval(5000)
 
-        while not self.mediaplayer.is_playing():
-            pass
-        a = 2
+        #while not self.mediaplayer.is_playing():
+        #    pass
 
     def open_file(self, tracks=None):
         if self.mode != Player.Mode_None:
             self.stop()
 
-        if tracks is None:
-            ini = iniConf(ConfName())
-            dir = ini.get('mp3', 'dir')
-            dialog_txt = "Choose Media File"
-            filename = QFileDialog.getOpenFileName(self, dialog_txt, dir)
-            if not filename:
-                return
-            filename = filename[0]
-        else:
-            filename = tracks[0].file
+        if tracks is None or len(tracks) == 0:
+            return
 
-        self.tm = tracks[0].tm_sec
+        self.tracks = tracks #copy.deepcopy(tracks)
+        self.index = 0
+        self.play_song()
+
+    def play_song(self):
+
+        self.tm = self.tracks[self.index].tm_sec
+        filename = self.tracks[self.index].file
         self.t_time.setText(get_tm(self.tm))
-        # getOpenFileName returns a tuple, so use only the actual file name
         self.media = self.instance.media_new(filename)
         self._play()
         self.mode = Player.Mode_Music
         self.timer.setInterval(100)
-        self.note.setText(tracks[0].artist + ' - ' + tracks[0].album + ' - ' + tracks[0].title)
+        self.note.setText(self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title)
 
 
     def _play(self):
-        self.update_ui()
         # Put the media in the media player
         self.mediaplayer.set_media(self.media)
 
@@ -312,9 +424,12 @@ class Player(QMainWindow):
         '''
 
 
-        self.mediaplayer.set_hwnd(self.winId()) #int(self.videoframe.winId()))
+        self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
 
         self.play_pause()
+        while not self.mediaplayer.is_playing():
+            pass
+        self.update_ui()
 
     def radio_metadata(self):
         encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
@@ -333,7 +448,10 @@ class Player(QMainWindow):
                 if title:
                     break
 
-        self.note.setText(title.decode(encoding, errors='replace'))
+        if isinstance(title, str):
+            self.note.setText(title)
+        else:
+            self.note.setText(title.decode(encoding, errors='replace'))
 
     def set_volume(self, volume):
         # Set the volume
@@ -368,8 +486,12 @@ class Player(QMainWindow):
             # After the video finished, the play button stills shows "Pause",
             # which is not the desired behavior of a media player.
             # This fixes that "bug".
-            if not self.is_paused:
-                self.stop()
+            if not self.is_paused and self.mode != Player.Mode_None:
+                if self.index < len(self.tracks) - 1:
+                    self.index += 1
+                    self.play_song()
+                else:
+                    self.stop()
         if self.mode == player.Mode_Radio:
             self.radio_metadata()
         elif self.mode == player.Mode_Music:

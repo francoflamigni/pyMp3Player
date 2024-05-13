@@ -1,0 +1,7 @@
+node_modules/
+dist/
+installer/build
+installer/dist
+installer/*.spec
+#setup/
+exe/

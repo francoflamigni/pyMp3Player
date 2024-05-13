@@ -35,6 +35,7 @@ class MusicIndexDlg(QDialog):
         self.albums.setSortingEnabled(False)
         self.albums.addItem('album')
         self.albums.itemSelectionChanged.connect(self.album_changed)
+        self.albums.doubleClicked.connect(self.play_album)
 
         splitter1 = QSplitter(self)
         splitter1.setOrientation(Qt.Orientation.Horizontal)
@@ -44,7 +45,7 @@ class MusicIndexDlg(QDialog):
         self.tracks = QListWidget(self)
         self.tracks.setSortingEnabled(False)
         self.tracks.addItem('tracce')
-        self.tracks.doubleClicked.connect(self.play)
+        self.tracks.doubleClicked.connect(self.play_song)
 
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
@@ -68,17 +69,21 @@ class MusicIndexDlg(QDialog):
         items = self.artists.selectedItems()
         if len(items) > 0:
             self.albums.clear()
+            self.tracks.clear()
             t = items[0].text()
             albums = self.music.find_albums(t)
             for a in albums:
-                self.albums.addItem(a)
+                self.albums.addItem(a.title)
 
     def album_changed(self):
         items = self.albums.selectedItems()
+        art = self.artists.selectedItems()
         if len(items) > 0:
             self.tracks.clear()
             t = items[0].text()
-            tracks = self.music.find_tracks(t)
+            if len(art) == 1:
+                art_name = art[0].text()
+            tracks = self.music.find_tracks(t, art_name)
             pic = self.music.find_pic(t)
             qp = QPixmap()
             qp.loadFromData(pic)
@@ -91,11 +96,6 @@ class MusicIndexDlg(QDialog):
     def set_artists(self):
         self.artists.clear()
         self.artists.addItems(a for a in self.music.get_artists())
-        '''
-        v = self.music.get_artists()
-        for a in v:
-            self.artists.addItem(a)
-        '''
 
     def index(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder, options=QFileDialog.Option.DontUseNativeDialog)
@@ -109,44 +109,33 @@ class MusicIndexDlg(QDialog):
                 self.artists.addItem(a)
             '''
 
-        '''
-        return
-
-        self.music.index(self.print)
-        self.print('Terminato')
-        v = self.music.get_artists()
-        for a in v:
-            self.artists.addItem(a)
-        '''
-
     def print(self, t):
         self.prog.setText(t)
         QApplication.processEvents()
 
-    def play(self):
+    def play_song(self):
         alb = self.albums.selectedItems()[0].text()
         trk = self.tracks.selectedItems()[0].text()
         t = trk + '@' + alb
         tt = self.music.tracks.name[t]
         self.parent.open_file([tt])
 
+    def play_album(self):
+        sel_alb = self.albums.selectedItems()
+        if sel_alb is None or len(sel_alb) == 0:
+            return
+        alb = sel_alb[0].text()
+        trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
+        '''
+        for trk in trks:
+            t = trk + '@' + alb
+            tt = self.music.tracks.name[t]
+        '''
+        v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
+        self.parent.open_file(v)
+        #self.parent.open_file([tt])
+
         a = 0
-
-    '''
-    @staticmethod
-    def run(parent, music=None, last_folder=''):
-        dlg = MusicIndexDlg(parent, music, last_folder)
-
-        if dlg.exec() == 1:
-            return 1
-        return 0
-
-    def Ok(self):
-        self.done(1)
-
-    def Annulla(self):
-        self.done(0)
-    '''
 
 class RadioDlg(QDialog):
     def __init__(self, parent, dict):
@@ -195,3 +184,60 @@ class RadioDlg(QDialog):
                 return items[0].text()
         return 0
     '''
+
+def slider_style():
+    QSS = """
+    QSlider {
+        min-height: 20px;
+    }
+
+    QSlider::groove:horizontal {
+        border: 0px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #888, stop:1 #ddd);
+        height: 12px;
+        border-radius: 10px;
+    }
+
+    QSlider::handle {
+        background: qradialgradient(cx:0, cy:0, radius: 1.2, fx:0.35,
+                                    fy:0.3, stop:0 #eef, stop:1 #002);
+        height: 10px;
+        width: 20px;
+        border-radius: 10px;
+    }
+
+    QSlider::sub-page:horizontal {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00C, stop:1 #00C);
+        border-top-left-radius: 7px;
+        border-bottom-left-radius: 7px;
+    }
+
+    """
+    return QSS
+
+def eq_slider_style():
+    QSS = """
+    QSlider {
+        min-height: 90px;
+        border: 5px;
+    }
+
+    QSlider::groove:horizontal {
+        border: 2px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #888, stop:1 #ddd);
+        height: 6px;
+        border-radius: 3px;
+    }
+
+    QSlider::handle {
+        background: qradialgradient(cx:0, cy:0, radius: 1.2, fx:0.35,
+                                    fy:0.3, stop:0 #eef, stop:1 #002);
+        height: 4px;
+        width: 2px;
+        border-radius: 2px;
+    }
+
+
+
+    """
+    return QSS

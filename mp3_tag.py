@@ -7,6 +7,7 @@ import glob
 from utils import ts_date2
 import hashlib
 import time
+import datetime
 
 def find_last(path):
     f = os.path.join(path, '**')
@@ -149,7 +150,7 @@ class music:
     def add_track(self, tag, path, time_secs):
         with self.lock:
             id_artist = self.artists.add(tag.artist)
-            id_album = self.albums.add(tag.album, path)
+            id_album = self.albums.add(tag, path)
             self.album_artist.add(id_album, id_artist)
             id_track = self.tracks.add(tag, time_secs)
             self.album_track.add(id_album, id_track)
@@ -166,12 +167,12 @@ class music:
             return albums
         return []
 
-    def find_tracks(self, album):
+    def find_tracks(self, album, art=''):
         tracks = []
         if album in self.albums.title.keys():
             alb = self.albums.title[album]
             tracks_id = self.album_track.find_tracks(alb.id)
-            tracks = self.tracks.find(tracks_id)
+            tracks = self.tracks.find(tracks_id, art)
         return tracks
 
     def find_pic(self, album):
@@ -195,7 +196,11 @@ class music:
 
     def load(self, path):
         with open(path, 'r') as fp:
-            data = json.load(fp)
+            try:
+                data = json.load(fp)
+            except json.JSONDecodeError as js:
+                return
+
             a = 0
         self.artists.load(data[0])
         self.albums.load(data[1])
@@ -262,11 +267,11 @@ class tracks:
         self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs)
         return self.id
 
-    def find(self, ids):
+    def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         if tr[0].num is not None:
             tr.sort(key=lambda x: x.num)
-        return [t.title for t in tr]
+        return [t.title for t in tr if art in t.artist]
     def size(self):
         return len(self.name)
 
@@ -283,18 +288,20 @@ class tracks:
 
 
 class album:
-    def __init__(self, title='', id=0, path=''):
+    def __init__(self, title='', year=0, id=0, path=''):
         self.title = title
+        self.year = year
         self.id = id
         self.path = path
 
     def set(self, value):
         self.title = value['title']
+        self.year = value['year']
         self.id = value['id']
         self.path = value['path']
 
     def save(self, fp):
-        jstr = json.dumps({'title': self.title, 'id': self.id, 'path': self.path})
+        jstr = json.dumps({'title': self.title, 'year': self.year, 'id': self.id, 'path': self.path})
 
 
 class albums:
@@ -302,19 +309,34 @@ class albums:
         self.title = {}
         self.id = 0
 
-    def add(self, title, path):
+    def add(self, tag, path):
+        title = tag.album
         if title in self.title.keys():
             return self.title[title].id
 
         self.id += 1
-        self.title[title] = album(title, self.id, path)
+
+        year = 1900
+        try:
+            year = tag.recording_date.year
+        except:
+            if isinstance(tag.recording_date, int):
+                year = tag.recording_date
+
+        self.title[title] = album(title, year, self.id, path) #tag.recording_date
         return self.id
 
     def find(self, ids):
-        albums = [k for k, v in self.title.items() if v.id in ids]
+        albums = [v for v in self.title.values() if v.id in ids]
+        if albums[0].year is not None:
+            albums.sort(key=lambda x: x.year)
         return albums
 
     def save(self):
+        for i, j in self.title.items():
+            a = i
+            b = j.__dict__
+            c = 0
         return json.dumps({i:j.__dict__ for i, j in self.title.items()}, indent=4)
 
     def load(self, dic):
