@@ -5,3 +5,4 @@ installer/dist
 installer/*.spec
 #setup/
 exe/
+.idea/
