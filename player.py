@@ -1,7 +1,9 @@
 import os
+import time
+
 vlc_path = os.path.join(os.getcwd(), 'exe/VLC')
-#os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
+
 import vlc
 import sys
 import re
@@ -9,7 +11,7 @@ import struct
 import urllib.request as urllib2
 
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
-            QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QSizePolicy)
+            QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit)
 from PyQt6.QtGui import QIcon, QPainter, QPen
 from PyQt6.QtCore import Qt, QTimer
 
@@ -169,17 +171,18 @@ class Player(QMainWindow):
         dlg = MusicIndexDlg(self, music(self), last_folder)
         dlg.setMinimumWidth(500)
         self.tab.addTab(dlg, 'Mp3')
-        self.tab. currentChanged.connect(self.currentChanged)
+        #self.tab. currentChanged.connect(self.currentChanged)
 
         radios = self.ini.get('radio')
-        if radios == '':
-            radios = None
+        #if radios == '':
+        #    radios = None
         self.rd = RadioDlg(self, radios)
         self.tab.addTab(self.rd, 'Radio')
-        # In this widget, the video will be drawn
 
         v1 = QVBoxLayout()
-        self.note = QLabel('', self)
+        self.note = QLineEdit(self) #QLabel('', self)
+        self.note.setReadOnly(True)
+        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
         v1.addWidget(self.tab)
         v1.addWidget(self.note)
 
@@ -227,7 +230,11 @@ class Player(QMainWindow):
         vl0.addLayout(hs)
         vl0.addLayout(hbt)
         #vl0.addStretch()
-        vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
+
+        vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
+        #vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)
+
+
         wdd = QFrame()
         wdd.setObjectName('slFrame')
 
@@ -268,7 +275,6 @@ class Player(QMainWindow):
         self.videoframe.setMinimumHeight(200)
         self.videoframe.setMinimumWidth(200)
 
-
         p = self.sizePolicy()
         p.setHeightForWidth(True)
         self.setSizePolicy(p)
@@ -303,12 +309,13 @@ class Player(QMainWindow):
     def currentChanged (self, index):
         if index == 1:
             self.positionslider.hide()
-            self.rt_time.hide()
-            self.t_time.hide()
+            self.rt_time.clear()
+            self.t_time.clear()
+            self.add_note('')
+
         else:
             self.positionslider.show()
-            self.rt_time.show()
-            self.t_time.show()
+            self.add_note('')
 
         a = 0
     def set_play_icon(self, type):
@@ -359,12 +366,6 @@ class Player(QMainWindow):
         if self.mode != Player.Mode_None:
             self.stop()
 
-        if url == '':
-            a = iniConf(ConfName())
-            radios = a.get('radio')
-            qq = RadioDlg.run(self, radios)
-            url = radios[qq]
-
         self.url = url
 
         # Set the title of the track as window title
@@ -373,8 +374,7 @@ class Player(QMainWindow):
         self.mode = Player.Mode_Radio
         self.timer.setInterval(5000)
 
-        #while not self.mediaplayer.is_playing():
-        #    pass
+        self.currentChanged(1)
 
     def open_file(self, tracks=None):
         if self.mode != Player.Mode_None:
@@ -386,9 +386,9 @@ class Player(QMainWindow):
         self.tracks = tracks #copy.deepcopy(tracks)
         self.index = 0
         self.play_song()
+        self.currentChanged(0)
 
     def play_song(self):
-
         self.tm = self.tracks[self.index].tm_sec
         filename = self.tracks[self.index].file
         self.t_time.setText(get_tm(self.tm))
@@ -396,7 +396,13 @@ class Player(QMainWindow):
         self._play()
         self.mode = Player.Mode_Music
         self.timer.setInterval(100)
-        self.note.setText(self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title)
+        tt = self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title
+        self.add_note(tt)
+
+    def add_note(self, txt):
+        self.note.setText(txt)
+        self.note.setToolTip(txt)
+        self.note.setCursorPosition(0)
 
 
     def _play(self):
@@ -409,25 +415,16 @@ class Player(QMainWindow):
         # Set the title of the track as window title
         self.setWindowTitle(self.media.get_meta(0))
 
-        # The media player has to be 'connected' to the QFrame (otherwise the
-        # video would be displayed in it's own window). This is platform
-        # specific, so we must give the ID of the QFrame (or similar object) to
-        # vlc. Different platforms have different functions for this
-
-        '''
-        if platform.system() == "Linux":  # for Linux using the X Server
-            self.mediaplayer.set_xwindow(int(self.videoframe.winId()))
-        elif platform.system() == "Windows":  # for Windows
-            self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
-        elif platform.system() == "Darwin":  # for MacOS
-            self.mediaplayer.set_nsobject(int(self.videoframe.winId()))
-        '''
-
-
         self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
 
         self.play_pause()
+        tm0 = time.monotonic()
         while not self.mediaplayer.is_playing():
+            dt = time.monotonic() - tm0
+            if dt > 10:
+                self.add_note('timeout')
+                self.stop()
+                break
             pass
         self.update_ui()
 
@@ -449,9 +446,9 @@ class Player(QMainWindow):
                     break
 
         if isinstance(title, str):
-            self.note.setText(title)
+            self.add_note(title)
         else:
-            self.note.setText(title.decode(encoding, errors='replace'))
+            self.add_note(title.decode(encoding, errors='replace'))
 
     def set_volume(self, volume):
         # Set the volume

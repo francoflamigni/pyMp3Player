@@ -389,9 +389,9 @@ class iniConf:
 
     def get(self, k1=None, k2=None):
         if k1 is None:
-            return self.config_object.sections()
+            return self.config_object.sections() # array di stringhe con il nome delle sezioni
         if k1 not in self.conf.keys():
-            return ''
+            return '' if k2 is not None else None
         sez = self.conf[k1]
         if k2 is None:
             return sez
