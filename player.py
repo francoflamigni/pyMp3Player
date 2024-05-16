@@ -6,9 +6,7 @@ os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 
 import vlc
 import sys
-import re
-import struct
-import urllib.request as urllib2
+import scrobbler
 
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
             QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit)
@@ -45,6 +43,7 @@ def ConfName(user=''):
     name = os.path.join(dir, base + '.ini')
     return name
 
+# subclass slider to highlight central tick
 class eqSlider(QSlider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -57,7 +56,6 @@ class eqSlider(QSlider):
         nt = interval / ti
 
         len = 3
-
         bd = 5
 
         dy = (sz.height() - 2 * bd) / nt
@@ -83,11 +81,6 @@ class Player(QMainWindow):
         self.ini = iniConf(ConfName())
         self.mode = Player.Mode_None
 
-        #vlc_path = os.path.join(cwd, 'exe/VLC')
-        #os.environ["PATH"] += os.pathsep + vlc_path
-        #os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_path
-        # import vlc
-
         # Create a basic vlc instance
         self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
 
@@ -108,6 +101,7 @@ class Player(QMainWindow):
         self.mediaplayer.set_equalizer(self.equalizer)
 
         self.create_ui()
+        self.show()
 
     def get_band(self, i):
         f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
@@ -130,17 +124,15 @@ class Player(QMainWindow):
         he.addWidget(eq)
         return eq
 
-    def create_equalizer(self):
+    def equalizer_ui(self):
         nf = vlc.libvlc_audio_equalizer_get_band_count()
         self.eq = []
         he = QHBoxLayout()
-        he.setContentsMargins(5, 5, 5, 5)
+        he.setContentsMargins(5, 15, 5, 5)
         for i in range(nf):
             eq = self.add_slider(i, he)
-            #sz = eq.size()
             self.eq.append(eq)
 
-        #m = he.sizeConstraint()
         he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
 
         wd = QFrame()
@@ -166,105 +158,45 @@ class Player(QMainWindow):
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
-        last_folder = self.ini.get('CONF', 'last_folder')
         self.tab = QTabWidget(self)
+        last_folder = self.ini.get('CONF', 'last_folder')
         dlg = MusicIndexDlg(self, music(self), last_folder)
         dlg.setMinimumWidth(500)
         self.tab.addTab(dlg, 'Mp3')
-        #self.tab. currentChanged.connect(self.currentChanged)
 
         radios = self.ini.get('radio')
-        #if radios == '':
-        #    radios = None
-        self.rd = RadioDlg(self, radios)
-        self.tab.addTab(self.rd, 'Radio')
+        rd = RadioDlg(self, radios)
+        self.tab.addTab(rd, 'Radio')
 
         v1 = QVBoxLayout()
         self.note = QLineEdit(self) #QLabel('', self)
         self.note.setReadOnly(True)
         self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
         v1.addWidget(self.tab)
-        v1.addWidget(self.note)
+        #v1.addWidget(self.note)
 
-        self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
-        self.positionslider.setObjectName('slipos')
-        self.positionslider.setStyleSheet(slider_style())
-        self.positionslider.setToolTip("Position")
-        self.positionslider.setMaximum(1000)
-        self.positionslider.sliderMoved.connect(self.set_position)
-        self.positionslider.sliderPressed.connect(self.set_position)
-        self.rt_time = QLabel('', self)
-        self.rt_time.setMaximumHeight(self.positionslider.height())
-        self.rt_time.setMinimumWidth(30)
-        self.t_time = QLabel('', self)
-        self.t_time.setMaximumHeight(self.positionslider.height())
-        self.t_time.setMinimumWidth(30)
+        # position slider e tempi totali e parziali
+        hs = self.position_slider_ui()
 
+        # play and stop buttons
+        hbt = self.play_stop_ui()
 
-        hs = QHBoxLayout()
-        hs.setContentsMargins(1, 1, 1, 1)
-        hs.addWidget(self.rt_time)
-        hs.addWidget(self.positionslider)
-        hs.addWidget(self.t_time)
-
-        self.playbutton = QPushButton(self)
-        self.playbutton.setMaximumWidth(30)
-        self.set_play_icon(Player.Mode_Play)
-        self.playbutton.clicked.connect(self.play_pause)
-
-        self.stopbutton = QPushButton(self)
-        self.stopbutton.setMaximumWidth(30)
-        self.stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
-        self.stopbutton.clicked.connect(self.stop)
-
-        hbt = QHBoxLayout()
-        hbt.addStretch()
-        hbt.setContentsMargins(1, 1, 1, 1)
-        hbt.addWidget(self.playbutton)
-        hbt.addWidget(self.stopbutton)
-        hbt.addStretch()
+        # visual effects frame
+        wdd = self.visual_effect_ui()
 
         vl0 = QVBoxLayout()
         vl0.setContentsMargins(0, 0, 0, 0)
-        #vl0.addStretch()
+        vl0.addWidget(self.note)
         vl0.addLayout(hs)
         vl0.addLayout(hbt)
-        #vl0.addStretch()
-
         vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
-        #vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)
-
-
-        wdd = QFrame()
-        wdd.setObjectName('slFrame')
-
-        wdd.setStyleSheet("QFrame#slFrame {background-color: rgb(220, 220, 220);"
-                            "border-width: 1;"
-                            "border-radius: 8;"
-                            "border-style: solid;"
-                            "border-color: rgb(10, 10, 10)}"
-                        )
 
         wdd.setLayout(vl0)
 
-        heq = self.create_equalizer()
+        heq = self.equalizer_ui()
 
-        cmb = QComboBox(self)
-        n = vlc.libvlc_audio_equalizer_get_preset_count()
-        a = vlc.libvlc_audio_equalizer_get_preset_name(0)
-        cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
-                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
-        cmb.currentIndexChanged.connect(self.currentIndexChanged)
-
-        self.volumeDial = QDial(self)
-        self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
-        self.volumeDial.setToolTip("Volume")
-        self.volumeDial.setNotchesVisible(True)
-        self.volumeDial.setMaximumHeight(80)
-        self.volumeDial.valueChanged.connect(self.set_volume)
-        v3 = QVBoxLayout()
-        v3.addWidget(cmb)
-        v3.addWidget(self.volumeDial)
+        # volume
+        v3 = self.volume_ui()
 
         h2 = QHBoxLayout()
         h2.addWidget(heq)  #)addLayout(heq)
@@ -305,6 +237,77 @@ class Player(QMainWindow):
         self.timer.timeout.connect(self.update_ui)
 
         self.resize(1000, 400)
+
+    def position_slider_ui(self):
+        self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
+        self.positionslider.setObjectName('slipos')
+        self.positionslider.setStyleSheet(slider_style())
+        self.positionslider.setToolTip("Position")
+        self.positionslider.setMaximum(1000)
+        self.positionslider.sliderMoved.connect(self.set_position)
+        self.positionslider.sliderPressed.connect(self.set_position)
+        self.rt_time = QLabel('', self)
+        self.rt_time.setMaximumHeight(self.positionslider.height())
+        self.rt_time.setMinimumWidth(30)
+        self.t_time = QLabel('', self)
+        self.t_time.setMaximumHeight(self.positionslider.height())
+        self.t_time.setMinimumWidth(30)
+        hs = QHBoxLayout()
+        hs.setContentsMargins(1, 1, 1, 1)
+        hs.addWidget(self.rt_time)
+        hs.addWidget(self.positionslider)
+        hs.addWidget(self.t_time)
+        return hs
+
+    def visual_effect_ui(self):
+        wdd = QFrame()
+        wdd.setObjectName('slFrame')
+
+        wdd.setStyleSheet("QFrame#slFrame {background-color: rgb(220, 220, 220);"
+                            "border-width: 1;"
+                            "border-radius: 8;"
+                            "border-style: solid;"
+                            "border-color: rgb(10, 10, 10)}"
+                        )
+        return wdd
+
+    def volume_ui(self):
+        cmb = QComboBox(self)
+        n = vlc.libvlc_audio_equalizer_get_preset_count()
+        a = vlc.libvlc_audio_equalizer_get_preset_name(0)
+        cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
+                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
+        cmb.currentIndexChanged.connect(self.currentIndexChanged)
+
+        self.volumeDial = QDial(self)
+        self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
+        self.volumeDial.setToolTip("Volume")
+        self.volumeDial.setNotchesVisible(True)
+        self.volumeDial.setMaximumHeight(80)
+        self.volumeDial.valueChanged.connect(self.set_volume)
+        v3 = QVBoxLayout()
+        v3.addWidget(cmb)
+        v3.addWidget(self.volumeDial)
+        return v3
+
+    def play_stop_ui(self):
+        self.playbutton = QPushButton(self)
+        self.playbutton.setMaximumWidth(30)
+        self.set_play_icon(Player.Mode_Play)
+        self.playbutton.clicked.connect(self.play_pause)
+
+        self.stopbutton = QPushButton(self)
+        self.stopbutton.setMaximumWidth(30)
+        self.stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
+        self.stopbutton.clicked.connect(self.stop)
+
+        hbt = QHBoxLayout()
+        hbt.addStretch()
+        hbt.setContentsMargins(1, 1, 1, 1)
+        hbt.addWidget(self.playbutton)
+        hbt.addWidget(self.stopbutton)
+        hbt.addStretch()
+        return hbt
 
     def currentChanged (self, index):
         if index == 1:
@@ -429,11 +432,16 @@ class Player(QMainWindow):
         self.update_ui()
 
     def radio_metadata(self):
-        encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
+        title = scrobbler.get_title(self.url)
+        self.add_note(title)
+        '''
         request = urllib2.Request(self.url, headers={'Icy-MetaData': 1})  # request metadata
-        response = urllib2.urlopen(request)
+        try:
+            response = urllib2.urlopen(request)
+        except:
+            self.add_note(title)
+            return
         metaint = int(response.headers['icy-metaint'])
-        title = ''
         for _ in range(10):  # # title may be empty initially, try several times
             response.read(metaint)  # skip to metadata
             metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte
@@ -448,7 +456,9 @@ class Player(QMainWindow):
         if isinstance(title, str):
             self.add_note(title)
         else:
+            encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
             self.add_note(title.decode(encoding, errors='replace'))
+        '''
 
     def set_volume(self, volume):
         # Set the volume
@@ -499,6 +509,6 @@ class Player(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     player = Player()
-    player.show()
-    player.resize(640, 480)
+    #player.show()
+    #player.resize(640, 480)
     sys.exit(app.exec())

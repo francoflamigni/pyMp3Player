@@ -1,12 +1,29 @@
-import os.path
-import time
-
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
-                             QListWidget, QApplication, QPushButton)
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
+                             QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
+                             QHeaderView)
 
-from utils import exitBtn, center_in_parent
+import scrobbler
+from pyradios import RadioBrowser
+
+from utils import center_in_parent
+
+'''
+https://github.com/andreztz/pyradios/tree/main/pyradios
+'''
+def poll_radio(url):
+    #sst = streamscrobbler()
+
+    stationinfo = scrobbler.get_server_info(url)
+
+
+    ##metadata is the bitrate and current song
+    metadata = stationinfo.get("metadata")
+
+    ## status is the integer to tell if the server is up or down, 0 means down, 1 up, 2 means up but also got metadata.
+    status = stationinfo.get("status")
+
 class MusicIndexDlg(QDialog):
     def __init__(self, parent, music, last_folder):
         super(MusicIndexDlg, self).__init__(parent)
@@ -90,8 +107,6 @@ class MusicIndexDlg(QDialog):
             self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
             self.tracks.addItems(a for a in tracks)
-            #for a in tracks:
-            #    self.tracks.addItem(a)
 
     def set_artists(self):
         self.artists.clear()
@@ -102,12 +117,6 @@ class MusicIndexDlg(QDialog):
         if folder != '':
             self.music.index(self.print, folder)
             self.set_artists()
-            '''
-            v = self.music.get_artists()
-            self.artists.clear()
-            for a in v:
-                self.artists.addItem(a)
-            '''
 
     def print(self, t):
         self.prog.setText(t)
@@ -126,64 +135,110 @@ class MusicIndexDlg(QDialog):
             return
         alb = sel_alb[0].text()
         trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
-        '''
-        for trk in trks:
-            t = trk + '@' + alb
-            tt = self.music.tracks.name[t]
-        '''
+
         v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
         self.parent.open_file(v)
-        #self.parent.open_file([tt])
 
-        a = 0
 
 class RadioDlg(QDialog):
     def __init__(self, parent, dict):
         super(RadioDlg, self).__init__(parent)
         self.radios = dict
-        self.parent = parent
+        self.wparent = parent
 
-        #self.lab = QLabel('', self)
         v = QVBoxLayout(self)
-        #v.addWidget(self.lab)
-        self.list = QListWidget(self)
-        self.list.doubleClicked.connect(self.play)
-        v.addWidget(self.list)
 
-        #h = exitBtn(self)
-        #v.addLayout(h)
+        h = QHBoxLayout()
+        lab = QLabel('Ricerca', self)
+        self.ed = QLineEdit(self)
+        b0 = QPushButton(self)
+        b0.clicked.connect(self.search)
+        h.addWidget(lab)
+        h.addWidget(self.ed)
+        h.addWidget(b0)
+
+        sp = QSplitter(self)
+        sp.setOrientation(Qt.Orientation.Vertical)
+
+        v1 = QVBoxLayout()
+        v1.addLayout(h)
+        self.table = QTableWidget(self)
+        v1.addWidget(self.table)
+
+        w = QWidget()
+        w.setLayout(v1)
+        sp.addWidget(w)
+
+        self.favorites = QListWidget(self)
+        self.favorites.doubleClicked.connect(self.play)
+        sp.addWidget(self.favorites)
+        v.addWidget(sp)
 
         if dict is not None:
             for d in dict.keys():
-                self.list.addItem(d)
+                self.favorites.addItem(d)
 
-    '''
-    def print(self, mes):
-        self.lab.setText(mes)
-        QApplication.processEvents()
-    '''
+    def search(self):
+        src = self.ed.text()
+        if len(src) > 0:
+            rb = RadioBrowser()
+            a = rb.search(name=src, name_exact=False, hidebroken=True)
+            self.fill_table(a)
+
+    def fill_table(self, list):
+        self.table.setRowCount(0)
+        self.wparent.stop()
+        if len(list) == 0:
+            return
+        radios = []
+        for l in list:
+            if 'ref' in l['url']:
+                continue
+            f_icon = l['favicon']
+            pix = scrobbler.get_thumbnail(f_icon)
+            r = RadioStation(l['name'], l['url'], l['bitrate'], l['country'])
+            radios.append(r)
+
+        fields = ['Nome', 'bitrate', 'paese', ' ']
+        self.table.setColumnCount(len(fields))
+        self.table.setHorizontalHeaderLabels(fields)
+        self.table.cellClicked.connect(self.onCellClicked)
+
+        for r in radios:
+            numRows = self.table.rowCount()
+
+            self.table.insertRow(numRows)
+            qi = QTableWidgetItem(r.name)
+            qi.setData(Qt.ItemDataRole.UserRole, r)
+            self.table.setItem(numRows, 0, qi)
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+            self.table.setItem(numRows, 1, QTableWidgetItem(r.bitrate))
+            self.table.setItem(numRows, 2, QTableWidgetItem(r.paese))
+            qi1 = QTableWidgetItem()
+            qi1.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
+            self.table.setItem(numRows, 3, qi1)
+            self.table.setColumnWidth(3, 10)
+
+    def onCellClicked(self, nr, nc):
+        if nc == 3:
+            b = self.wparent
+            b.stop()
+            qi = self.table.item(0, 0)
+            dat = qi.data(Qt.ItemDataRole.UserRole)
+            url = dat.url
+            b.open_radio(url)
 
     def play(self):
-        rad = self.list.selectedItems()[0].text()
+        rad = self.favorites.selectedItems()[0].text()
         url = self.radios[rad]
-        self.parent.open_radio(url)
+        self.wparent.open_radio(url)
 
-    '''
-    def Ok(self):
-        self.done(1)
-
-    def Annulla(self):
-        self.done(0)
-
-    @staticmethod
-    def run(parent, dic):
-        dlg = RadioDlg(parent, dic)
-        if dlg.exec() == 1:
-            items = dlg.list.selectedItems()
-            if len(items) > 0:
-                return items[0].text()
-        return 0
-    '''
+class RadioStation:
+    def __init__(self, name='', url='', bitrate=0, paese=''):
+        self.name = name
+        self.url = url
+        self.bitrate = bitrate
+        self.paese = paese
 
 def slider_style():
     QSS = """
