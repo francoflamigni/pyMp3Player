@@ -124,6 +124,9 @@ class Music:
                         brano.tag.title, _ = os.path.splitext(t[1])
                     if brano.tag.album is None:
                         brano.tag.album = os.path.basename(t[0])
+                    if brano.tag.artist is None:
+                        dir = os.path.dirname(t[0])
+                        brano.tag.artist = os.path.basename(dir)
                     self.add_track(brano.tag, path, brano.info.time_secs)
                     count += 1
             except Empty:
@@ -157,8 +160,9 @@ class Music:
 
     def find_tracks(self, album, art=''):
         tracks = []
-        if album in self.albums.title.keys():
-            alb = self.albums.title[album]
+        alb_art = album + '@' + art
+        if alb_art in self.albums.title.keys():
+            alb = self.albums.title[alb_art]
             tracks_id = self.album_track.find_tracks(alb.id)
             tracks = self.tracks.find(tracks_id, art)
         return tracks
@@ -171,9 +175,10 @@ class Music:
                         return k
         return None
 
-    def find_pic(self, album):
-        if album in self.albums.title.keys():
-            alb = self.albums.title[album]
+    def find_pic(self, album, art=''):
+        alb_art = album + '@' + art
+        if alb_art in self.albums.title.keys():
+            alb = self.albums.title[alb_art]
             brano = eyed3.load(alb.path)
             if len(brano.tag.images) > 0:
                 return brano.tag.images[0].image_data
@@ -252,9 +257,6 @@ class tracks:
         self.id = 0
 
     def add(self, tag, time_secs):
-        #tag.title, tag.album, tag.artist, tag.file_info.name, tag.track_num.count, time_secs
-        #if title is None or album is None:
-        #    a = 0
         nome = tag.title + '@' + tag.album
         if nome in self.name.keys():
             return self.name[nome].id
@@ -265,8 +267,8 @@ class tracks:
 
     def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
-        if tr[0].num is not None:
-            tr.sort(key=lambda x: x.num)
+        #if tr[0].num is not None:
+        tr.sort(key=lambda x: x.num if x.num is not None else 0)
         return [t.title for t in tr if art in t.artist]
     def size(self):
         return len(self.name)
@@ -306,10 +308,11 @@ class albums:
         self.id = 0
 
     def add(self, tag, path):
-        title = tag.album
+        #if tag.album is None or tag.artist is None:
+        #    a = 0
+        title = tag.album + '@' + tag.artist
         if title in self.title.keys():
             return self.title[title].id
-
         self.id += 1
 
         year = 1900
@@ -319,21 +322,16 @@ class albums:
             if isinstance(tag.recording_date, int):
                 year = tag.recording_date
 
-        #path = os.path.dirname(path)
-        self.title[title] = album(title, year, self.id, path) #tag.recording_date
+        self.title[title] = album(tag.album, year, self.id, path)
         return self.id
 
     def find(self, ids):
         albums = [v for v in self.title.values() if v.id in ids]
-        if albums[0].year is not None:
-            albums.sort(key=lambda x: x.year)
+        #if albums[0].year is not None:
+        albums.sort(key=lambda x: x.year)
         return albums
 
     def save(self):
-        for i, j in self.title.items():
-            a = i
-            b = j.__dict__
-            c = 0
         return json.dumps({i:j.__dict__ for i, j in self.title.items()}, indent=4)
 
     def load(self, dic):

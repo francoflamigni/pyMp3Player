@@ -10,7 +10,7 @@ from googletrans import Translator
 
 from mp3_tag import Music
 
-from utils import center_in_parent, yesNoMessage, errorMessage
+from utils import center_in_parent, yesNoMessage, waitCursor
 from threading import Thread, Lock
 from myShazam import myShazam
 
@@ -29,10 +29,30 @@ def poll_radio(url):
     ## status is the integer to tell if the server is up or down, 0 means down, 1 up, 2 means up but also got metadata.
     status = stationinfo.get("status")
 
+
+class myList(QListWidget):
+    def __init__(self, parent, txt=''):
+        super().__init__(parent)
+        self.wparent = parent
+        self.addItem(txt)
+        self.setMouseTracking(True)
+    def mouseMoveEvent(self, event):
+        self.setFocus()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.wparent.contextMenu(event.pos(), self)
+        super(QListWidget, self).mousePressEvent(event)
+    def keyPressEvent(self, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+
+
 class MusicIndexDlg(QDialog):
     def __init__(self, parent, music, last_folder):
         super(MusicIndexDlg, self).__init__(parent)
         self.parent = parent
+        self.shaz = False
 
         self.setWindowTitle('Catalogo MP3')
         center_in_parent(self, parent, 700, 500)
@@ -55,14 +75,12 @@ class MusicIndexDlg(QDialog):
         h0.addWidget(self.b1)
         h0.addWidget(b2)
 
-        self.artists = QListWidget(self)
+        self.artists = myList(self, 'artisti')  #QListWidget(self)
         self.artists.setSortingEnabled(True)
-        self.artists.addItem('artisti')
         self.artists.itemSelectionChanged.connect(self.artist_changed)
 
-        self.albums = QListWidget(self)
+        self.albums = myList(self, 'album')
         self.albums.setSortingEnabled(False)
-        self.albums.addItem('album')
         self.albums.itemSelectionChanged.connect(self.album_changed)
         self.albums.doubleClicked.connect(self.play_album)
 
@@ -71,11 +89,9 @@ class MusicIndexDlg(QDialog):
         splitter1.addWidget(self.artists)
         splitter1.addWidget(self.albums)
 
-        self.tracks = QListWidget(self)
+        self.tracks = myList(self, 'tracce')
         self.tracks.setSortingEnabled(False)
-        self.tracks.addItem('tracce')
         self.tracks.doubleClicked.connect(self.play_song)
-        self.tracks.installEventFilter(self)
 
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
@@ -97,6 +113,37 @@ class MusicIndexDlg(QDialog):
         elif self.res == music.NO_FOLDER or self.res == music.NO_FILE:
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(last_folder)
+
+    def contextMenu(self, p, wd):
+        ctx = QMenu(self)
+        if wd == self.artists:
+            return
+        it = wd.itemAt(p)
+        if it is None:
+            return
+        p1 = wd.mapToGlobal(p)
+        artist = self.artists.selectedItems()
+        if len(artist) > 0:
+            artist = artist[0].text()
+        if wd == self.albums:
+            album = it.text()
+            track = ''
+        else:
+            album = self.albums.selectedItems()
+            if len(album) > 0:
+                album = album[0].text()
+            track = it.text()
+        ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
+
+        ctx.exec(p1)
+
+    def add_playlist(self, artist, album, track):
+        if track != '':
+            v = [self.music.tracks.name[track + '@' + album].file]
+        else:
+            trks = self.music.find_tracks(album, artist)
+            v = [self.music.tracks.name[trk + '@' + album].file for trk in trks if trk]
+        a = 0
 
     def process(self):
         if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
@@ -145,6 +192,8 @@ class MusicIndexDlg(QDialog):
         if item is not None and len(item) > 0:
             item[0].setSelected(True)
             self.tracks.scrollToItem(item[0])
+
+    '''
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.KeyPress:
             key = event.key()
@@ -152,8 +201,14 @@ class MusicIndexDlg(QDialog):
                 self.lyric_song()
             elif key == Qt.Key.Key_F3:
                 self.find_song()
+        if event.type == QEvent.Type.MouseMove:
+            self.artists.setFocus()
+            #obj.setFocus()
+            #obj.s
+            a = 0
 
         return super(MusicIndexDlg, self).eventFilter(obj, event)
+    '''
 
     def lyric_song(self):
         artists = self.artists.selectedItems()
@@ -167,7 +222,11 @@ class MusicIndexDlg(QDialog):
                     lyricsDlg.run(self.parent, txt, track)
 
     def find_song(self, time=5):
+        if self.shaz:
+            return
+        self.shaz = True
         ms = myShazam(self._find_song, time=time)
+        waitCursor(True)
         ms.guess()
     def _find_song(self, out):
         mes = ''
@@ -187,11 +246,15 @@ class MusicIndexDlg(QDialog):
 
         if len(mes) == 0:
             t = out['retryms'] / 1000
+            if t < 10:
+                self.shaz = False
+                self.find_song(t)
+                return
             mes = 'Non riconosciuta'
-            self.find_song(t)
-            return
 
+        waitCursor()
         infoDlg.run(self.parent, mes)
+        self.shaz = False
 
     def artist_changed(self):
         items = self.artists.selectedItems()
@@ -212,7 +275,7 @@ class MusicIndexDlg(QDialog):
             if len(art) == 1:
                 art_name = art[0].text()
             tracks = self.music.find_tracks(t, art_name)
-            pic = self.music.find_pic(t)
+            pic = self.music.find_pic(t, art_name)
             qp = QPixmap()
             qp.loadFromData(pic)
             self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
@@ -491,27 +554,28 @@ class lyricsDlg(QDialog):
         center_in_parent(self, parent, 600, 500)
         self.setWindowTitle(track)
 
-        v = QVBoxLayout()
+        v = QVBoxLayout(self)
+        self.h = QHBoxLayout()
         self.txt_box = myPlainText(self)
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
 
         self.txt_box.setText(txt)
-        v.addWidget(self.txt_box)
+        self.h.addWidget(self.txt_box)
+        v.addLayout(self.h)
 
         if lang != 'it':
-            bt = QPushButton(self)
-            bt.setText('Traduci')
-            bt.clicked.connect(self.traduci)
-            v.addWidget(bt)
-        self.h = QHBoxLayout(self)
-        self.h.addLayout(v)
+            self.bt = QPushButton(self)
+            self.bt.setText('Traduci')
+            self.bt.clicked.connect(self.traduci)
+            v.addWidget(self.bt)
 
     def traduci(self):
         tr_box = myPlainText(self)
         self.txt_box.setSlave(tr_box)
         self.h.addWidget(tr_box)
         txt1 = self.tr.translate(self.txt, 'it')
+        self.bt.hide()
 
         tr_box.setText(txt1.text)
         sz = self.size()

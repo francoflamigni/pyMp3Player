@@ -13,12 +13,11 @@ pip install eyed3
 pip install pyradios 
 
 pip install soundcard
+
 pip install soundfile
 
 pip install shazamio
 
-pip install ly
-
 pip install googletrans==3.1.0a0
 
- pip install lyricsgenius
+pip install lyricsgenius
