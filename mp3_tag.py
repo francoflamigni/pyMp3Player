@@ -12,12 +12,17 @@ import datetime
 def find_last(path):
     f = os.path.join(path, '**')
     list_of_files = glob.glob(f, recursive=True)
-    latest_file = max(list_of_files, key=os.path.getctime)
+    latest_file = max(list_of_files, key=os.path.getmtime)
     r = os.path.relpath(latest_file, path)
-    v = os.path.getctime(latest_file)
+    v = os.path.getmtime(latest_file)
     t = ts_date2(v)
     return {r: v}
-class music:
+class Music:
+    NO_INDEX = -1  # manca l'indice
+    INDEX_LOADED = 0  # indice caricacato
+    NO_FILE = 1  # la cartella indicata non contiene file
+    NO_FOLDER = 2  # manca il nome della cartella o questa non è una cartella
+    OLD_INDEX = 3  # indice presente ma non aggiornato
     def __init__(self, parent, path=''):
         self.parent = parent
         self.path = path
@@ -36,8 +41,9 @@ class music:
         self.album_track = album_track()
 
     def init(self, folder):
-        if folder == '':
-            return False
+        if folder == '' or os.path.isdir(folder) is False:
+            return Music.NO_FOLDER
+
         self.parent.ini.set('CONF', 'last_folder', folder)
         self.parent.ini.save()
         hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
@@ -45,19 +51,23 @@ class music:
         self.clear()
         jf = os.path.join(folder, 'index.json')
         if os.path.isfile(jf) is False:
-            return False
+            return Music.NO_INDEX
+
+        # trova il file modificato più di recente
         lst = list(find_last(folder).values())
         if len(lst) == 0:
-            return False
+            return Music.NO_FILES
         lst = lst[0]
+
+        # trova la data di ultima modifica registrata
         lst_t = self.parent.ini.get('CONF', hash)
         if lst_t == '':
-            return False
+            return Music.NO_INDEX
         if float(lst) > float(lst_t):
-            return False
+            return Music.OLD_INDEX  # l'indice va rigenerato
         self.load(jf)
         self.path = folder
-        return True
+        return Music.INDEX_LOADED  # non ci sono state modifiche si può caricare l'indice
 
     def index(self, print, folder):
         if self.init(folder) is True:
@@ -65,26 +75,6 @@ class music:
         if folder == '':
             return
         self.path = folder
-        '''
-        if folder == '':
-            return
-        self.path = folder
-        self.parent.ini.set('CONF', 'last_folder', folder)
-        self.parent.ini.save()
-        hash = hashlib.md5(self.path.encode('utf-8')).hexdigest()
-
-        self.clear()
-        jf = os.path.join(self.path, 'index.json')
-        if os.path.isfile(jf) is True:
-            lst = list(find_last(self.path).values())
-            if len(lst) > 0:
-                lst = lst[0]
-            lst_t = self.parent.ini.get('CONF', hash)
-            if lst_t != '':
-                if float(lst) <= float(lst_t):
-                    self.load(jf)
-                    return
-        '''
 
         self.print = print
         self.searchers = []
@@ -110,7 +100,7 @@ class music:
 
         jf = os.path.join(folder, 'index.json')
         self.save(jf)
-        v = os.path.getctime(jf)
+        v = os.path.getmtime(jf)
         hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
         self.parent.ini.set('CONF', hash, str(v))
         self.parent.ini.save()
@@ -141,8 +131,6 @@ class music:
         a = 0
     def get_mp3(self, path):
         for root, dirs, files in os.walk(path):
-            #if self.tracks.size() > 200:
-            #    return
             self.print(root)
             for file in files:
                 self.inp.put((root, file))
@@ -174,6 +162,14 @@ class music:
             tracks_id = self.album_track.find_tracks(alb.id)
             tracks = self.tracks.find(tracks_id, art)
         return tracks
+
+    def find_artist_by_album(self, id):
+        for t in self.album_artist.a_a:
+            if id == t[0]:
+                for k, v in self.artists.name.items():
+                    if v == t[1]:
+                        return k
+        return None
 
     def find_pic(self, album):
         if album in self.albums.title.keys():
@@ -323,6 +319,7 @@ class albums:
             if isinstance(tag.recording_date, int):
                 year = tag.recording_date
 
+        #path = os.path.dirname(path)
         self.title[title] = album(title, year, self.id, path) #tag.recording_date
         return self.id
 

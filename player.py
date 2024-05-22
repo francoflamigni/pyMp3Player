@@ -10,11 +10,11 @@ import scrobbler
 
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
             QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit)
-from PyQt6.QtGui import QIcon, QPainter, QPen
+from PyQt6.QtGui import QIcon, QPainter, QPen, QShowEvent
 from PyQt6.QtCore import Qt, QTimer
 
 from utils import iniConf
-from mp3_tag import music
+from mp3_tag import Music
 from dialogs import RadioDlg, MusicIndexDlg, slider_style, eq_slider_style
 
 '''
@@ -66,9 +66,9 @@ class eqSlider(QSlider):
         qp.drawLine(sz.width(), y, sz.width() - len, y)
 
 class Player(QMainWindow):
-    Mode_None = 0
-    Mode_Music = 1
-    Mode_Radio = 2
+    Mode_None = 0  # nessuna selezione
+    Mode_Music = 1  # mp3
+    Mode_Radio = 2  # radio
     Mode_Play = 3
     Mode_Pause = 4
     def __init__(self, master=None):
@@ -102,6 +102,12 @@ class Player(QMainWindow):
 
         self.create_ui()
         self.show()
+
+
+    def show(self):
+        QMainWindow.show(self)
+        QApplication.processEvents()
+        self.dlg.process()
 
     def get_band(self, i):
         f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
@@ -160,12 +166,12 @@ class Player(QMainWindow):
 
         self.tab = QTabWidget(self)
         last_folder = self.ini.get('CONF', 'last_folder')
-        dlg = MusicIndexDlg(self, music(self), last_folder)
-        dlg.setMinimumWidth(500)
-        self.tab.addTab(dlg, 'Mp3')
+        self.dlg = MusicIndexDlg(self, Music(self), last_folder)
+        self.dlg.setMinimumWidth(500)
+        self.tab.addTab(self.dlg, 'Mp3')
 
-        radios = self.ini.get('radio')
-        rd = RadioDlg(self, radios)
+        # radios = self.ini.get('radio')
+        rd = RadioDlg(self)
         self.tab.addTab(rd, 'Radio')
 
         v1 = QVBoxLayout()
@@ -307,7 +313,32 @@ class Player(QMainWindow):
         hbt.addWidget(self.playbutton)
         hbt.addWidget(self.stopbutton)
         hbt.addStretch()
+
+        self.lyricbutton = QPushButton(self)
+        self.lyricbutton.setMaximumWidth(30)
+        self.lyricbutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/lyric.png')))
+        self.lyricbutton.setToolTip('testo brano')
+        self.lyricbutton.clicked.connect(self.songLyrics)
+
+        self.titlebutton = QPushButton(self)
+        self.titlebutton.setMaximumWidth(30)
+        self.titlebutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/shazam.png')))
+        self.titlebutton.setToolTip('riconosce brano')
+        self.titlebutton.clicked.connect(self.songTitle)
+        hbt.addWidget(self.lyricbutton)
+        hbt.addWidget(self.titlebutton)
         return hbt
+
+    def songLyrics(self):
+        #if self.mode != Player.Mode_Music:
+        #    return
+        idx = self.tab.currentIndex()
+        wd = self.tab.widget(0)
+        wd.lyric_song()
+        a = 0
+    def songTitle(self):
+        wd = self.tab.widget(0)
+        wd.find_song()
 
     def currentChanged (self, index):
         if index == 1:
@@ -434,31 +465,6 @@ class Player(QMainWindow):
     def radio_metadata(self):
         title = scrobbler.get_title(self.url)
         self.add_note(title)
-        '''
-        request = urllib2.Request(self.url, headers={'Icy-MetaData': 1})  # request metadata
-        try:
-            response = urllib2.urlopen(request)
-        except:
-            self.add_note(title)
-            return
-        metaint = int(response.headers['icy-metaint'])
-        for _ in range(10):  # # title may be empty initially, try several times
-            response.read(metaint)  # skip to metadata
-            metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte
-            metadata = response.read(metadata_length).rstrip(b'\0')
-            # extract title from the metadata
-            m = re.search(br"StreamTitle='([^']*)';", metadata)
-            if m:
-                title = m.group(1)
-                if title:
-                    break
-
-        if isinstance(title, str):
-            self.add_note(title)
-        else:
-            encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
-            self.add_note(title.decode(encoding, errors='replace'))
-        '''
 
     def set_volume(self, volume):
         # Set the volume
@@ -509,6 +515,4 @@ class Player(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     player = Player()
-    #player.show()
-    #player.resize(640, 480)
     sys.exit(app.exec())

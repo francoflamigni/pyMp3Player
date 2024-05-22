@@ -1,13 +1,18 @@
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
-                             QHeaderView)
+                             QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu)
 
 import scrobbler
 from pyradios import RadioBrowser
+from googletrans import Translator
 
-from utils import center_in_parent
+from mp3_tag import Music
+
+from utils import center_in_parent, yesNoMessage, errorMessage
+from threading import Thread, Lock
+from myShazam import myShazam
 
 '''
 https://github.com/andreztz/pyradios/tree/main/pyradios
@@ -39,10 +44,17 @@ class MusicIndexDlg(QDialog):
         self.prog = QLabel('')
         self.b1 = QPushButton('...', self)
         self.b1.setMaximumWidth(60)
-        self.b1.clicked.connect(self.index)
+        self.b1.clicked.connect(self.index2)
+
+        b2 = QPushButton('search', self)
+        b2.setMaximumWidth(60)
+        b2.clicked.connect(self.search)
+
         h0 = QHBoxLayout()
         h0.addWidget(self.prog)
         h0.addWidget(self.b1)
+        h0.addWidget(b2)
+
         self.artists = QListWidget(self)
         self.artists.setSortingEnabled(True)
         self.artists.addItem('artisti')
@@ -63,6 +75,7 @@ class MusicIndexDlg(QDialog):
         self.tracks.setSortingEnabled(False)
         self.tracks.addItem('tracce')
         self.tracks.doubleClicked.connect(self.play_song)
+        self.tracks.installEventFilter(self)
 
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
@@ -78,9 +91,107 @@ class MusicIndexDlg(QDialog):
 
         v.addLayout(h0)
         v.addWidget(splitter2)
-        if music.init(last_folder) is True:
+        self.res = music.init(last_folder)
+        if self.res == music.INDEX_LOADED:
             self.set_artists()
-            self.print(last_folder)
+        elif self.res == music.NO_FOLDER or self.res == music.NO_FILE:
+            self.print('La cartella indicata non esiste o non contiene file')
+        self.print(last_folder)
+
+    def process(self):
+        if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
+            if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
+             self.index(self.last_folder)
+        a = 0
+    def search(self):
+        sel = mySearch.run(self.parent, self.music)
+        if sel is None:
+            return
+        if 'artista' in sel:
+            a = sel.split(':')[1].strip()
+            self._select_artist(a)
+        elif 'album' in sel:
+            a1 = sel.split(':')[1].strip()
+            a2 = a1.split(';')
+            artist = a2[0].strip()
+            self._select_artist(artist)
+            album = a2[1].strip()
+            self._select_album(album)
+            a = 0
+        elif 'traccia' in sel:
+            a1 = sel.split(':')[1].strip()
+            a2 = a1.split(';')
+            artist = a2[0].strip()
+            self._select_artist(artist)
+            album = a2[1].strip()
+            self._select_album(album)
+            track = a2[2].strip()
+            self._select_track(track)
+
+    def _select_artist(self, name):
+        item = self.artists.findItems(name, Qt.MatchFlag.MatchContains)
+        if item is not None and len(item) > 0:
+            item[0].setSelected(True)
+            self.artists.scrollToItem(item[0])
+
+    def _select_album(self, name):
+        item = self.albums.findItems(name, Qt.MatchFlag.MatchContains)
+        if item is not None and len(item) > 0:
+            item[0].setSelected(True)
+            self.albums.scrollToItem(item[0])
+
+    def _select_track(self, name):
+        item = self.tracks.findItems(name, Qt.MatchFlag.MatchContains)
+        if item is not None and len(item) > 0:
+            item[0].setSelected(True)
+            self.tracks.scrollToItem(item[0])
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_F2:
+                self.lyric_song()
+            elif key == Qt.Key.Key_F3:
+                self.find_song()
+
+        return super(MusicIndexDlg, self).eventFilter(obj, event)
+
+    def lyric_song(self):
+        artists = self.artists.selectedItems()
+        if len(artists) != 0:
+            artist = artists[0].text()
+            tracks = self.tracks.selectedItems()
+            if len(tracks) != 0:
+                track = tracks[0].text()
+                txt = scrobbler.song_text(artist, track)
+                if len(txt) > 0:
+                    lyricsDlg.run(self.parent, txt, track)
+
+    def find_song(self, time=5):
+        ms = myShazam(self._find_song, time=time)
+        ms.guess()
+    def _find_song(self, out):
+        mes = ''
+        if isinstance(out, dict):
+            if 'track' in out.keys():
+                tr = out['track']
+                title = tr['title']
+                artist = tr['subtitle']
+                meta = tr['sections'][0]['metadata'][0]['text']
+                mes = 'Artista: ' + artist + '\n'
+                mes += 'Album: ' + meta + '\n'
+                mes += 'Titolo: ' + title + '\n'
+                a = 0
+        elif isinstance(out, str):
+            mes = out
+            a = 0
+
+        if len(mes) == 0:
+            t = out['retryms'] / 1000
+            mes = 'Non riconosciuta'
+            self.find_song(t)
+            return
+
+        infoDlg.run(self.parent, mes)
 
     def artist_changed(self):
         items = self.artists.selectedItems()
@@ -112,8 +223,12 @@ class MusicIndexDlg(QDialog):
         self.artists.clear()
         self.artists.addItems(a for a in self.music.get_artists())
 
-    def index(self):
-        folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder, options=QFileDialog.Option.DontUseNativeDialog)
+    def index2(self):
+        folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder,
+                                                  options=QFileDialog.Option.DontUseNativeDialog)
+        self.index(folder)
+
+    def index(self, folder=''):
         if folder != '':
             self.music.index(self.print, folder)
             self.set_artists()
@@ -140,10 +255,30 @@ class MusicIndexDlg(QDialog):
         self.parent.open_file(v)
 
 
+class tableMenu(QTableWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.parent.contextMenu(event.pos(), type='radios')
+        super(QTableWidget, self).mousePressEvent(event)
+
+class listMenu(QListWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.parent.contextMenu(event.pos(), type='favorites')
+        super(QListWidget, self).mousePressEvent(event)
+
 class RadioDlg(QDialog):
-    def __init__(self, parent, dict):
+    def __init__(self, parent):
         super(RadioDlg, self).__init__(parent)
-        self.radios = dict
+        self.ini = parent.ini
         self.wparent = parent
 
         v = QVBoxLayout(self)
@@ -153,6 +288,7 @@ class RadioDlg(QDialog):
         self.ed = QLineEdit(self)
         b0 = QPushButton(self)
         b0.clicked.connect(self.search)
+        self.ed.returnPressed.connect(self.search)
         h.addWidget(lab)
         h.addWidget(self.ed)
         h.addWidget(b0)
@@ -162,20 +298,21 @@ class RadioDlg(QDialog):
 
         v1 = QVBoxLayout()
         v1.addLayout(h)
-        self.table = QTableWidget(self)
+        self.table = tableMenu(self)
         v1.addWidget(self.table)
 
         w = QWidget()
         w.setLayout(v1)
         sp.addWidget(w)
 
-        self.favorites = QListWidget(self)
+        self.favorites = listMenu(self)
         self.favorites.doubleClicked.connect(self.play)
         sp.addWidget(self.favorites)
         v.addWidget(sp)
 
-        if dict is not None:
-            for d in dict.keys():
+        rd = self.ini.get('radio')
+        if rd is not None:
+            for d in rd.keys():
                 self.favorites.addItem(d)
 
     def search(self):
@@ -185,39 +322,122 @@ class RadioDlg(QDialog):
             a = rb.search(name=src, name_exact=False, hidebroken=True)
             self.fill_table(a)
 
+    def load_icons(self, list):
+        row = 0
+        for l in list:
+            if 'ref' in l['url']:
+                continue
+            im = scrobbler.get_thumbnail(l['favicon'])
+            if im is not None:
+                qii = self.table.item(row, 1)
+                qp = QPixmap()
+                qp.loadFromData(im)
+                qii.setIcon(QIcon(qp))
+            row += 1
+        a = 0
+
     def fill_table(self, list):
         self.table.setRowCount(0)
-        self.wparent.stop()
+        #self.wparent.stop()
         if len(list) == 0:
             return
         radios = []
         for l in list:
             if 'ref' in l['url']:
                 continue
-            f_icon = l['favicon']
-            pix = scrobbler.get_thumbnail(f_icon)
-            r = RadioStation(l['name'], l['url'], l['bitrate'], l['country'])
+            #im = #scrobbler.get_thumbnail(l['favicon'])
+            r = RadioStation(l['name'], l['url'], None, l['country'])
             radios.append(r)
 
-        fields = ['Nome', 'bitrate', 'paese', ' ']
+        searcher = Thread(target=self.load_icons, args=(list,))
+        searcher.start()
+
+        fields = ['Nome', 'icon', 'paese', ' ']
         self.table.setColumnCount(len(fields))
         self.table.setHorizontalHeaderLabels(fields)
         self.table.cellClicked.connect(self.onCellClicked)
+
+        horizontalHeader = self.table.horizontalHeader()
+        horizontalHeader.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        horizontalHeader.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        horizontalHeader.resizeSection(1, 30)
+        horizontalHeader.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        horizontalHeader.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        horizontalHeader.resizeSection(3, 30)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+
 
         for r in radios:
             numRows = self.table.rowCount()
 
             self.table.insertRow(numRows)
-            qi = QTableWidgetItem(r.name)
+            name = r.name
+            if len(name) > 25:
+                name = name[:25]
+            qi = QTableWidgetItem(name)
+            qi.setToolTip(r.url)
             qi.setData(Qt.ItemDataRole.UserRole, r)
             self.table.setItem(numRows, 0, qi)
-            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-            self.table.setItem(numRows, 1, QTableWidgetItem(r.bitrate))
+
+            qii = QTableWidgetItem()
+            if r.ico is not None:
+                qp = QPixmap()
+                qp.loadFromData(r.ico)
+                qii.setIcon(QIcon(qp))
+            self.table.setItem(numRows, 1, qii)
             self.table.setItem(numRows, 2, QTableWidgetItem(r.paese))
             qi1 = QTableWidgetItem()
             qi1.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
             self.table.setItem(numRows, 3, qi1)
             self.table.setColumnWidth(3, 10)
+
+    def contextMenu(self, p, type='radios'):
+        ctx = QMenu(self)
+        if type == 'radios':
+            it = self.table.itemAt(p)
+            if it is None:
+                return
+            if it.column() != 0:
+                it = self.table.item(it.row(), 0)
+            ctx.addAction("Aggiunge ai preferiti").triggered.connect(lambda x: self.add_favourites(it))
+            p1 = self.table.mapToGlobal(p)
+        else:
+            it = self.favorites.itemAt(p)
+            ctx.addAction("Rimuove dai preferiti").triggered.connect(lambda x: self.del_favourites(it))
+            p1 = self.favorites.mapToGlobal(p)
+
+        ctx.exec(p1)
+
+    def add_favourites(self, it):
+        r = it.data(Qt.ItemDataRole.UserRole)
+        if r is None:
+            return
+        nome = r.name
+        k = self.favorites.findItems(nome, Qt.MatchFlag.MatchExactly)
+        rd = self.ini.get('radio')
+
+        if len(k) > 0:
+            if yesNoMessage('Sostituzione', 'Esiste già una emittente di nome ' + nome + ' sostituirla?'):
+                self.del_favourites(k[0])
+            else:
+                return
+
+        rd[nome] = r.url
+        self.ini.set_sez('radio', rd)
+        self.ini.save()
+        self.favorites.addItem(nome)
+        a = 0
+
+    def del_favourites(self, it):
+        row = self.favorites.row(it)
+        qi = self.favorites.takeItem(row)
+        nome = qi.text()
+
+        rd = self.ini.get('radio')
+        del rd[nome]
+        self.ini.set_sez('radio', rd)
+        self.ini.save()
+        a = 0
 
     def onCellClicked(self, nr, nc):
         if nc == 3:
@@ -230,15 +450,165 @@ class RadioDlg(QDialog):
 
     def play(self):
         rad = self.favorites.selectedItems()[0].text()
-        url = self.radios[rad]
+        rd = self.ini.get('radio')
+        url = rd[rad]
         self.wparent.open_radio(url)
 
 class RadioStation:
-    def __init__(self, name='', url='', bitrate=0, paese=''):
+    def __init__(self, name='', url='', ico=None, paese=''):
         self.name = name
         self.url = url
-        self.bitrate = bitrate
+        self.ico = ico
+        #self.bitrate = bitrate
         self.paese = paese
+
+class myPlainText(QPlainTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.setReadOnly(True)
+        self.slave = None
+
+        self.last_position = self.verticalScrollBar().sliderPosition()
+        self.verticalScrollBar().valueChanged.connect(self.handle_value_changed)
+        self.cur = QTextCursor(self.document())
+
+    def setSlave(self, slave):
+        self.slave = slave
+    def setText(self, txt):
+        self.cur.movePosition(QTextCursor.MoveOperation.End)
+        self.cur.insertText(txt)
+    def handle_value_changed(self, position):
+        if self.slave is None:
+            return
+        self.slave.verticalScrollBar().setValue(position)
+
+class lyricsDlg(QDialog):
+    def __init__(self, parent, txt, track=''):
+        super(lyricsDlg, self).__init__(parent)
+        self.parent = parent
+        self.txt = txt
+        center_in_parent(self, parent, 600, 500)
+        self.setWindowTitle(track)
+
+        v = QVBoxLayout()
+        self.txt_box = myPlainText(self)
+        self.tr = Translator()
+        lang = self.tr.detect(txt).lang
+
+        self.txt_box.setText(txt)
+        v.addWidget(self.txt_box)
+
+        if lang != 'it':
+            bt = QPushButton(self)
+            bt.setText('Traduci')
+            bt.clicked.connect(self.traduci)
+            v.addWidget(bt)
+        self.h = QHBoxLayout(self)
+        self.h.addLayout(v)
+
+    def traduci(self):
+        tr_box = myPlainText(self)
+        self.txt_box.setSlave(tr_box)
+        self.h.addWidget(tr_box)
+        txt1 = self.tr.translate(self.txt, 'it')
+
+        tr_box.setText(txt1.text)
+        sz = self.size()
+        sz.setWidth(sz.width() * 2)
+        self.resize(sz)
+        a = 0
+
+    @staticmethod
+    def run(parent, txt, track=''):
+        dlg = lyricsDlg(parent, txt, track)
+        dlg.exec()
+
+
+class infoDlg(QDialog):
+    def __init__(self, parent, txt):
+        super(infoDlg, self).__init__(parent)
+        self.parent = parent
+        self.txt = txt
+        center_in_parent(self, parent, 300, 100)
+        self.setWindowTitle('Shazam')
+
+        v = QVBoxLayout(self)
+        self.txt_box = myPlainText(self)
+
+        self.txt_box.setText(txt)
+        v.addWidget(self.txt_box)
+
+    @staticmethod
+    def run(parent, txt):
+        dlg = infoDlg(parent, txt)
+        dlg.exec()
+
+class mySearch(QDialog):
+    def __init__(self, parent, music):
+        super(mySearch, self).__init__(parent)
+        center_in_parent(self, parent, 600, 400)
+
+
+        self.parent = parent
+        self.music = music
+
+        self.ed = QLineEdit(self)
+        b1 = QPushButton('...', self)
+        b1.setMaximumWidth(50)
+        b1.clicked.connect(self.search)
+        h = QHBoxLayout()
+        h.addWidget(self.ed)
+        h.addWidget(b1)
+
+        self.list = QListWidget(self)
+        self.list.doubleClicked.connect(self.selection)
+
+        v = QVBoxLayout(self)
+        v.addLayout(h)
+        v.addWidget(self.list)
+        self.selected = None
+
+    def search(self):
+        txt = self.ed.text().lower()
+        if len(txt) == 0:
+            return
+        mes = []
+
+        a1 = [k for k in self.music.artists.name.keys() if k is not None and txt in k.lower()]
+        kk = 1
+        if len(a1) > 0:
+            for a in a1:
+                mes.append(str(kk) + ' artista: ' + a + '\n')
+                kk += 1
+        a2 = [self.music.albums.title[k] for k in self.music.albums.title.keys() if k is not None and txt in k.lower()]
+        if len(a2) > 0:
+            for a in a2:
+                art = self.music.find_artist_by_album(a.id)
+                mes.append(str(kk) + ' album: ' + art + ';' + a.title + '\n')
+                kk += 1
+        a3 = [k for k in self.music.tracks.name.values() if k is not None and txt in k.title.lower()]
+        if len(a3) > 0:
+            for a in a3:
+                mes.append(str(kk) + ' traccia: ' + a.artist + ';' + a.album + ';' + a.title + '\n')
+                kk += 1
+
+        self.list.clear()
+        self.list.addItems(mes)
+
+
+    def selection(self):
+        s = self.list.selectedItems()
+        if len(s) > 0:
+            self.selected = s[0].text()
+            self.done(1)
+
+    @staticmethod
+    def run(parent, music):
+        dlg = mySearch(parent, music)
+        if dlg.exec() == 1:
+            return dlg.selected
+        return None
 
 def slider_style():
     QSS = """

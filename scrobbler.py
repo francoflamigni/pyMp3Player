@@ -6,11 +6,14 @@ import urllib.parse
 import urllib.request
 import re
 import struct
+import lyricsgenius as genius
 logger = logging.getLogger(__package__)
 
 formatter = logging.Formatter(
     "[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s"
 )
+
+from utils import waitCursor
 
 null_handler = logging.NullHandler()
 null_handler.setFormatter(formatter)
@@ -171,17 +174,20 @@ def get_thumbnail(url):
     if len(url) > 0:
         try:
             im = urllib.request.urlopen(url).read()
+            return im
             with open("c:/temp/test.png", "wb") as f:
                 f.write(im)
         except:
             pass
+    return None
 
 def get_title(url):
+    title = ''
     request = urllib.request.Request(url, headers={'Icy-MetaData': 1})  # request metadata
     try:
         response = urllib.request.urlopen(request)
     except:
-        return ''
+        return title
 
     metaint = int(response.headers['icy-metaint'])
     for _ in range(10):  # # title may be empty initially, try several times
@@ -195,7 +201,25 @@ def get_title(url):
             if title:
                 break
 
-        if isinstance(title, str) is False:
-            encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
-            title = title.decode(encoding, errors='replace')
+    if isinstance(title, str) is False:
+        encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
+        title = title.decode(encoding, errors='replace')
     return title
+
+def song_text(artist, song):
+    txt = ''
+    api = genius.Genius('RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l', verbose=True, timeout=10,
+                        remove_section_headers=True)
+    waitCursor(True)
+    try:
+        #art = api.search_artist(artist, max_songs=0)
+        song = api.search_song(song, artist, None, False)
+        if song is not None:
+            txt = song.lyrics
+            aa = txt.find('\n')
+            txt = txt[aa + 1:]
+            a = 0
+    except ConnectionError as err:
+        a = 0
+    waitCursor()
+    return txt
