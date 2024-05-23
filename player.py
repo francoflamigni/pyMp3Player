@@ -165,6 +165,7 @@ class Player(QMainWindow):
         self.setCentralWidget(self.widget)
 
         self.tab = QTabWidget(self)
+        #self.tab.setTabPosition(QTabWidget.TabPosition.West)
         last_folder = self.ini.get('CONF', 'last_folder')
         self.dlg = MusicIndexDlg(self, Music(self), last_folder)
         self.dlg.setMinimumWidth(500)

@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
-                             QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu)
+                             QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu, QTabWidget, QListWidgetItem)
 
 import scrobbler
 from pyradios import RadioBrowser
@@ -34,18 +34,17 @@ class myList(QListWidget):
     def __init__(self, parent, txt=''):
         super().__init__(parent)
         self.wparent = parent
-        self.addItem(txt)
+        if txt != '':
+            self.addItem(txt)
         self.setMouseTracking(True)
     def mouseMoveEvent(self, event):
         self.setFocus()
+        super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
             self.wparent.contextMenu(event.pos(), self)
         super(QListWidget, self).mousePressEvent(event)
-    def keyPressEvent(self, event):
-        if event.type() == QEvent.Type.KeyPress:
-            key = event.key()
 
 
 class MusicIndexDlg(QDialog):
@@ -96,13 +95,23 @@ class MusicIndexDlg(QDialog):
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
         splitter2.addWidget(splitter1)
+        self.tab = QTabWidget(self)
+        self.tab.setTabPosition(QTabWidget.TabPosition.West)
+        self.tab.tabBarDoubleClicked.connect(self.play_playlist)
+
         self.pix = QLabel()
         self.pix.setMinimumSize(200, 200)
-        h = QHBoxLayout()
-        h.addWidget(self.pix)
-        h.addWidget(self.tracks)
+        self.plst = myList(self)
+        self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.plst.setMinimumSize(200, 200)
+        self.tab.addTab(self.pix, 'cover')
+        self.tab.addTab(self.plst, 'playlist')
+
+        self.h = QHBoxLayout()
+        self.h.addWidget(self.tab)
+        self.h.addWidget(self.tracks)
         wd = QWidget()
-        wd.setLayout(h)
+        wd.setLayout(self.h)
         splitter2.addWidget(wd)
 
         v.addLayout(h0)
@@ -114,6 +123,14 @@ class MusicIndexDlg(QDialog):
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(last_folder)
 
+    def play_playlist(self, index):
+        if index == 0:
+            return
+        v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
+        #v = [v for v in self.playlist]
+        self.parent.open_file(v)
+        a = 0
+
     def contextMenu(self, p, wd):
         ctx = QMenu(self)
         if wd == self.artists:
@@ -122,28 +139,48 @@ class MusicIndexDlg(QDialog):
         if it is None:
             return
         p1 = wd.mapToGlobal(p)
-        artist = self.artists.selectedItems()
-        if len(artist) > 0:
-            artist = artist[0].text()
-        if wd == self.albums:
-            album = it.text()
-            track = ''
+        if wd == self.plst:
+            ctx.addAction("Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
+            ctx.addAction("Rimuove selezionati").triggered.connect(lambda x: self.remove_playlist('selected'))
         else:
-            album = self.albums.selectedItems()
-            if len(album) > 0:
-                album = album[0].text()
-            track = it.text()
-        ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
+            artist = self.artists.selectedItems()
+            if len(artist) > 0:
+                artist = artist[0].text()
+            if wd == self.albums:
+                album = it.text()
+                track = ''
+            else:
+                album = self.albums.selectedItems()
+                if len(album) > 0:
+                    album = album[0].text()
+                track = it.text()
+            ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
 
         ctx.exec(p1)
 
     def add_playlist(self, artist, album, track):
         if track != '':
-            v = [self.music.tracks.name[track + '@' + album].file]
+            vi = [self.music.tracks.name[track + '@' + album]]
         else:
             trks = self.music.find_tracks(album, artist)
-            v = [self.music.tracks.name[trk + '@' + album].file for trk in trks if trk]
+            vi = [self.music.tracks.name[trk + '@' + album] for trk in trks if trk]
+
+        for p in vi:
+            qi = QListWidgetItem(p.title)
+            qi.setData(Qt.ItemDataRole.UserRole, p)
+            self.plst.addItem(qi)
+
         a = 0
+
+    def remove_playlist(self, type):
+        if type == 'all':
+            self.plst.clear()
+        else:
+            its = self.plst.selectedItems()
+            rs = [self.plst.row(it) for it in its]
+            for r in reversed(rs):
+                self.plst.takeItem(r)
+            a = 0
 
     def process(self):
         if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
@@ -278,7 +315,8 @@ class MusicIndexDlg(QDialog):
             pic = self.music.find_pic(t, art_name)
             qp = QPixmap()
             qp.loadFromData(pic)
-            self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
+            if self.pix is not None:
+                self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
             self.tracks.addItems(a for a in tracks)
 
