@@ -31,6 +31,7 @@ class Music:
 
         self.nth = 12
         self.inp = Queue(self.nth)
+        self._anomalie = Queue(9000)
         self.lock = Lock()
 
     def clear(self):
@@ -116,17 +117,32 @@ class Music:
                 path = os.path.join(t[0], t[1])
                 try:
                     brano = eyed3.load(path)
-                    qq = brano.info.time_secs
+                    # qq = brano.info.time_secs
                 except:
+                    self._anomalie.put(path + ' eye3d error')
                     continue
                 if brano is not None and brano.tag is not None:
                     if brano.tag.title is None:
+                        self._anomalie.put(path + ' no title')
                         brano.tag.title, _ = os.path.splitext(t[1])
                     if brano.tag.album is None:
+                        self._anomalie.put(path + ' no album')
                         brano.tag.album = os.path.basename(t[0])
                     if brano.tag.artist is None:
+                        self._anomalie.put(path + ' no artist')
                         dir = os.path.dirname(t[0])
                         brano.tag.artist = os.path.basename(dir)
+
+                    try:
+                        if brano.tag.recording_date is None and brano.tag.release_date is None:
+                            self._anomalie.put(path + ' no year 1')
+                    except:
+                        self._anomalie.put(path + ' no year 2')
+                    if brano.tag.track_num.count is None:
+                        self._anomalie.put(path + ' no num')
+                    if brano.info is None:
+                        self._anomalie.put(path + ' no info')
+
                     self.add_track(brano.tag, path, brano.info.time_secs)
                     count += 1
             except Empty:
@@ -158,6 +174,7 @@ class Music:
             return albums
         return []
 
+    # ritorna l'oggetto traccia dato il titolo dell'a
     def find_tracks(self, album, art=''):
         tracks = []
         alb_art = album + '@' + art
@@ -167,9 +184,9 @@ class Music:
             tracks = self.tracks.find(tracks_id, art)
         return tracks
 
-    def find_artist_by_album(self, id):
-        for t in self.album_artist.a_a:
-            if id == t[0]:
+    def find_artist_by_album(self, id_album):
+        for t in self.album_artist.a_a:  # t[0] id album, t[1] id artista
+            if id_album == t[0]:
                 for k, v in self.artists.name.items():
                     if v == t[1]:
                         return k
@@ -308,19 +325,16 @@ class albums:
         self.id = 0
 
     def add(self, tag, path):
-        #if tag.album is None or tag.artist is None:
-        #    a = 0
         title = tag.album + '@' + tag.artist
         if title in self.title.keys():
             return self.title[title].id
         self.id += 1
 
         year = 1900
-        try:
+        if tag.recording_date is not None:
             year = tag.recording_date.year
-        except:
-            if isinstance(tag.recording_date, int):
-                year = tag.recording_date
+        elif tag.release_date is not None:
+            year = tag.release_date.year
 
         self.title[title] = album(tag.album, year, self.id, path)
         return self.id

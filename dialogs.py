@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
@@ -11,22 +11,24 @@ from googletrans import Translator
 from mp3_tag import Music
 
 from utils import center_in_parent, yesNoMessage, waitCursor
-from threading import Thread, Lock
+from threading import Thread
 from myShazam import myShazam
 
 '''
 https://github.com/andreztz/pyradios/tree/main/pyradios
 '''
+
+
 def poll_radio(url):
     #sst = streamscrobbler()
 
     stationinfo = scrobbler.get_server_info(url)
 
 
-    ##metadata is the bitrate and current song
+    #metadata is the bitrate and current song
     metadata = stationinfo.get("metadata")
 
-    ## status is the integer to tell if the server is up or down, 0 means down, 1 up, 2 means up but also got metadata.
+    # status is the integer to tell if the server is up or down, 0 means down, 1 up, 2 means up but also got metadata.
     status = stationinfo.get("status")
 
 
@@ -37,6 +39,7 @@ class myList(QListWidget):
         if txt != '':
             self.addItem(txt)
         self.setMouseTracking(True)
+
     def mouseMoveEvent(self, event):
         self.setFocus()
         super(QListWidget, self).mouseMoveEvent(event)
@@ -74,7 +77,7 @@ class MusicIndexDlg(QDialog):
         h0.addWidget(self.b1)
         h0.addWidget(b2)
 
-        self.artists = myList(self, 'artisti')  #QListWidget(self)
+        self.artists = myList(self, 'artisti')
         self.artists.setSortingEnabled(True)
         self.artists.itemSelectionChanged.connect(self.artist_changed)
 
@@ -127,9 +130,7 @@ class MusicIndexDlg(QDialog):
         if index == 0:
             return
         v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
-        #v = [v for v in self.playlist]
         self.parent.open_file(v)
-        a = 0
 
     def contextMenu(self, p, wd):
         ctx = QMenu(self)
@@ -185,8 +186,8 @@ class MusicIndexDlg(QDialog):
     def process(self):
         if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
             if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
-             self.index(self.last_folder)
-        a = 0
+                self.index(self.last_folder)
+
     def search(self):
         sel = mySearch.run(self.parent, self.music)
         if sel is None:
@@ -201,7 +202,6 @@ class MusicIndexDlg(QDialog):
             self._select_artist(artist)
             album = a2[1].strip()
             self._select_album(album)
-            a = 0
         elif 'traccia' in sel:
             a1 = sel.split(':')[1].strip()
             a2 = a1.split(';')
@@ -276,10 +276,8 @@ class MusicIndexDlg(QDialog):
                 mes = 'Artista: ' + artist + '\n'
                 mes += 'Album: ' + meta + '\n'
                 mes += 'Titolo: ' + title + '\n'
-                a = 0
         elif isinstance(out, str):
             mes = out
-            a = 0
 
         if len(mes) == 0:
             t = out['retryms'] / 1000
@@ -306,17 +304,18 @@ class MusicIndexDlg(QDialog):
     def album_changed(self):
         items = self.albums.selectedItems()
         art = self.artists.selectedItems()
-        if len(items) > 0:
+        if len(items) > 0 and len(art) > 0:
             self.tracks.clear()
-            t = items[0].text()
-            if len(art) == 1:
-                art_name = art[0].text()
-            tracks = self.music.find_tracks(t, art_name)
-            pic = self.music.find_pic(t, art_name)
-            qp = QPixmap()
-            qp.loadFromData(pic)
-            if self.pix is not None:
-                self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
+            trk_name = items[0].text()
+            art_name = art[0].text()
+            tracks = self.music.find_tracks(trk_name, art_name)
+            pic = self.music.find_pic(trk_name, art_name)
+            if pic is not None:
+                qp = QPixmap()
+                if qp.loadFromData(pic):
+                    self.pix.setPixmap(qp.scaled(self.pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
+            else:
+                self.pix.clear()
 
             self.tracks.addItems(a for a in tracks)
 
@@ -437,20 +436,18 @@ class RadioDlg(QDialog):
             row += 1
         a = 0
 
-    def fill_table(self, list):
+    def fill_table(self, rList):
         self.table.setRowCount(0)
-        #self.wparent.stop()
-        if len(list) == 0:
+        if len(rList) == 0:
             return
         radios = []
-        for l in list:
+        for l in rList:
             if 'ref' in l['url']:
                 continue
-            #im = #scrobbler.get_thumbnail(l['favicon'])
             r = RadioStation(l['name'], l['url'], None, l['country'])
             radios.append(r)
 
-        searcher = Thread(target=self.load_icons, args=(list,))
+        searcher = Thread(target=self.load_icons, args=(rList,))
         searcher.start()
 
         fields = ['Nome', 'icon', 'paese', ' ']

@@ -21,3 +21,6 @@ pip install shazamio
 pip install googletrans==3.1.0a0
 
 pip install lyricsgenius
+
+per le copertine dei cd
+https://musicbrainz.org/
