@@ -142,6 +142,7 @@ class Music:
                         self._anomalie.put(path + ' no num')
                     if brano.info is None:
                         self._anomalie.put(path + ' no info')
+                        continue
 
                     self.add_track(brano.tag, path, brano.info.time_secs)
                     count += 1

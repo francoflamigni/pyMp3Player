@@ -1,5 +1,6 @@
+import os
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QTextCursor, QIcon
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
                              QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu, QTabWidget, QListWidgetItem)
@@ -36,17 +37,45 @@ class myList(QListWidget):
     def __init__(self, parent, txt=''):
         super().__init__(parent)
         self.wparent = parent
+        self.itc = None
+        #self.play_cur = False
         if txt != '':
             self.addItem(txt)
         self.setMouseTracking(True)
 
+    def setSelCur(self, it):
+        if self.itc == it:
+            return
+        else:
+            self.itc = it
+
     def mouseMoveEvent(self, event):
-        self.setFocus()
+        if self.hasFocus() is False:
+            self.setFocus()
+            #QApplication.restoreOverrideCursor()
+            #self.wparent.play_cur = False
+            self.unsetCursor()
+            super(QListWidget, self).mouseMoveEvent(event)
+            return
+
+        it = self.itemAt(event.pos())
+        if it != self.itc:
+            self.unsetCursor()
+        else:
+            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
         super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
             self.wparent.contextMenu(event.pos(), self)
+        elif event.button() == Qt.MouseButton.LeftButton:
+            it = self.itemAt(event.pos())
+            if it == self.itc:
+                if self == self.wparent.albums:
+                    self.wparent.play_album()
+                elif self == self.wparent.tracks:
+                    self.wparent.play_song()
         super(QListWidget, self).mousePressEvent(event)
 
 
@@ -55,6 +84,7 @@ class MusicIndexDlg(QDialog):
         super(MusicIndexDlg, self).__init__(parent)
         self.parent = parent
         self.shaz = False
+        self.play_cur = False
 
         self.setWindowTitle('Catalogo MP3')
         center_in_parent(self, parent, 700, 500)
@@ -93,6 +123,7 @@ class MusicIndexDlg(QDialog):
 
         self.tracks = myList(self, 'tracce')
         self.tracks.setSortingEnabled(False)
+        self.tracks.itemSelectionChanged.connect(self.track_changed)
         self.tracks.doubleClicked.connect(self.play_song)
 
         splitter2 = QSplitter(self)
@@ -107,8 +138,13 @@ class MusicIndexDlg(QDialog):
         self.plst = myList(self)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.plst.setMinimumSize(200, 200)
-        self.tab.addTab(self.pix, 'cover')
-        self.tab.addTab(self.plst, 'playlist')
+        self.tab.addTab(self.pix, '')
+        self.tab.setTabIcon(0, QIcon(os.path.join(os.getcwd(), 'icone/cover.png')))
+        self.tab.setTabToolTip(0, 'copertina')
+
+        self.tab.addTab(self.plst, '')
+        self.tab.setTabIcon(1, QIcon(os.path.join(os.getcwd(), 'icone/playlist.png')))
+        self.tab.setTabToolTip(1, 'playlist')
 
         self.h = QHBoxLayout()
         self.h.addWidget(self.tab)
@@ -230,22 +266,6 @@ class MusicIndexDlg(QDialog):
             item[0].setSelected(True)
             self.tracks.scrollToItem(item[0])
 
-    '''
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.KeyPress:
-            key = event.key()
-            if key == Qt.Key.Key_F2:
-                self.lyric_song()
-            elif key == Qt.Key.Key_F3:
-                self.find_song()
-        if event.type == QEvent.Type.MouseMove:
-            self.artists.setFocus()
-            #obj.setFocus()
-            #obj.s
-            a = 0
-
-        return super(MusicIndexDlg, self).eventFilter(obj, event)
-    '''
 
     def lyric_song(self):
         artists = self.artists.selectedItems()
@@ -305,6 +325,7 @@ class MusicIndexDlg(QDialog):
         items = self.albums.selectedItems()
         art = self.artists.selectedItems()
         if len(items) > 0 and len(art) > 0:
+            self.albums.setSelCur(items[0])
             self.tracks.clear()
             trk_name = items[0].text()
             art_name = art[0].text()
@@ -318,6 +339,11 @@ class MusicIndexDlg(QDialog):
                 self.pix.clear()
 
             self.tracks.addItems(a for a in tracks)
+
+    def track_changed(self):
+        items = self.tracks.selectedItems()
+        if len(items) > 0:
+            self.tracks.setSelCur(items[0])
 
     def set_artists(self):
         self.artists.clear()
@@ -384,12 +410,13 @@ class RadioDlg(QDialog):
         v = QVBoxLayout(self)
 
         h = QHBoxLayout()
-        lab = QLabel('Ricerca', self)
+        #lab = QLabel('Ricerca', self)
         self.ed = QLineEdit(self)
         b0 = QPushButton(self)
+        b0.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
         b0.clicked.connect(self.search)
         self.ed.returnPressed.connect(self.search)
-        h.addWidget(lab)
+        #h.addWidget(lab)
         h.addWidget(self.ed)
         h.addWidget(b0)
 
@@ -653,9 +680,11 @@ class mySearch(QDialog):
         self.music = music
 
         self.ed = QLineEdit(self)
-        b1 = QPushButton('...', self)
+        b1 = QPushButton(self)
+        b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
         b1.setMaximumWidth(50)
         b1.clicked.connect(self.search)
+        self.ed.returnPressed.connect(self.search)
         h = QHBoxLayout()
         h.addWidget(self.ed)
         h.addWidget(b1)

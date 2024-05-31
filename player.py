@@ -77,6 +77,8 @@ class Player(QMainWindow):
 
         self.setWindowTitle("Media Player")
         self.setWindowIcon(QIcon(os.path.join(cwd, 'icone/pentagram.ico')))
+        self.setObjectName('player_widget')
+        self.setStyleSheet("QMainWindow#player_widget {background-color: black}")
 
         self.ini = iniConf(ConfName())
         self.mode = Player.Mode_None
@@ -169,11 +171,15 @@ class Player(QMainWindow):
         last_folder = self.ini.get('CONF', 'last_folder')
         self.dlg = MusicIndexDlg(self, Music(self), last_folder)
         self.dlg.setMinimumWidth(500)
-        self.tab.addTab(self.dlg, 'Mp3')
+        self.tab.addTab(self.dlg, '')
+        self.tab.setTabIcon(0, QIcon(os.path.join(os.getcwd(), 'icone/mp3.png')))
+        self.tab.setTabToolTip(0, 'Mp3')
 
         # radios = self.ini.get('radio')
         rd = RadioDlg(self)
-        self.tab.addTab(rd, 'Radio')
+        self.tab.addTab(rd, '')
+        self.tab.setTabIcon(1, QIcon(os.path.join(os.getcwd(), 'icone/radio.png')))
+        self.tab.setTabToolTip(1, 'Radio')
 
         v1 = QVBoxLayout()
         self.note = QLineEdit(self) #QLabel('', self)
@@ -420,8 +426,8 @@ class Player(QMainWindow):
 
         self.tracks = tracks #copy.deepcopy(tracks)
         self.index = 0
-        self.play_song()
         self.currentChanged(0)
+        self.play_song()
 
     def play_song(self):
         self.tm = self.tracks[self.index].tm_sec
