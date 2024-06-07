@@ -11,7 +11,7 @@ from googletrans import Translator
 
 from mp3_tag import Music
 
-from utils import center_in_parent, yesNoMessage, waitCursor
+from utils import center_in_parent, yesNoMessage, waitCursor, informMessage
 from threading import Thread
 from myShazam import myShazam
 
@@ -38,44 +38,41 @@ class myList(QListWidget):
         super().__init__(parent)
         self.wparent = parent
         self.itc = None
-        #self.play_cur = False
         if txt != '':
             self.addItem(txt)
         self.setMouseTracking(True)
 
     def setSelCur(self, it):
-        if self.itc == it:
-            return
-        else:
+        if self.itc != it:
             self.itc = it
 
     def mouseMoveEvent(self, event):
         if self.hasFocus() is False:
             self.setFocus()
-            #QApplication.restoreOverrideCursor()
-            #self.wparent.play_cur = False
             self.unsetCursor()
             super(QListWidget, self).mouseMoveEvent(event)
             return
 
         it = self.itemAt(event.pos())
-        if it != self.itc:
-            self.unsetCursor()
-        else:
-            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        if self.itc is not None:
+            if it != self.itc:
+                self.unsetCursor()
+            else:
+                self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
         super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
-            self.wparent.contextMenu(event.pos(), self)
+            p = self.mapToGlobal(event.pos())
+            self.wparent.contextMenu(p, self)
         elif event.button() == Qt.MouseButton.LeftButton:
             it = self.itemAt(event.pos())
             if it == self.itc:
-                if self == self.wparent.albums:
-                    self.wparent.play_album()
-                elif self == self.wparent.tracks:
-                    self.wparent.play_song()
+                try:
+                    self.wparent.play_item(self)
+                except:
+                    pass
         super(QListWidget, self).mousePressEvent(event)
 
 
@@ -98,14 +95,20 @@ class MusicIndexDlg(QDialog):
         self.b1.setMaximumWidth(60)
         self.b1.clicked.connect(self.index2)
 
-        b2 = QPushButton('search', self)
-        b2.setMaximumWidth(60)
+        b2 = QPushButton(self)
+        b2.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
+        b2.setMaximumWidth(40)
         b2.clicked.connect(self.search)
+
+        b3 = QPushButton('?', self)
+        b3.setMaximumWidth(40)
+        b3.clicked.connect(self.info)
 
         h0 = QHBoxLayout()
         h0.addWidget(self.prog)
         h0.addWidget(self.b1)
         h0.addWidget(b2)
+        h0.addWidget(b3)
 
         self.artists = myList(self, 'artisti')
         self.artists.setSortingEnabled(True)
@@ -162,6 +165,9 @@ class MusicIndexDlg(QDialog):
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(last_folder)
 
+    def info(self):
+        informMessage('Music Player\nGestione mp3\nVersione 1.0\n31 Maggio 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
+
     def play_playlist(self, index):
         if index == 0:
             return
@@ -175,7 +181,7 @@ class MusicIndexDlg(QDialog):
         it = wd.itemAt(p)
         if it is None:
             return
-        p1 = wd.mapToGlobal(p)
+        #p1 = wd.mapToGlobal(p)
         if wd == self.plst:
             ctx.addAction("Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
             ctx.addAction("Rimuove selezionati").triggered.connect(lambda x: self.remove_playlist('selected'))
@@ -193,7 +199,13 @@ class MusicIndexDlg(QDialog):
                 track = it.text()
             ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
 
-        ctx.exec(p1)
+        ctx.exec(p)
+
+    def play_item(self, lst):
+        if lst == self.albums:
+            self.play_album()
+        elif lst == self.tracks:
+            self.play_song()
 
     def add_playlist(self, artist, album, track):
         if track != '':
@@ -384,13 +396,15 @@ class MusicIndexDlg(QDialog):
 class tableMenu(QTableWidget):
     def __init__(self, parent):
         super().__init__(parent)
-        self.parent = parent
+        self.wparent = parent
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
-            self.parent.contextMenu(event.pos(), type='radios')
+            p = self.mapToGlobal(event.pos())
+            self.wparent.contextMenu(p, self)
         super(QTableWidget, self).mousePressEvent(event)
 
+'''
 class listMenu(QListWidget):
     def __init__(self, parent):
         super().__init__(parent)
@@ -400,7 +414,7 @@ class listMenu(QListWidget):
         if event.button() == Qt.MouseButton.RightButton:
             self.parent.contextMenu(event.pos(), type='favorites')
         super(QListWidget, self).mousePressEvent(event)
-
+'''
 class RadioDlg(QDialog):
     def __init__(self, parent):
         super(RadioDlg, self).__init__(parent)
@@ -432,8 +446,9 @@ class RadioDlg(QDialog):
         w.setLayout(v1)
         sp.addWidget(w)
 
-        self.favorites = listMenu(self)
+        self.favorites = myList(self)
         self.favorites.doubleClicked.connect(self.play)
+        self.favorites.itemSelectionChanged.connect(self.favorite_changed)
         sp.addWidget(self.favorites)
         v.addWidget(sp)
 
@@ -491,7 +506,6 @@ class RadioDlg(QDialog):
         horizontalHeader.resizeSection(3, 30)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
-
         for r in radios:
             numRows = self.table.rowCount()
 
@@ -516,22 +530,21 @@ class RadioDlg(QDialog):
             self.table.setItem(numRows, 3, qi1)
             self.table.setColumnWidth(3, 10)
 
-    def contextMenu(self, p, type='radios'):
+    def contextMenu(self, p, wd):
         ctx = QMenu(self)
-        if type == 'radios':
-            it = self.table.itemAt(p)
+        if wd == self.table:
+            it = self.table.itemAt( self.table.mapFromGlobal(p))
             if it is None:
                 return
             if it.column() != 0:
                 it = self.table.item(it.row(), 0)
             ctx.addAction("Aggiunge ai preferiti").triggered.connect(lambda x: self.add_favourites(it))
-            p1 = self.table.mapToGlobal(p)
+            #p1 = self.table.mapToGlobal(p)
         else:
             it = self.favorites.itemAt(p)
             ctx.addAction("Rimuove dai preferiti").triggered.connect(lambda x: self.del_favourites(it))
-            p1 = self.favorites.mapToGlobal(p)
 
-        ctx.exec(p1)
+        ctx.exec(p)
 
     def add_favourites(self, it):
         r = it.data(Qt.ItemDataRole.UserRole)
@@ -547,6 +560,8 @@ class RadioDlg(QDialog):
             else:
                 return
 
+        if rd is None:
+            rd = {}
         rd[nome] = r.url
         self.ini.set_sez('radio', rd)
         self.ini.save()
@@ -573,6 +588,14 @@ class RadioDlg(QDialog):
             url = dat.url
             b.open_radio(url)
 
+    def favorite_changed(self):
+        items = self.favorites.selectedItems()
+        if len(items) > 0:
+            self.favorites.setSelCur(items[0])
+
+    def play_item(self, lst):
+        if lst == self.favorites:
+            self.play()
     def play(self):
         rad = self.favorites.selectedItems()[0].text()
         rd = self.ini.get('radio')
