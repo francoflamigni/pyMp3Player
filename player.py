@@ -9,8 +9,8 @@ import sys
 import scrobbler
 
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
-            QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit)
-from PyQt6.QtGui import QIcon, QPainter, QPen, QShowEvent
+            QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit, QSplashScreen)
+from PyQt6.QtGui import QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 
 from utils import iniConf
@@ -83,6 +83,12 @@ class Player(QMainWindow):
         self.ini = iniConf(ConfName())
         self.mode = Player.Mode_None
 
+        self.splash = None
+        f = os.path.join(cwd,  './icone/splash.bmp')
+        if os.path.isfile(f):
+            self.splash = QSplashScreen(QPixmap(f))
+            self.splash.show()
+
         # Create a basic vlc instance
         self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
 
@@ -103,6 +109,8 @@ class Player(QMainWindow):
         self.mediaplayer.set_equalizer(self.equalizer)
 
         self.create_ui()
+        if self.splash is not None:
+            self.splash.close()
         self.show()
 
 
