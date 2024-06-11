@@ -64,8 +64,10 @@ class myList(QListWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
-            p = self.mapToGlobal(event.pos())
-            self.wparent.contextMenu(p, self)
+            it = self.itemAt(event.pos())
+            if it is not None:
+                p = self.mapToGlobal(event.pos())
+                self.wparent.contextMenu(p, self, it)
         elif event.button() == Qt.MouseButton.LeftButton:
             it = self.itemAt(event.pos())
             if it == self.itc:
@@ -174,14 +176,10 @@ class MusicIndexDlg(QDialog):
         v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
         self.parent.open_file(v)
 
-    def contextMenu(self, p, wd):
+    def contextMenu(self, p, wd, it):
         ctx = QMenu(self)
         if wd == self.artists:
             return
-        it = wd.itemAt(p)
-        if it is None:
-            return
-        #p1 = wd.mapToGlobal(p)
         if wd == self.plst:
             ctx.addAction("Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
             ctx.addAction("Rimuove selezionati").triggered.connect(lambda x: self.remove_playlist('selected'))
