@@ -11,7 +11,7 @@ import scrobbler
 from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
             QApplication, QDial, QStyle, QTabWidget, QComboBox, QFrame, QSplitter, QLineEdit, QSplashScreen)
 from PyQt6.QtGui import QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 
 from utils import iniConf
 from mp3_tag import Music
@@ -24,6 +24,8 @@ def get_tm(secs):
     min = int(secs / 60)
     sec = int(secs) - int(min * 60)
     return "{:02.0F}:{:02.0F}".format(min, sec)
+
+'''
 def ConfDir():
     baseDir = os.path.join(os.getenv('APPDATA'), 'MySoft')
     if os.path.exists(baseDir) is False:
@@ -42,6 +44,7 @@ def ConfName(user=''):
         base += '_' + user
     name = os.path.join(dir, base + '.ini')
     return name
+'''
 
 # subclass slider to highlight central tick
 class eqSlider(QSlider):
@@ -80,7 +83,12 @@ class Player(QMainWindow):
         self.setObjectName('player_widget')
         self.setStyleSheet("QMainWindow#player_widget {background-color: black}")
 
-        self.ini = iniConf(ConfName())
+        self.ini = iniConf('music_player')
+        md = self.ini.get('MAIN', 'splittermode')
+        if md == '' or md == '1':
+            self.splittermode = True
+        else:
+            self.splittermode = False
         self.mode = Player.Mode_None
 
         self.splash = None
@@ -109,6 +117,7 @@ class Player(QMainWindow):
         self.mediaplayer.set_equalizer(self.equalizer)
 
         self.create_ui()
+
         if self.splash is not None:
             self.splash.close()
         self.show()
@@ -167,43 +176,54 @@ class Player(QMainWindow):
         for i in range(len(self.eq)):
             v = self.equalizer.get_amp_at_index(i)
             self.eq[i].setValue(int(v))
-            a = 0
-
 
     def create_ui(self):
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
         self.tab = QTabWidget(self)
-        #self.tab.setTabPosition(QTabWidget.TabPosition.West)
-        last_folder = self.ini.get('CONF', 'last_folder')
-        self.dlg = MusicIndexDlg(self, Music(self), last_folder)
+        #self.tab.setStyleSheet("QTabWidget::QWidget {background-color: black}")
+        self.dlg = MusicIndexDlg(self)
         self.dlg.setMinimumWidth(500)
         self.tab.addTab(self.dlg, '')
         self.tab.setTabIcon(0, QIcon(os.path.join(os.getcwd(), 'icone/mp3.png')))
         self.tab.setTabToolTip(0, 'Mp3')
 
-        # radios = self.ini.get('radio')
         rd = RadioDlg(self)
         self.tab.addTab(rd, '')
         self.tab.setTabIcon(1, QIcon(os.path.join(os.getcwd(), 'icone/radio.png')))
         self.tab.setTabToolTip(1, 'Radio')
 
         v1 = QVBoxLayout()
-        self.note = QLineEdit(self) #QLabel('', self)
-        self.note.setReadOnly(True)
-        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
         v1.addWidget(self.tab)
-        #v1.addWidget(self.note)
 
+        h3 = QHBoxLayout()
+        self.videoframe = QFrame()
+        self.videoframe.setMinimumSize(QSize(200, 200))
+        self.cover = QLabel()
+        self.cover.setMinimumSize(QSize(200, 200))
+        self.cover.setMaximumWidth(200)
+        h3.addStretch()
+        h3.addWidget(self.cover)
+        h3.addStretch()
+        h3.addWidget(self.videoframe)
+        h3.addStretch()
+
+        '''
         # position slider e tempi totali e parziali
         hs = self.position_slider_ui()
 
         # play and stop buttons
         hbt = self.play_stop_ui()
+        '''
 
-        # visual effects frame
-        wdd = self.visual_effect_ui()
+        # control_frame note, play - pause- slider bar
+        wdd = self.control_frame()
+
+        '''
+        self.note = QLineEdit(self)
+        self.note.setReadOnly(True)
+        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         vl0 = QVBoxLayout()
         vl0.setContentsMargins(0, 0, 0, 0)
@@ -213,43 +233,48 @@ class Player(QMainWindow):
         vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
 
         wdd.setLayout(vl0)
+        '''
 
         heq = self.equalizer_ui()
-
         # volume
         v3 = self.volume_ui()
-
         h2 = QHBoxLayout()
-        h2.addWidget(heq)  #)addLayout(heq)
+        h2.addWidget(heq)
         h2.addLayout(v3)
 
-        v4 = QHBoxLayout()
-        self.videoframe = QFrame()
-        self.videoframe.setMinimumHeight(200)
-        self.videoframe.setMinimumWidth(200)
 
+        '''
         p = self.sizePolicy()
         p.setHeightForWidth(True)
         self.setSizePolicy(p)
-        v4.addStretch()
-        v4.addWidget(self.videoframe)
-        v4.addStretch()
+        '''
 
         v2 = QVBoxLayout()
-        v2.addLayout(v4)
+        v2.addLayout(h3)
         v2.addWidget(wdd)
         v2.addLayout(h2)
 
-        ht = QSplitter()
         wd1 = QWidget()
         wd1.setLayout(v1)
         wd2 = QWidget()
         wd2.setLayout(v2)
-        ht.addWidget(wd1)
-        ht.addWidget(wd2)
 
         vt = QVBoxLayout()
-        vt.addWidget(ht)
+
+        if self.splittermode:
+            ht = QSplitter()
+            ht.addWidget(wd1)
+            ht.addWidget(wd2)
+            vt.addWidget(ht)
+            self.resize(1000, 400)
+        else:
+            #wd2.setStyleSheet("QWidget {background-color: black}")
+            self.tab.addTab(wd2,'')
+            self.tab.setTabIcon(2, QIcon(os.path.join(os.getcwd(), 'icone/stereo.png')))
+            self.tab.setTabToolTip(2, 'player')
+
+            vt.addWidget(self.tab)
+            self.resize(500, 400)
 
         self.widget.setLayout(vt)
 
@@ -257,7 +282,6 @@ class Player(QMainWindow):
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
-        self.resize(1000, 400)
 
     def position_slider_ui(self):
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
@@ -280,7 +304,18 @@ class Player(QMainWindow):
         hs.addWidget(self.t_time)
         return hs
 
-    def visual_effect_ui(self):
+    def control_frame(self):
+        # position slider e tempi totali e parziali
+        hs = self.position_slider_ui()
+
+        # play and stop buttons
+        hbt = self.play_stop_ui()
+
+        # information line
+        self.note = QLineEdit(self)
+        self.note.setReadOnly(True)
+        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
         wdd = QFrame()
         wdd.setObjectName('slFrame')
 
@@ -290,6 +325,15 @@ class Player(QMainWindow):
                             "border-style: solid;"
                             "border-color: rgb(10, 10, 10)}"
                         )
+
+        v = QVBoxLayout()
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(self.note)
+        v.addLayout(hs)
+        v.addLayout(hbt)
+        v.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
+
+        wdd.setLayout(v)
         return wdd
 
     def volume_ui(self):
@@ -411,11 +455,12 @@ class Player(QMainWindow):
             self.mediaplayer.set_equalizer(self.equalizer)
             #v1 = self.equalizer.get_amp_at_index(i)
 
-    def open_radio(self, url=''):
+    def open_radio(self, url='', fav=''):
         if self.mode != Player.Mode_None:
             self.stop()
 
         self.url = url
+        self.fav = fav
 
         # Set the title of the track as window title
         self.media = self.instance.media_new(url)
@@ -425,6 +470,19 @@ class Player(QMainWindow):
 
         self.currentChanged(1)
 
+        pic = scrobbler.get_thumbnail(self.fav)
+        if pic is not None:
+            qp = QPixmap()
+            s2 = self.cover.size()
+            if qp.loadFromData(pic):
+                s1 = qp.width(), qp.height()
+                self.cover.setPixmap(qp.scaledToHeight(self.cover.height())) #, Qt.AspectRatioMode.KeepAspectRatio))
+                self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+        else:
+            self.cover.clear()
+        if self.tab.count() > 2:
+            self.tab.setCurrentIndex(2)
+
     def open_file(self, tracks=None):
         if self.mode != Player.Mode_None:
             self.stop()
@@ -432,10 +490,13 @@ class Player(QMainWindow):
         if tracks is None or len(tracks) == 0:
             return
 
-        self.tracks = tracks #copy.deepcopy(tracks)
+        self.tracks = tracks
         self.index = 0
         self.currentChanged(0)
         self.play_song()
+
+        if self.tab.count() > 2:
+            self.tab.setCurrentIndex(2)
 
     def play_song(self):
         self.tm = self.tracks[self.index].tm_sec
@@ -447,6 +508,7 @@ class Player(QMainWindow):
         self.timer.setInterval(100)
         tt = self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title
         self.add_note(tt)
+        self.dlg.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
 
     def add_note(self, txt):
         self.note.setText(txt)

@@ -376,10 +376,27 @@ def resource_path(dir):
 
     return base_path
 
+def ConfDir(base):
+    baseDir = os.path.join(os.getenv('APPDATA'), 'MySoft')
+    if os.path.exists(baseDir) is False:
+        os.mkdir(baseDir)
+
+    confDir = path = os.path.join(baseDir, base)
+    if os.path.exists(confDir) is False:
+        os.mkdir(confDir)
+    return confDir
+
+
+def ConfName(base, user=''):
+    dir = ConfDir(base)
+    if user != '':
+        base += '_' + user
+    name = os.path.join(dir, base + '.ini')
+    return name
 
 class iniConf:
     def __init__(self, name):
-        self.confName = name
+        self.confName = ConfName(name)
         self.done = False
         self.conf = {}
         self.config_object = ConfigParser()
@@ -421,7 +438,7 @@ class iniConf:
         for key1 in self.conf.keys():
             sez = self.conf[key1]
             for key2 in sez.keys():
-                ob = sez[key2]
+                ob = sez[key2].replace('%', '%%')
                 self.config_object.set(key1, key2, ob)
 
         with open(self.confName, 'w') as conf:

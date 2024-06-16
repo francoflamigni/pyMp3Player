@@ -24,3 +24,6 @@ pip install lyricsgenius
 
 per le copertine dei cd
 https://musicbrainz.org/
+
+per le icone
+https://icon-icons.com/
