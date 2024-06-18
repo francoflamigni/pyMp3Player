@@ -1,7 +1,7 @@
 #define MyAppName "Player"
 #define MyReleaseVersion "1"
 #define MyAppVersion "1.0"
-#define MyAppPublisher "Mysost"
+#define MyAppPublisher "Mysoft"
 #define MyAppURL ""
 #define MyAppExeName "Player.exe"
 
@@ -16,15 +16,15 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={commonpf64}\MySoft\
-DefaultGroupName=Myself\{#MyAppName}
+DefaultDirName={commonpf64}\{#MyAppPublisher}\
+DefaultGroupName={#MyAppPublisher}\{#MyAppName}
 OutputDir={#MyBaseDir}\setup
 SourceDir={#MyBaseDir}
-OutputBaseFilename=Player_{#MyAppVersion}.{#MyReleaseVersion}_setup
+OutputBaseFilename={#MyAppName}_{#MyAppVersion}.{#MyReleaseVersion}_setup
 
 Compression=lzma
 SolidCompression=yes
-UninstallDisplayIcon={app}\Biblioteca.exe
+UninstallDisplayIcon={app}\{#MyAppExeName}
 UsePreviousAppDir=yes
 WizardImageStretch=no
 SetupIconFile=.\icone\pentagram.ico

@@ -79,7 +79,7 @@ class Player(QMainWindow):
         cwd = os.getcwd()
 
         self.setWindowTitle("Media Player")
-        self.setWindowIcon(QIcon(os.path.join(cwd, 'icone/pentagram.ico')))
+        self.setWindowIcon(QIcon(os.path.join(cwd, 'icone/player.ico')))
         self.setObjectName('player_widget')
         self.setStyleSheet("QMainWindow#player_widget {background-color: black}")
 
