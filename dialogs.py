@@ -12,7 +12,7 @@ from googletrans import Translator
 
 from mp3_tag import Music
 
-from utils import center_in_parent, yesNoMessage, waitCursor, informMessage, iniConf, exitBtn
+from utils import center_in_parent, yesNoMessage, waitCursor, informMessage, iniConf, exitBtn, set_background
 from threading import Thread
 from myShazam import myShazam
 
@@ -74,6 +74,9 @@ class MusicIndexDlg(QDialog):
 
         self.setWindowTitle('Catalogo MP3')
         center_in_parent(self, parent, 700, 500)
+        self.setObjectName("mp3_widget")
+        set_background(self)
+        #self.setStyleSheet("QWidget#mp3_widget {background-color: #c0c0c0}")
 
         ini = iniConf('music_player')
         self.last_folder = ini.get('CONF', 'last_folder')
@@ -162,7 +165,7 @@ class MusicIndexDlg(QDialog):
         self.print(self.last_folder)
 
     def info(self):
-        informMessage('Music Player\nGestione mp3\nVersione 1.2\n16 Giugno 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
+        informMessage('Music Player\nGestione mp3\nVersione 1.3\n21 Giugno 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
 
     def config(self):
         configDlg.run(self)
@@ -426,6 +429,9 @@ class RadioDlg(QDialog):
         super(RadioDlg, self).__init__(parent)
         self.ini = parent.ini
         self.wparent = parent
+        self.setObjectName("radio_widget")
+        set_background(self)
+        #self.setStyleSheet("QWidget#radio_widget {background-color: black}")
 
         v = QVBoxLayout(self)
 

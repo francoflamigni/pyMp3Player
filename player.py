@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel,
 from PyQt6.QtGui import QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtCore import Qt, QTimer, QSize
 
-from utils import iniConf
+from utils import iniConf, set_background
 from mp3_tag import Music
 from dialogs import RadioDlg, MusicIndexDlg, slider_style, eq_slider_style
 
@@ -25,26 +25,6 @@ def get_tm(secs):
     sec = int(secs) - int(min * 60)
     return "{:02.0F}:{:02.0F}".format(min, sec)
 
-'''
-def ConfDir():
-    baseDir = os.path.join(os.getenv('APPDATA'), 'MySoft')
-    if os.path.exists(baseDir) is False:
-        os.mkdir(baseDir)
-
-    confDir = path = os.path.join(baseDir, 'music_player')
-    if os.path.exists(confDir) is False:
-        os.mkdir(confDir)
-    return confDir
-
-
-def ConfName(user=''):
-    dir = ConfDir()
-    base = 'music_player'
-    if user != '':
-        base += '_' + user
-    name = os.path.join(dir, base + '.ini')
-    return name
-'''
 
 # subclass slider to highlight central tick
 class eqSlider(QSlider):
@@ -80,8 +60,8 @@ class Player(QMainWindow):
 
         self.setWindowTitle("Media Player")
         self.setWindowIcon(QIcon(os.path.join(cwd, 'icone/player.ico')))
-        self.setObjectName('player_widget')
-        self.setStyleSheet("QMainWindow#player_widget {background-color: black}")
+        self.setObjectName("player_widget")
+        set_background(self, 'black')
 
         self.ini = iniConf('music_player')
         md = self.ini.get('MAIN', 'splittermode')
@@ -117,6 +97,7 @@ class Player(QMainWindow):
         self.mediaplayer.set_equalizer(self.equalizer)
 
         self.create_ui()
+        self.init_equal()
 
         if self.splash is not None:
             self.splash.close()
@@ -139,6 +120,7 @@ class Player(QMainWindow):
         eq.setToolTip(str(self.freq[i]))
         eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
         eq.sliderPressed.connect(lambda widget=eq: self.equal(widget))
+        eq.sliderReleased.connect(lambda widget=eq: self.equal_sav(widget))
         eq.setStyleSheet(eq_slider_style())
         eq.setMaximumHeight(110)
         eq.setRange(-20, 20)
@@ -170,19 +152,48 @@ class Player(QMainWindow):
         wd.setLayout(he)
         return wd
 
-    def currentIndexChanged(self, v):
-        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(v)
+    def currentIndexChanged(self, idx):
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(idx)
         self.mediaplayer.set_equalizer(self.equalizer)
         for i in range(len(self.eq)):
             v = self.equalizer.get_amp_at_index(i)
             self.eq[i].setValue(int(v))
+            #self.equal_sav(self.eq[i])
+
+        ini = iniConf('music_player')
+        eq_sav = {}
+        eq_sav['preset'] = str(idx)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+
+
+    def init_equal(self):
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            return
+        if 'preset' in eq_sav.keys():
+            v = int(eq_sav['preset'])
+            self.currentIndexChanged(v)
+            self.cmb.setCurrentIndex(v)
+            return
+
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            eqi = self.eq[i]
+            o = eqi.objectName()
+            if o in eq_sav.keys():
+                v = int(eq_sav[o])
+                eqi.setValue(v)
+                self.equalizer.set_amp_at_index(v, i)
 
     def create_ui(self):
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
         self.tab = QTabWidget(self)
-        #self.tab.setStyleSheet("QTabWidget::QWidget {background-color: black}")
+
         self.dlg = MusicIndexDlg(self)
         self.dlg.setMinimumWidth(500)
         self.tab.addTab(self.dlg, '')
@@ -220,34 +231,12 @@ class Player(QMainWindow):
         # control_frame note, play - pause- slider bar
         wdd = self.control_frame()
 
-        '''
-        self.note = QLineEdit(self)
-        self.note.setReadOnly(True)
-        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        vl0 = QVBoxLayout()
-        vl0.setContentsMargins(0, 0, 0, 0)
-        vl0.addWidget(self.note)
-        vl0.addLayout(hs)
-        vl0.addLayout(hbt)
-        vl0.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
-
-        wdd.setLayout(vl0)
-        '''
-
         heq = self.equalizer_ui()
         # volume
         v3 = self.volume_ui()
         h2 = QHBoxLayout()
         h2.addWidget(heq)
         h2.addLayout(v3)
-
-
-        '''
-        p = self.sizePolicy()
-        p.setHeightForWidth(True)
-        self.setSizePolicy(p)
-        '''
 
         v2 = QVBoxLayout()
         v2.addLayout(h3)
@@ -268,7 +257,8 @@ class Player(QMainWindow):
             vt.addWidget(ht)
             self.resize(1000, 400)
         else:
-            #wd2.setStyleSheet("QWidget {background-color: black}")
+            wd2.setObjectName("wd2_widget")
+            set_background(wd2)
             self.tab.addTab(wd2,'')
             self.tab.setTabIcon(2, QIcon(os.path.join(os.getcwd(), 'icone/stereo.png')))
             self.tab.setTabToolTip(2, 'player')
@@ -337,12 +327,12 @@ class Player(QMainWindow):
         return wdd
 
     def volume_ui(self):
-        cmb = QComboBox(self)
+        self.cmb = QComboBox(self)
         n = vlc.libvlc_audio_equalizer_get_preset_count()
         a = vlc.libvlc_audio_equalizer_get_preset_name(0)
-        cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
+        self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
                       for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
-        cmb.currentIndexChanged.connect(self.currentIndexChanged)
+        self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
 
         self.volumeDial = QDial(self)
         self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
@@ -351,7 +341,7 @@ class Player(QMainWindow):
         self.volumeDial.setMaximumHeight(80)
         self.volumeDial.valueChanged.connect(self.set_volume)
         v3 = QVBoxLayout()
-        v3.addWidget(cmb)
+        v3.addWidget(self.cmb)
         v3.addWidget(self.volumeDial)
         return v3
 
@@ -455,6 +445,20 @@ class Player(QMainWindow):
             self.mediaplayer.set_equalizer(self.equalizer)
             #v1 = self.equalizer.get_amp_at_index(i)
 
+    def equal_sav(self, wid):
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            eq_sav = {}
+
+        if 'preset' in eq_sav.keys():
+            del eq_sav['preset']
+        o = wid.objectName()
+        v = wid.value()
+        eq_sav[o] = str(v)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+
     def open_radio(self, url='', fav=''):
         if self.mode != Player.Mode_None:
             self.stop()
@@ -506,7 +510,8 @@ class Player(QMainWindow):
         self._play()
         self.mode = Player.Mode_Music
         self.timer.setInterval(100)
-        tt = self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title
+        prg = ' (' + str(self.index + 1) + '/' + str(len(self.tracks))+ ')'
+        tt = self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title + prg
         self.add_note(tt)
         self.dlg.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
 

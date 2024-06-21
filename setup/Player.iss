@@ -8,7 +8,7 @@
 #define MyBaseDir "C:\Users\franc\MySoft\PyMp3Player"
 
 [Setup]
-AppId={{AD957F8E-9CA9-4607-81FC-E9B6372204A2}
+AppId={{FF49FD1A-5560-4A62-87D4-B96E2A27FF30}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}.{#MyReleaseVersion}
 AppVerName={#MyAppName}-{#MyAppVersion}.{#MyReleaseVersion}
@@ -24,10 +24,10 @@ OutputBaseFilename={#MyAppName}_{#MyAppVersion}.{#MyReleaseVersion}_setup
 
 Compression=lzma
 SolidCompression=yes
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon=.\icone\player.ico
 UsePreviousAppDir=yes
 WizardImageStretch=no
-SetupIconFile=.\icone\pentagram.ico
+SetupIconFile=.\icone\player.ico
 WizardImageFile=.\icone\splash.bmp
 WizardSmallImageFile=.\icone\splash.bmp
 
@@ -54,15 +54,15 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Source: "{#MyBaseDir}\installer\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 [Registry]
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: String; ValueName: "{app}\Player\{#MyAppExeName}"; ValueData: "RUNASADMIN"; Flags: uninsdeletekeyifempty uninsdeletevalue;
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: String; ValueName: "{app}\{#MyAppName}\{#MyAppExeName}"; ValueData: "RUNASADMIN"; Flags: uninsdeletekeyifempty uninsdeletevalue;
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\biblioteca\{#MyAppExeName}"; IconIndex: 0
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; IconIndex: 0
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; IconIndex: 0
-Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\biblioteca\{#MyAppExeName}"; Tasks: desktopicon; IconIndex: 0
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; Tasks: desktopicon; IconIndex: 0
 
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\biblioteca\{#MyAppExeName}"; IconIndex: 0; Tasks: quicklaunchicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; IconIndex: 0; Tasks: quicklaunchicon
 
 [Run]
-Filename: "{app}\Player\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 

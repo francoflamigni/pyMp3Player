@@ -523,6 +523,11 @@ def _find_controls(wd, vec):
         a = 0
     a = 0
 
+def set_background(wd, bk_color='#c0c0c0'):
+    nome = wd.objectName()
+    col = "QWidget#" + nome + " {background-color: " + bk_color + "}"
+    wd.setStyleSheet(col)
+
 
 def send_key(widget, key, modif=Qt.KeyboardModifier.NoModifier):
     pressEvent = QKeyEvent(QKeyEvent.Type.KeyPress, key, modif)
