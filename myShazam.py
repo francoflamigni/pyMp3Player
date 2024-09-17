@@ -4,7 +4,7 @@ from shazamio import Shazam
 from threading import Thread
 import asyncio
 import os
-import tempfile
+
 
 class myShazam:
     def __init__(self, bck, time=10):

@@ -13,8 +13,8 @@ from PyQt6.QtWidgets import (QSlider, QHBoxLayout, QMainWindow, QWidget, QLabel,
 from PyQt6.QtGui import QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtCore import Qt, QTimer, QSize
 
-from utils import iniConf, set_background
-from mp3_tag import Music
+from pyMyLib.qtUtils import set_background
+from pyMyLib.utils import iniConf
 from dialogs import RadioDlg, MusicIndexDlg, slider_style, eq_slider_style
 
 '''

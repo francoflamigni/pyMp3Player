@@ -13,7 +13,7 @@ formatter = logging.Formatter(
     "[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s"
 )
 
-from utils import waitCursor
+from pyMyLib.qtUtils import waitCursor
 
 null_handler = logging.NullHandler()
 null_handler.setFormatter(formatter)

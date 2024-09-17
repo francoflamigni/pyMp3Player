@@ -4,10 +4,10 @@ from threading import Thread, Lock
 from queue import Empty, Queue
 import json
 import glob
-from utils import ts_date2
+from pyMyLib.utils import ts_date2
 import hashlib
 import time
-import datetime
+
 
 def find_last(path):
     f = os.path.join(path, '**')

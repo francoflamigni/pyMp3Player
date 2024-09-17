@@ -12,7 +12,10 @@ from googletrans import Translator
 
 from mp3_tag import Music
 
-from utils import center_in_parent, yesNoMessage, waitCursor, informMessage, iniConf, exitBtn, set_background
+from pyMyLib.qtUtils import exitBtn, waitCursor, center_in_parent, set_background, yesNoMessage, informMessage
+from pyMyLib.utils import iniConf
+
+
 from threading import Thread
 from myShazam import myShazam
 
@@ -84,27 +87,29 @@ class MusicIndexDlg(QDialog):
         self.music = Music(parent)
         v = QVBoxLayout(self)
         self.prog = QLabel('')
-        self.b1 = QPushButton('...', self)
-        self.b1.setMaximumWidth(60)
+
+        self.b1 = QPushButton(self)
+        self.b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/folder_open.png')))
+        self.b1.setMaximumWidth(30)
         self.b1.clicked.connect(self.index2)
 
         b2 = QPushButton(self)
         b2.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
-        b2.setMaximumWidth(40)
+        b2.setMaximumWidth(30)
         b2.clicked.connect(self.search)
 
         b3 = QPushButton(self)
         b3.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/config.png')))
-        b3.setMaximumWidth(40)
+        b3.setMaximumWidth(30)
         b3.clicked.connect(self.config)
 
         bi = QPushButton('?', self)
-        bi.setMaximumWidth(40)
+        bi.setMaximumWidth(30)
         bi.clicked.connect(self.info)
 
         h0 = QHBoxLayout()
-        h0.addWidget(self.prog)
         h0.addWidget(self.b1)
+        h0.addWidget(self.prog)
         h0.addWidget(b2)
         h0.addWidget(b3)
         h0.addWidget(bi)
@@ -252,6 +257,7 @@ class MusicIndexDlg(QDialog):
             if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
                 self.index(self.last_folder)
 
+    ''' Cerca canzone artista album'''
     def search(self):
         sel = mySearch.run(self.wparent, self.music)
         if sel is None:
@@ -302,9 +308,12 @@ class MusicIndexDlg(QDialog):
             tracks = self.tracks.selectedItems()
             if len(tracks) != 0:
                 track = tracks[0].text()
-                txt = scrobbler.song_text(artist, track)
-                if len(txt) > 0:
-                    lyricsDlg.run(self.wparent, txt, track)
+            elif self.wparent.tab.currentIndex() == 2:
+                wd = self.wparent
+                track = wd.tracks[wd.index].title
+            txt = scrobbler.song_text(artist, track)
+            if len(txt) > 0:
+                lyricsDlg.run(self.wparent, txt, track)
 
     def find_song(self, time=5):
         if self.shaz:
@@ -712,6 +721,7 @@ class mySearch(QDialog):
     def __init__(self, parent, music):
         super(mySearch, self).__init__(parent)
         center_in_parent(self, parent, 600, 400)
+        self.setWindowTitle('Cerca')
 
         self.wparent = parent
         self.music = music
@@ -791,7 +801,7 @@ class configDlg(QDialog):
         v.addWidget(self.ui_mode)
         v.addLayout(exitBtn(self))
 
-    def Ok(self):
+    def accept(self):
         v = '0'
         if self.ui_mode.isChecked():
             v = '1'
@@ -806,8 +816,8 @@ class configDlg(QDialog):
 
         self.done(1)
 
-    def Annulla(self):
-        self.done(0)
+    #def Annulla(self):
+    #    self.done(0)
     @staticmethod
     def run(parent):
         dlg = configDlg(parent).exec()
