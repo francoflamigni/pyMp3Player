@@ -170,7 +170,7 @@ class MusicIndexDlg(QDialog):
         self.print(self.last_folder)
 
     def info(self):
-        informMessage('Music Player\nGestione mp3\nVersione 1.3\n21 Giugno 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
+        informMessage('Music Player\nGestione mp3\nVersione 1.4\n19 Settembre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
 
     def config(self):
         configDlg.run(self)
