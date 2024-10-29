@@ -64,11 +64,15 @@ class Player(QMainWindow):
         set_background(self, 'black')
 
         self.ini = iniConf('music_player')
+        '''
         md = self.ini.get('MAIN', 'splittermode')
         if md == '' or md == '1':
             self.splittermode = True
         else:
             self.splittermode = False
+        '''
+
+        self.splittermode = False
         self.mode = Player.Mode_None
 
         self.splash = None
@@ -219,14 +223,6 @@ class Player(QMainWindow):
         h3.addStretch()
         h3.addWidget(self.videoframe)
         h3.addStretch()
-
-        '''
-        # position slider e tempi totali e parziali
-        hs = self.position_slider_ui()
-
-        # play and stop buttons
-        hbt = self.play_stop_ui()
-        '''
 
         # control_frame note, play - pause- slider bar
         wdd = self.control_frame()
