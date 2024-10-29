@@ -1,0 +1,16 @@
+setuptools==69.0.3
+pyinstaller-hooks-contrib==2023.12
+pyinstaller==5.7.0
+python-vlc
+pyqt6==6.6.1
+pyqt6-qt6==6.6.1
+PyQt6-Frameless-Window
+superqt
+eyed3
+pyradios 
+soundcard
+soundfile
+shazamio
+googletrans==3.1.0a0
+lyricsgenius
+-e C:/Users/franc/MySoft/pyMyLib/

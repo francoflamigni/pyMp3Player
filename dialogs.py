@@ -1,10 +1,16 @@
 import os
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor
+import time
+
+vlc_path = os.path.join(os.getcwd(), 'exe/VLC')
+os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
+import vlc
+
+from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QPainter, QPen
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
                              QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu, QTabWidget, QListWidgetItem,
-                             QCheckBox)
+                             QCheckBox, QFrame, QComboBox, QDial, QSlider)
 
 import scrobbler
 from pyradios import RadioBrowser
@@ -22,6 +28,16 @@ from myShazam import myShazam
 '''
 https://github.com/andreztz/pyradios/tree/main/pyradios
 '''
+
+def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
+    pixmap = QPixmap(png_path)
+    scaled_pixmap = pixmap.scaled(width, height)
+    return QCursor(scaled_pixmap, hotspot_x, hotspot_y)
+
+def lyric_song(artist, track, parent=None):
+    txt = scrobbler.song_text(artist, track)
+    if len(txt) > 0:
+        lyricsDlg.run(parent, txt, track)
 
 class myList(QListWidget):
     def __init__(self, parent, txt=''):
@@ -48,7 +64,8 @@ class myList(QListWidget):
             if it != self.itc:
                 self.unsetCursor()
             else:
-                self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                self.setCursor(create_cursor('icone/play.png'))
+                #self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
         super(QListWidget, self).mouseMoveEvent(event)
 
@@ -62,6 +79,7 @@ class myList(QListWidget):
             it = self.itemAt(event.pos())
             if it == self.itc:
                 try:
+                    self.unsetCursor()
                     self.wparent.play_item(self)
                 except:
                     pass
@@ -75,11 +93,8 @@ class MusicIndexDlg(QDialog):
         self.shaz = False
         self.play_cur = False
 
-        self.setWindowTitle('Catalogo MP3')
-        center_in_parent(self, parent, 700, 500)
         self.setObjectName("mp3_widget")
         set_background(self)
-        #self.setStyleSheet("QWidget#mp3_widget {background-color: #c0c0c0}")
 
         ini = iniConf('music_player')
         self.last_folder = ini.get('CONF', 'last_folder')
@@ -93,26 +108,20 @@ class MusicIndexDlg(QDialog):
         self.b1.setMaximumWidth(30)
         self.b1.clicked.connect(self.index2)
 
+        self.te = QLineEdit()
+        self.te.setMinimumWidth(200)
+        self.te.textChanged.connect(self.list_search)
+
         b2 = QPushButton(self)
         b2.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
         b2.setMaximumWidth(30)
         b2.clicked.connect(self.search)
 
-        b3 = QPushButton(self)
-        b3.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/config.png')))
-        b3.setMaximumWidth(30)
-        b3.clicked.connect(self.config)
-
-        bi = QPushButton('?', self)
-        bi.setMaximumWidth(30)
-        bi.clicked.connect(self.info)
-
         h0 = QHBoxLayout()
         h0.addWidget(self.b1)
         h0.addWidget(self.prog)
+        h0.addWidget(self.te)
         h0.addWidget(b2)
-        h0.addWidget(b3)
-        h0.addWidget(bi)
 
         self.artists = myList(self, 'artisti')
         self.artists.setSortingEnabled(True)
@@ -169,11 +178,16 @@ class MusicIndexDlg(QDialog):
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(self.last_folder)
 
-    def info(self):
-        informMessage('Music Player\nGestione mp3\nVersione 1.4\n19 Settembre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
-
-    def config(self):
-        configDlg.run(self)
+    def list_search(self):
+        txt = self.te.text()
+        if not txt:
+            self.artists.clearSelection()
+            self.albums.clear()
+            return
+        items = self.artists.findItems(txt, Qt.MatchContains)
+        if items:
+            items[0].setSelected(True)
+            self.artists.scrollToItem(items[0])
 
     def play_playlist(self, index):
         if index == 0:
@@ -201,6 +215,8 @@ class MusicIndexDlg(QDialog):
                     album = album[0].text()
                 track = it.text()
             ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
+            if wd == self.tracks:
+                ctx.addAction("Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
 
         ctx.exec(p)
 
@@ -239,9 +255,6 @@ class MusicIndexDlg(QDialog):
         mes = 'playlist brani: ' + str(self.plst.count()) + ' durata: ' + tm
         self.tab.setTabToolTip(1, mes)
 
-
-        a = 0
-
     def remove_playlist(self, type):
         if type == 'all':
             self.plst.clear()
@@ -259,7 +272,8 @@ class MusicIndexDlg(QDialog):
 
     ''' Cerca canzone artista album'''
     def search(self):
-        sel = mySearch.run(self.wparent, self.music)
+        txt = self.te.text()
+        sel = mySearch.run(self.wparent, self.music, txt)
         if sel is None:
             return
         if 'artista' in sel:
@@ -299,21 +313,6 @@ class MusicIndexDlg(QDialog):
         if item is not None and len(item) > 0:
             item[0].setSelected(True)
             self.tracks.scrollToItem(item[0])
-
-
-    def lyric_song(self):
-        artists = self.artists.selectedItems()
-        if len(artists) != 0:
-            artist = artists[0].text()
-            tracks = self.tracks.selectedItems()
-            if len(tracks) != 0:
-                track = tracks[0].text()
-            elif self.wparent.tab.currentIndex() == 2:
-                wd = self.wparent
-                track = wd.tracks[wd.index].title
-            txt = scrobbler.song_text(artist, track)
-            if len(txt) > 0:
-                lyricsDlg.run(self.wparent, txt, track)
 
     def find_song(self, time=5):
         if self.shaz:
@@ -440,7 +439,6 @@ class RadioDlg(QDialog):
         self.wparent = parent
         self.setObjectName("radio_widget")
         set_background(self)
-        #self.setStyleSheet("QWidget#radio_widget {background-color: black}")
 
         v = QVBoxLayout(self)
 
@@ -718,7 +716,7 @@ class infoDlg(QDialog):
         dlg.exec()
 
 class mySearch(QDialog):
-    def __init__(self, parent, music):
+    def __init__(self, parent, music, txt):
         super(mySearch, self).__init__(parent)
         center_in_parent(self, parent, 600, 400)
         self.setWindowTitle('Cerca')
@@ -727,6 +725,7 @@ class mySearch(QDialog):
         self.music = music
 
         self.ed = QLineEdit(self)
+        self.ed.setText(txt)
         b1 = QPushButton(self)
         b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
         b1.setMaximumWidth(50)
@@ -743,6 +742,8 @@ class mySearch(QDialog):
         v.addLayout(h)
         v.addWidget(self.list)
         self.selected = None
+        if txt:
+            self.search()
 
     def search(self):
         txt = self.ed.text().lower()
@@ -779,8 +780,8 @@ class mySearch(QDialog):
             self.done(1)
 
     @staticmethod
-    def run(parent, music):
-        dlg = mySearch(parent, music)
+    def run(parent, music, txt=''):
+        dlg = mySearch(parent, music, txt)
         if dlg.exec() == 1:
             return dlg.selected
         return None
@@ -821,6 +822,476 @@ class configDlg(QDialog):
     @staticmethod
     def run(parent):
         dlg = configDlg(parent).exec()
+
+'''
+'''
+class eqSlider(QSlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        qp = QPainter(self)
+        sz = self.size()
+        ti = self.tickInterval()
+        interval = self.maximum() - self.minimum()
+        nt = interval / ti
+
+        len = 3
+        bd = 5
+
+        dy = (sz.height() - 2 * bd) / nt
+        y = int(bd + (nt / 2) * dy)
+
+        qp.setPen(QPen(Qt.GlobalColor.red, 3))
+        qp.drawLine(0, y, len, y)
+        qp.drawLine(sz.width(), y, sz.width() - len, y)
+
+def get_tm(secs):
+    min = int(secs / 60)
+    sec = int(secs) - int(min * 60)
+    return "{:02.0F}:{:02.0F}".format(min, sec)
+
+class MusicPlayerDlg(QDialog):
+    Mode_None = 0  # nessuna selezione
+    Mode_Music = 1  # mp3
+    Mode_Radio = 2  # radio
+    Mode_Play = 3
+    Mode_Pause = 4
+    def __init__(self, parent):
+        super(MusicPlayerDlg, self).__init__(parent)
+        self.wparent = parent
+
+        self.media = None
+        self.is_paused = False
+        self.tracks = []
+        self.index = -1
+        self.eq = []
+
+        self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
+        self.mediaplayer = self.instance.media_player_new()
+
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
+        self.freq = [self.get_band(i) for i in range(nf)]
+        self.mode = MusicPlayerDlg.Mode_None
+
+        self.setObjectName("player_widget")
+        set_background(self)
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(100)
+        self.timer.timeout.connect(self.update_ui)
+
+        h3 = QHBoxLayout()
+        self.videoframe = QFrame()
+        self.videoframe.setMinimumSize(QSize(200, 200))
+        self.cover = QLabel()
+        self.cover.setMinimumSize(QSize(200, 200))
+        self.cover.setMaximumWidth(200)
+        h3.addStretch()
+        h3.addWidget(self.cover)
+        h3.addStretch()
+        h3.addWidget(self.videoframe)
+        h3.addStretch()
+
+        # control_frame note, play - pause- slider bar
+        wdd = self.control_frame()
+
+        heq = self.equalizer_ui()
+        # volume
+        vol = self.volume_ui()
+        h2 = QHBoxLayout()
+        h2.addWidget(heq)
+        h2.addLayout(vol)
+
+        v2 = QVBoxLayout(self)
+        v2.addLayout(h3)
+        v2.addWidget(wdd)
+        v2.addLayout(h2)
+
+    def get_band(self, i):
+        f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
+        s = str(int(f / 1000.)) + 'kHz' if f >= 1000. else str(int(f)) + 'Hz'
+        return s
+
+    def position_slider_ui(self):
+        self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
+        self.positionslider.setObjectName('slipos')
+        self.positionslider.setStyleSheet(slider_style())
+        self.positionslider.setToolTip("Position")
+        self.positionslider.setMaximum(1000)
+        self.positionslider.sliderMoved.connect(self.set_position)
+        self.positionslider.sliderPressed.connect(self.set_position)
+        self.rt_time = QLabel('', self)
+        self.rt_time.setMaximumHeight(self.positionslider.height())
+        self.rt_time.setMinimumWidth(30)
+        self.t_time = QLabel('', self)
+        self.t_time.setMaximumHeight(self.positionslider.height())
+        self.t_time.setMinimumWidth(30)
+        hs = QHBoxLayout()
+        hs.setContentsMargins(1, 1, 1, 1)
+        hs.addWidget(self.rt_time)
+        hs.addWidget(self.positionslider)
+        hs.addWidget(self.t_time)
+        return hs
+
+    def set_position(self):
+        # Set the movie position according to the position slider.
+
+        # The vlc MediaPlayer needs a float value between 0 and 1, Qt uses
+        # integer variables, so you need a factor; the higher the factor, the
+        # more precise are the results (1000 should suffice).
+
+        # Set the media position to where the slider was dragged
+        self.timer.stop()
+        pos = self.positionslider.value()
+        self.mediaplayer.set_position(pos / 1000.0)
+        self.timer.start()
+
+    def control_frame(self):
+        # position slider e tempi totali e parziali
+        hs = self.position_slider_ui()
+
+        # play and stop buttons
+        hbt = self.play_stop_ui()
+
+        # information line
+        self.note = QLineEdit(self)
+        self.note.setReadOnly(True)
+        self.note.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        wdd = QFrame()
+        wdd.setObjectName('slFrame')
+
+        wdd.setStyleSheet("QFrame#slFrame {background-color: rgb(220, 220, 220);"
+                            "border-width: 1;"
+                            "border-radius: 8;"
+                            "border-style: solid;"
+                            "border-color: rgb(10, 10, 10)}"
+                        )
+
+        v = QVBoxLayout()
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(self.note)
+        v.addLayout(hs)
+        v.addLayout(hbt)
+        v.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
+
+        wdd.setLayout(v)
+        return wdd
+
+    def equalizer_ui(self):
+        self.init_equal()
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
+        self.eq = []
+        he = QHBoxLayout()
+        he.setContentsMargins(5, 15, 5, 5)
+        for i in range(nf):
+            eq = self.add_slider(i, he)
+            self.eq.append(eq)
+
+        he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
+
+        wd = QFrame()
+        wd.setStyleSheet("QFrame {background-color: rgb(220, 255, 255);"
+                            "border-width: 1;"
+                            "border-radius: 8;"
+                            "border-style: solid;"
+                            "border-color: rgb(10, 10, 10)}"
+                        )
+        wd.setLayout(he)
+        return wd
+
+    def add_slider(self, i, he):
+        eq = eqSlider(Qt.Orientation.Vertical, self)
+        eq.setObjectName('eq' + str(i))
+        eq.setToolTip(str(self.freq[i]))
+        eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
+        eq.sliderPressed.connect(lambda widget=eq: self.equal(widget))
+        eq.sliderReleased.connect(lambda widget=eq: self.equal_sav(widget))
+        eq.setStyleSheet(eq_slider_style())
+        eq.setMaximumHeight(110)
+        eq.setRange(-20, 20)
+        eq.setTickInterval(5)
+        eq.setTickPosition(QSlider.TickPosition.TicksBothSides)
+        v = self.equalizer.get_amp_at_index(i)
+        eq.setValue(int(v))
+        he.addWidget(eq)
+        return eq
+
+    def equal(self, wid):
+        if isinstance(wid, QSlider) is True:
+            o = wid.objectName()
+            i = int(o[2:])
+            v = wid.value()
+            self.equalizer.set_amp_at_index(v, i)
+            self.mediaplayer.set_equalizer(self.equalizer)
+
+    def equal_sav(self, wid):
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            eq_sav = {}
+
+        if 'preset' in eq_sav.keys():
+            del eq_sav['preset']
+        o = wid.objectName()
+        v = wid.value()
+        eq_sav[o] = str(v)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+
+    def init_equal(self):
+        self.cmb = QComboBox(self)
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            return
+        if 'preset' in eq_sav.keys():
+            v = int(eq_sav['preset'])
+            self.currentIndexChanged(v)
+            self.cmb.setCurrentIndex(v)
+            return
+
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            eqi = self.eq[i]
+            o = eqi.objectName()
+            if o in eq_sav.keys():
+                v = int(eq_sav[o])
+                eqi.setValue(v)
+                self.equalizer.set_amp_at_index(v, i)
+
+    def currentIndexChanged(self, idx):
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(idx)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            v = self.equalizer.get_amp_at_index(i)
+            self.eq[i].setValue(int(v))
+            #self.equal_sav(self.eq[i])
+
+        ini = iniConf('music_player')
+        eq_sav = {}
+        eq_sav['preset'] = str(idx)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+
+    def play_stop_ui(self):
+        self.playbutton = QPushButton(self)
+        self.playbutton.setMaximumWidth(30)
+        #self.set_play_icon(Player.Mode_Play)
+        self.playbutton.clicked.connect(self.play_pause)
+
+        self.stopbutton = QPushButton(self)
+        self.stopbutton.setMaximumWidth(30)
+        self.stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
+        self.stopbutton.clicked.connect(self.stop)
+
+        hbt = QHBoxLayout()
+        hbt.addStretch()
+        hbt.setContentsMargins(1, 1, 1, 1)
+        hbt.addWidget(self.playbutton)
+        hbt.addWidget(self.stopbutton)
+        hbt.addStretch()
+
+        self.lyricbutton = QPushButton(self)
+        self.lyricbutton.setMaximumWidth(30)
+        self.lyricbutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/lyric.png')))
+        self.lyricbutton.setToolTip('testo brano')
+        self.lyricbutton.clicked.connect(self.songLyrics)
+
+        self.titlebutton = QPushButton(self)
+        self.titlebutton.setMaximumWidth(30)
+        self.titlebutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/shazam.png')))
+        self.titlebutton.setToolTip('riconosce brano')
+        self.titlebutton.clicked.connect(self.wparent.songTitle)
+        hbt.addWidget(self.lyricbutton)
+        hbt.addWidget(self.titlebutton)
+        return hbt
+
+    def songLyrics(self):
+        if self.index >= 0:
+            lyric_song(self.tracks[self.index].artist, self.tracks[self.index].title, self.wparent)
+
+    def set_play_icon(self, type):
+        if type == MusicPlayerDlg.Mode_Play:
+            ic = 'SP_MediaPlay'
+            tp = 'Play'
+        else:
+            ic = 'SP_MediaPause'
+            tp = 'Pause'
+        self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, ic)))
+        self.playbutton.setToolTip(tp)
+
+    def play_pause(self):
+        # Toggle play/pause status
+        if self.mediaplayer.is_playing():
+            self.mediaplayer.pause()
+            self.set_play_icon(MusicPlayerDlg.Mode_Play)
+            self.is_paused = True
+            self.timer.stop()
+        else:
+            if self.mediaplayer.play() == -1:
+                self.open_file()
+                return
+
+            self.mediaplayer.play()
+            self.set_play_icon(MusicPlayerDlg.Mode_Pause)
+            self.timer.start()
+            self.is_paused = False
+
+    def stop(self):
+        # Stop player
+        self.mediaplayer.stop()
+        self.set_play_icon(MusicPlayerDlg.Mode_Play)
+        self.mode = MusicPlayerDlg.Mode_None
+        self.index = -1
+
+
+    def volume_ui(self):
+        n = vlc.libvlc_audio_equalizer_get_preset_count()
+        a = vlc.libvlc_audio_equalizer_get_preset_name(0)
+        self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
+                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
+        self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
+
+        self.volumeDial = QDial(self)
+        self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
+        self.volumeDial.setToolTip("Volume")
+        self.volumeDial.setNotchesVisible(True)
+        self.volumeDial.setMaximumHeight(80)
+        self.volumeDial.valueChanged.connect(self.set_volume)
+        v3 = QVBoxLayout()
+        v3.addWidget(self.cmb)
+        v3.addWidget(self.volumeDial)
+        return v3
+
+    def set_volume(self, volume):
+        # Set the volume
+        self.mediaplayer.audio_set_volume(volume)
+
+    def open_radio(self, url='', fav=''):
+        if self.mode != MusicPlayerDlg.Mode_None:
+            self.stop()
+
+        self.url = url
+        self.fav = fav
+
+        # Set the title of the track as window title
+        self.media = self.instance.media_new(url)
+        self._play()
+        self.mode = MusicPlayerDlg.Mode_Radio
+        self.timer.setInterval(5000)
+
+        self.currentChanged(1)
+
+        pic = scrobbler.get_thumbnail(self.fav)
+        if pic is not None:
+            qp = QPixmap()
+            s2 = self.cover.size()
+            if qp.loadFromData(pic):
+                s1 = qp.width(), qp.height()
+                self.cover.setPixmap(qp.scaledToHeight(self.cover.height())) #, Qt.AspectRatioMode.KeepAspectRatio))
+                self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+        else:
+            self.cover.clear()
+
+    def open_file(self, tracks=None):
+        if self.mode != MusicPlayerDlg.Mode_None:
+            self.stop()
+
+        if tracks is None or len(tracks) == 0:
+            return
+
+        self.tracks = tracks
+        self.index = 0
+        self.currentChanged(0)
+        self.play_song()
+
+    def play_song(self):
+        self.tm = self.tracks[self.index].tm_sec
+        filename = self.tracks[self.index].file
+        self.t_time.setText(get_tm(self.tm))
+        self.media = self.instance.media_new(filename)
+        self._play()
+        self.mode = MusicPlayerDlg.Mode_Music
+        self.timer.setInterval(100)
+        prg = ' (' + str(self.index + 1) + '/' + str(len(self.tracks))+ ')'
+        tt = self.tracks[self.index].artist + ' - ' + self.tracks[self.index].album + ' - ' + self.tracks[self.index].title + prg
+        self.add_note(tt)
+        self.wparent.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
+
+    def _play(self):
+        # Put the media in the media player
+        self.mediaplayer.set_media(self.media)
+
+        # Parse the metadata of the file
+        self.media.parse()
+
+        # Set the title of the track as window title
+        self.setWindowTitle(self.media.get_meta(0))
+
+        self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
+
+        self.play_pause()
+        tm0 = time.monotonic()
+        while not self.mediaplayer.is_playing():
+            dt = time.monotonic() - tm0
+            if dt > 10:
+                self.add_note('timeout')
+                self.stop()
+                break
+            pass
+        self.update_ui()
+
+    def currentChanged (self, index):
+        if index == 1:
+            self.positionslider.hide()
+            self.rt_time.clear()
+            self.t_time.clear()
+            self.add_note('')
+
+        else:
+            self.positionslider.show()
+            self.add_note('')
+
+    def add_note(self, txt):
+        self.note.setText(txt)
+        self.note.setToolTip(txt)
+        self.note.setCursorPosition(0)
+
+    def update_ui(self):
+        # Updates the user interface
+
+        # Set the slider's position to its corresponding media position
+        # Note that the setValue function only takes values of type int,
+        # so we must first convert the corresponding media position.
+        media_pos = int(self.mediaplayer.get_position() * 1000)
+        self.positionslider.setValue(media_pos)
+
+        # No need to call this function if nothing is played
+        if not self.mediaplayer.is_playing():
+            self.timer.stop()
+
+            # After the video finished, the play button stills shows "Pause",
+            # which is not the desired behavior of a media player.
+            # This fixes that "bug".
+            if not self.is_paused and self.mode != MusicPlayerDlg.Mode_None:
+                if self.index < len(self.tracks) - 1:
+                    self.index += 1
+                    self.play_song()
+                else:
+                    self.stop()
+        if self.mode == MusicPlayerDlg.Mode_Radio:
+            self.radio_metadata()
+        elif self.mode == MusicPlayerDlg.Mode_Music:
+            tm = (self.tm * media_pos) / 1000
+            self.rt_time.setText(get_tm(tm))
+
+    def radio_metadata(self):
+        title = scrobbler.get_title(self.url)
+        self.add_note(title)
+
 
 def slider_style():
     QSS = """

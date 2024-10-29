@@ -2,6 +2,9 @@
 
 dipendenze
 
+
+pip install setuptools==69.0.3
+
 pip install pyinstaller==5.7.0
 
 pip install python-vlc
@@ -21,6 +24,8 @@ pip install shazamio
 pip install googletrans==3.1.0a0
 
 pip install lyricsgenius
+
+pip install PyQt6-Frameless-Window
 
 per le copertine dei cd
 https://musicbrainz.org/
