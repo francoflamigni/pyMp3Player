@@ -6,7 +6,7 @@ os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QPainter, QPen
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QPainter, QPen, QTextCharFormat
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel, QStyle,
                              QListWidget, QApplication, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem,
                              QHeaderView, QPlainTextEdit, QAbstractItemView, QMenu, QTabWidget, QListWidgetItem,
@@ -101,6 +101,7 @@ class MusicIndexDlg(QDialog):
 
         self.music = Music(parent)
         v = QVBoxLayout(self)
+        v.setContentsMargins(1, 1, 1, 1)
         self.prog = QLabel('')
 
         self.b1 = QPushButton(self)
@@ -126,6 +127,7 @@ class MusicIndexDlg(QDialog):
         self.artists = myList(self, 'artisti')
         self.artists.setSortingEnabled(True)
         self.artists.itemSelectionChanged.connect(self.artist_changed)
+        self.artists.setMinimumHeight(200)
 
         self.albums = myList(self, 'album')
         self.albums.setSortingEnabled(False)
@@ -134,26 +136,32 @@ class MusicIndexDlg(QDialog):
 
         splitter1 = QSplitter(self)
         splitter1.setOrientation(Qt.Orientation.Horizontal)
+        splitter1.setContentsMargins(0, 0, 0, 0)
         splitter1.addWidget(self.artists)
         splitter1.addWidget(self.albums)
 
         self.tracks = myList(self, 'tracce')
+        self.tracks.setMinimumWidth(250)
         self.tracks.setSortingEnabled(False)
         self.tracks.itemSelectionChanged.connect(self.track_changed)
         self.tracks.doubleClicked.connect(self.play_song)
 
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
+        splitter2.setContentsMargins(0, 0, 0, 0)
         splitter2.addWidget(splitter1)
         self.tab = QTabWidget(self)
         self.tab.setTabPosition(QTabWidget.TabPosition.West)
         self.tab.tabBarDoubleClicked.connect(self.play_playlist)
+        #self.tab.setMinimumSize(200, 200)
+        self.tab.setMaximumWidth(250)
 
         self.pix = QLabel()
-        self.pix.setMinimumSize(200, 200)
+        #self.pix.setMinimumSize(200, 200)
+
         self.plst = myList(self)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.plst.setMinimumSize(200, 200)
+        #self.plst.setMinimumSize(200, 200)
         self.tab.addTab(self.pix, '')
         self.tab.setTabIcon(0, QIcon(os.path.join(os.getcwd(), 'icone/cover.png')))
         self.tab.setTabToolTip(0, 'copertina')
@@ -163,6 +171,7 @@ class MusicIndexDlg(QDialog):
         self.tab.setTabToolTip(1, 'playlist')
 
         self.h = QHBoxLayout()
+        self.h.setContentsMargins(1, 1, 1, 1)
         self.h.addWidget(self.tab)
         self.h.addWidget(self.tracks)
         wd = QWidget()
@@ -645,19 +654,38 @@ class myPlainText(QPlainTextEdit):
 
     def setSlave(self, slave):
         self.slave = slave
+        self.slave.setStyleSheet("""
+        QPlainTextEdit {
+            selection-background-color: yellow;
+            selection-color: black;
+        }
+        """)
+        self.slave.verticalScrollBar().valueChanged.connect(self.handle_value_changed2)
+
     def setText(self, txt):
         self.cur.movePosition(QTextCursor.MoveOperation.End)
         self.cur.insertText(txt)
+
     def handle_value_changed(self, position):
         if self.slave is None:
             return
         self.slave.verticalScrollBar().setValue(position)
 
+    def handle_value_changed2(self, position):
+        self.verticalScrollBar().setValue(position)
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+
+        cursor = self.cursorForPosition(event.pos())
+        cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+        self.setTextCursor(cursor)
+
 class lyricsDlg(QDialog):
     def __init__(self, parent, txt, track=''):
         super(lyricsDlg, self).__init__(parent)
         self.wparent = parent
-        self.txt = txt
+        self.txt = txt.lstrip()
         center_in_parent(self, parent, 600, 500)
         self.setWindowTitle(track)
 
@@ -667,7 +695,7 @@ class lyricsDlg(QDialog):
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
 
-        self.txt_box.setText(txt)
+        self.txt_box.setText(self.txt)
         self.h.addWidget(self.txt_box)
         v.addLayout(self.h)
 
@@ -684,11 +712,28 @@ class lyricsDlg(QDialog):
         txt1 = self.tr.translate(self.txt, 'it')
         self.bt.hide()
 
+        self.txt_box.selectionChanged.connect(self.sync)
+
         tr_box.setText(txt1.text)
         sz = self.size()
         sz.setWidth(sz.width() * 2)
         self.resize(sz)
-        a = 0
+
+    def sync(self):
+        line_number = self.txt_box.textCursor().blockNumber()
+        # Ottieni il cursore del documento
+        cursor = self.txt_box.slave.textCursor()
+        # Posizionarsi all'inizio del documento
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        # Scorrere fino alla riga desiderata
+        for _ in range(line_number):
+            cursor.movePosition(QTextCursor.MoveOperation.Down)
+
+        # Selezionare la riga intera
+        cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+
+        # Impostare il cursore aggiornato nel QPlainTextEdit
+        self.txt_box.slave.setTextCursor(cursor)
 
     @staticmethod
     def run(parent, txt, track=''):

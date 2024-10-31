@@ -1,23 +1,16 @@
 import os
-#import time
-
-#vlc_path = os.path.join(os.getcwd(), 'exe/VLC')
-#os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
-
-#import vlc
 import sys
-#import scrobbler
 
-from PyQt6.QtWidgets import (QToolBar, QHBoxLayout, QMainWindow, QWidget, QLabel, QStackedWidget, QVBoxLayout,
+from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout,
             QApplication, QTabBar, QSplashScreen, QPushButton, QTextEdit, QSplitter, QToolBar)
-from PyQt6.QtGui import QIcon, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtCore import Qt
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
 from pyMyLib.qtUtils import informMessage
 from pyMyLib.utils import iniConf
-from dialogs import RadioDlg, MusicIndexDlg, MusicPlayerDlg, slider_style, eq_slider_style
+from dialogs import RadioDlg, MusicIndexDlg, MusicPlayerDlg
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -97,18 +90,14 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab = QStackedWidget(self)
 
         self.dlg = MusicIndexDlg(self)
-        self.dlg.setMinimumWidth(500)
+        #self.dlg.setMinimumWidth(500)
         self.tab.addWidget(self.dlg)
-
 
         rd = RadioDlg(self)
         self.tab.addWidget(rd)
 
         self.ply = MusicPlayerDlg(self)
-        #self.tab.addTab(self.ply, '')
         self.tab.addWidget(self.ply)
-        #self.tab.setTabIcon(2, QIcon(os.path.join(os.getcwd(), 'icone/stereo.png')))
-        #self.tab.setTabToolTip(2, 'player')
 
         v.addWidget(self.tab)
 
