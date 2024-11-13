@@ -330,6 +330,7 @@ class MusicIndexDlg(QDialog):
         ms = myShazam(self._find_song, time=time)
         waitCursor(True)
         ms.guess()
+
     def _find_song(self, out):
         mes = ''
         if isinstance(out, dict):
@@ -606,12 +607,13 @@ class RadioDlg(QDialog):
 
     def onCellClicked(self, nr, nc):
         if nc == 3:
-            b = self.wparent
-            b.stop()
+            #b = self.wparent.ply
+            #b.stop()
             qi = self.table.item(0, 0)
             dat = qi.data(Qt.ItemDataRole.UserRole)
             url = dat.url
-            b.open_radio(url, dat.favicon)
+            self.wparent.open_radio(url, dat.favicon)
+            #b.open_radio(url, dat.favicon)
 
     def favorite_changed(self):
         items = self.favorites.selectedItems()
@@ -873,6 +875,7 @@ class configDlg(QDialog):
 class eqSlider(QSlider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
     def paintEvent(self, event):
         super().paintEvent(event)
         qp = QPainter(self)
@@ -926,6 +929,7 @@ class MusicPlayerDlg(QDialog):
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
+        ''' Parte superiore con copertina e spettro'''
         h3 = QHBoxLayout()
         self.videoframe = QFrame()
         self.videoframe.setMinimumSize(QSize(200, 200))

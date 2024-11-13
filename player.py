@@ -46,7 +46,6 @@ class Player(FramelessDialog): #QMainWindow):
             self.splash = QSplashScreen(QPixmap(f))
             self.splash.show()
 
-
         self.create_ui()
 
         if self.splash is not None:
@@ -58,6 +57,12 @@ class Player(FramelessDialog): #QMainWindow):
         QMainWindow.show(self)
         QApplication.processEvents()
         self.dlg.process()
+
+    def changeEvent(self, event):
+        # Metodo 4: Intercettare e gestire l'evento di massimizzazione
+        if event.type() == event.Type.WindowStateChange:
+            if self.windowState() & Qt.WindowState.WindowMaximized:
+                self.showNormal()
 
     def createTabBar(self):
         tool = QToolBar()
@@ -104,7 +109,6 @@ class Player(FramelessDialog): #QMainWindow):
     def get_track_pix(self, album, artist, cover):
         self.dlg.get_track_pix(album, artist, cover)
 
-
     def songTitle(self):
         wd = self.tab.widget(0)
         wd.find_song()
@@ -123,69 +127,6 @@ class Player(FramelessDialog): #QMainWindow):
         informMessage('Music Player\nGestione mp3\nVersione 1.1.1\n29 Ottobre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
 
 
-class MyTitleBar2(StandardTitleBar):
-    def __init__(self, parent):
-        super().__init__(parent)
-
-        self.setTitle('pippo')
-        self.setIcon(QIcon(QPixmap('prova.ico')))
-
-        tb = QToolBar()
-        bt1 = QPushButton()
-        bt1.setText("aa")
-        #bt1.clicked.connect(parent.aaa)
-        bt1.setMaximumWidth(35)
-        bt1.setMaximumHeight(20)
-        tb.addWidget(bt1)
-        te = QTextEdit()
-        te.setMaximumHeight(20)
-        tb.addWidget(te)
-
-        lay = self.layout()
-        lay.insertSpacing(3, 5)
-
-        #lay.insertWidget(4, tb)
-        a =0
-
-
-class MyDialog(FramelessDialog):
-    def __init__(self):
-        super().__init__()
-        #cwd = os.getcwd()
-
-        #self.setTitleBar(MyTitleBar(self))
-        #self.titleBar.raise_()
-
-        self.ini = iniConf('music_player')
-
-        self.splash = None
-        '''
-        f = os.path.join(os.getcwd(),  './icone/splash.bmp')
-        if os.path.isfile(f):
-            self.splash = QSplashScreen(QPixmap(f))
-            self.splash.show()
-        '''
-
-        self.create_ui()
-
-        if self.splash is not None:
-            self.splash.close()
-
-        self.show()
-
-
-    def create_ui(self):
-
-        #self.setTitleBar2(MyTitleBar(self))
-        #self.titleBar.raise_()
-        v = QVBoxLayout(self)
-        v.addSpacing(20)
-        self.sp = QSplitter(self)
-        self.sp.setOrientation(Qt.Orientation.Vertical)
-        self.sp.addWidget(QTextEdit())
-
-        v.addWidget(self.sp)
-        self.show()
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     player = Player()
