@@ -974,25 +974,18 @@ class Equalizer(QFrame):
 
     def add_slider(self, i, he):
         eq = eqSlider(Qt.Orientation.Vertical, self, band=i)
-        #eq.setObjectName('eq' + str(i))
-        #eq.setToolTip(str(self.freq[i]))
+
         eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
         eq.sliderPressed.connect(lambda widget=eq: self.equal(widget))
         eq.sliderReleased.connect(lambda widget=eq: self.equal_sav(widget))
-        '''
-        eq.setStyleSheet(eq_slider_style())
-        eq.setMaximumHeight(110)
-        eq.setRange(-20, 20)
-        eq.setTickInterval(5)
-        eq.setTickPosition(QSlider.TickPosition.TicksBothSides)
-        '''
+
         v = self.equalizer.get_amp_at_index(i)
         eq.set_value(v)
         #eq.set_tip(self.freq[i], v)
         he.addWidget(eq)
         return eq
 
-    ''' richiamato quando si clicca o si muove uno slider'''
+    ''' richiamato quando si clicca o si muove uno slider '''
     def equal(self, wid):
         if isinstance(wid, QSlider) is True:
             #o = wid.objectName()
@@ -1001,7 +994,7 @@ class Equalizer(QFrame):
             self.equalizer.set_amp_at_index(v, band)
             self.mediaplayer.set_equalizer(self.equalizer)
 
-    ''' richiamato quando si finisce di spostare uno slider'''
+    ''' richiamato quando si finisce di spostare uno slider '''
     def equal_sav(self, wid):
         ini = iniConf('music_player')
         eq_sav = ini.get('EQUALIZER')
@@ -1019,7 +1012,6 @@ class Equalizer(QFrame):
         #wid.setToolTip(f"{self.freq[i]} {v}db")
         self.equalizer.set_amp_at_index(v, band)
         self.mediaplayer.set_equalizer(self.equalizer)
-        #self.cmb.setCurrentIndex(self.cmb.count()-1)
 
         eq_sav[o] = str(v)
         ini.set_sez('EQUALIZER', eq_sav)
@@ -1055,14 +1047,6 @@ class Equalizer(QFrame):
             self.eq[i].set_value(v)
             #self.eq[i].setToolTip(f"{self.freq[i]} {v}db")
             self.equal_sav(self.eq[i])
-
-        '''
-        ini = iniConf('music_player')
-        eq_sav = {}
-        eq_sav['preset'] = str(idx)
-        ini.set_sez('EQUALIZER', eq_sav)
-        ini.save()
-        '''
 
 
 def get_tm(secs):
