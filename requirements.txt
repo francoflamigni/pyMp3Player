@@ -13,4 +13,5 @@ soundfile
 shazamio
 googletrans==3.1.0a0
 lyricsgenius
+musicbrainzngs
 -e C:/Users/franc/MySoft/pyMyLib/

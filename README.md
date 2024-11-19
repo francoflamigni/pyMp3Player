@@ -31,8 +31,19 @@ pip install googletrans==3.1.0a0
 
 pip install lyricsgenius
 
+pip install musicbrainzngs
+
 per le copertine dei cd
 https://musicbrainz.org/
 
 per le icone
 https://icon-icons.com/
+
+Genius:
+Acess Token RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l
+
+spotify:
+user franco.flamigni@gmail.com
+psw: Av@lon1991
+ClientID: 5661c9e19f734ba5a723c7a51d7cc665
+secret: 1a1a91272cdb4ffb99c561a930ba7ecd
