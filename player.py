@@ -2,9 +2,8 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout,
-            QApplication, QTabBar, QSplashScreen, QPushButton, QTextEdit, QSplitter, QToolBar)
+            QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar)
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtCore import Qt
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -23,6 +22,7 @@ class MyTitleBar(StandardTitleBar):
         self.setTitle("Media Player")
         self.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/player.ico')))
         self.maxBtn.hide()
+        self.setDoubleClickEnabled(False)
 
         lay = self.layout()
         lay.insertSpacing(3, 5)
@@ -57,12 +57,6 @@ class Player(FramelessDialog): #QMainWindow):
         QMainWindow.show(self)
         QApplication.processEvents()
         self.dlg.process()
-
-    def changeEvent(self, event):
-        # Metodo 4: Intercettare e gestire l'evento di massimizzazione
-        if event.type() == event.Type.WindowStateChange:
-            if self.windowState() & Qt.WindowState.WindowMaximized:
-                self.showNormal()
 
     def createTabBar(self):
         tool = QToolBar()

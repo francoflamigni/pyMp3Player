@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
 import scrobbler
 from pyradios import RadioBrowser
 from googletrans import Translator
+from music_brainz import brainz
 
 from mp3_tag import Music
 
@@ -38,6 +39,9 @@ def lyric_song(artist, track, parent=None):
     txt = scrobbler.song_text(artist, track)
     if len(txt) > 0:
         lyricsDlg.run(parent, txt, track)
+
+def info_album(artist, album, parent=None):
+    brainz(artist, album)
 
 class myList(QListWidget):
     def __init__(self, parent, txt=''):
@@ -112,6 +116,7 @@ class MusicIndexDlg(QDialog):
         self.te = QLineEdit()
         self.te.setMinimumWidth(200)
         self.te.textChanged.connect(self.list_search)
+        self.te.returnPressed.connect(self.search)
 
         b2 = QPushButton(self)
         b2.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
@@ -226,6 +231,8 @@ class MusicIndexDlg(QDialog):
             ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
             if wd == self.tracks:
                 ctx.addAction("Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
+            else:
+                ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
 
         ctx.exec(p)
 
@@ -873,8 +880,17 @@ class configDlg(QDialog):
 '''
 '''
 class eqSlider(QSlider):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, band, **kwargs):
         super().__init__(*args, **kwargs)
+        self.wparent = args[1]
+        self.freq = self.wparent.freq[band]
+        self.band = band
+        self.setObjectName(f"eq{band}")
+        self.setStyleSheet(eq_slider_style())
+        self.setMaximumHeight(110)
+        self.setRange(-20, 20)
+        self.setTickInterval(5)
+        self.setTickPosition(QSlider.TickPosition.TicksBothSides)
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -894,10 +910,166 @@ class eqSlider(QSlider):
         qp.drawLine(0, y, len, y)
         qp.drawLine(sz.width(), y, sz.width() - len, y)
 
+    def set_tip(self, val):
+        self.setToolTip(f"{self.freq} {val}db")
+
+    def set_value(self, val):
+        self.setValue(int(val))
+        self.setToolTip(f"{self.freq} {val}db")
+
+    def get_value(self):
+        v = self.value()
+        self.setToolTip(f"{self.freq} {v}db")
+        return v, self.band
+
+class Equalizer(QFrame):
+    def __init__(self, mediaplayer):
+        super().__init__()
+        self.mediaplayer = mediaplayer
+        self.cmb = None
+        self.eq = []
+        self.freq = []
+        self.init_ui()
+        self.equal_load()
+
+    def init_equal(self):
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
+        self.freq = [self.get_band(i) for i in range(nf)]
+        self.cmb = QComboBox(self)
+        #n = vlc.libvlc_audio_equalizer_get_preset_count()
+        #a = vlc.libvlc_audio_equalizer_get_preset_name(0)
+        self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
+                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
+
+        self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
+
+    def init_ui(self):
+        self.init_equal()
+        nf = vlc.libvlc_audio_equalizer_get_band_count()
+        self.eq = []
+        he = QHBoxLayout()
+        he.setContentsMargins(5, 15, 5, 5)
+        for i in range(nf):
+            eq = self.add_slider(i, he)
+            self.eq.append(eq)
+
+        he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
+
+        self.setStyleSheet("QFrame {background-color: rgb(220, 255, 255);"
+                         "border-width: 1;"
+                         "border-radius: 8;"
+                         "border-style: solid;"
+                         "border-color: rgb(10, 10, 10)}"
+                         )
+        self.setLayout(he)
+
+    def get_preset(self):
+        return self.cmb
+
+    def get_band(self, i):
+        f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
+        s = str(int(f / 1000.)) + 'kHz' if f >= 1000. else str(int(f)) + 'Hz'
+        return s
+
+    def add_slider(self, i, he):
+        eq = eqSlider(Qt.Orientation.Vertical, self, band=i)
+        #eq.setObjectName('eq' + str(i))
+        #eq.setToolTip(str(self.freq[i]))
+        eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
+        eq.sliderPressed.connect(lambda widget=eq: self.equal(widget))
+        eq.sliderReleased.connect(lambda widget=eq: self.equal_sav(widget))
+        '''
+        eq.setStyleSheet(eq_slider_style())
+        eq.setMaximumHeight(110)
+        eq.setRange(-20, 20)
+        eq.setTickInterval(5)
+        eq.setTickPosition(QSlider.TickPosition.TicksBothSides)
+        '''
+        v = self.equalizer.get_amp_at_index(i)
+        eq.set_value(v)
+        #eq.set_tip(self.freq[i], v)
+        he.addWidget(eq)
+        return eq
+
+    ''' richiamato quando si clicca o si muove uno slider'''
+    def equal(self, wid):
+        if isinstance(wid, QSlider) is True:
+            #o = wid.objectName()
+            #i = int(o[2:])
+            v, band = wid.get_value()
+            self.equalizer.set_amp_at_index(v, band)
+            self.mediaplayer.set_equalizer(self.equalizer)
+
+    ''' richiamato quando si finisce di spostare uno slider'''
+    def equal_sav(self, wid):
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            eq_sav = {}
+
+        v = self.cmb.currentIndex()
+        eq_sav['preset'] = str(v)
+        #if 'preset' in eq_sav.keys():
+        #    del eq_sav['preset']
+        o = wid.objectName()
+        #i = int(o[2:])
+        #v = wid.value()
+        v, band = wid.get_value()
+        #wid.setToolTip(f"{self.freq[i]} {v}db")
+        self.equalizer.set_amp_at_index(v, band)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        #self.cmb.setCurrentIndex(self.cmb.count()-1)
+
+        eq_sav[o] = str(v)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+
+    def equal_load(self):
+        ini = iniConf('music_player')
+        eq_sav = ini.get('EQUALIZER')
+        if eq_sav is None:
+            return
+        if 'preset' in eq_sav.keys():
+            v = int(eq_sav['preset'])
+            self.currentIndexChanged(v)
+            self.cmb.setCurrentIndex(v)
+            #return
+
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            eqi = self.eq[i]
+            o = eqi.objectName()
+            if o in eq_sav.keys():
+                v = int(eq_sav[o])
+                eqi.set_value(v)
+                self.equalizer.set_amp_at_index(v, i)
+
+    ''' è stato cambiato il preset della combo '''
+    def currentIndexChanged(self, idx):
+        self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(idx)
+        self.mediaplayer.set_equalizer(self.equalizer)
+        for i in range(len(self.eq)):
+            v = self.equalizer.get_amp_at_index(i)
+            self.eq[i].set_value(v)
+            #self.eq[i].setToolTip(f"{self.freq[i]} {v}db")
+            self.equal_sav(self.eq[i])
+
+        '''
+        ini = iniConf('music_player')
+        eq_sav = {}
+        eq_sav['preset'] = str(idx)
+        ini.set_sez('EQUALIZER', eq_sav)
+        ini.save()
+        '''
+
+
 def get_tm(secs):
     min = int(secs / 60)
     sec = int(secs) - int(min * 60)
     return "{:02.0F}:{:02.0F}".format(min, sec)
+
 
 class MusicPlayerDlg(QDialog):
     Mode_None = 0  # nessuna selezione
@@ -913,13 +1085,13 @@ class MusicPlayerDlg(QDialog):
         self.is_paused = False
         self.tracks = []
         self.index = -1
-        self.eq = []
+        #self.eq = []
 
         self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
         self.mediaplayer = self.instance.media_player_new()
 
-        nf = vlc.libvlc_audio_equalizer_get_band_count()
-        self.freq = [self.get_band(i) for i in range(nf)]
+        #nf = vlc.libvlc_audio_equalizer_get_band_count()
+        #self.freq = [self.get_band(i) for i in range(nf)]
         self.mode = MusicPlayerDlg.Mode_None
 
         self.setObjectName("player_widget")
@@ -945,11 +1117,13 @@ class MusicPlayerDlg(QDialog):
         # control_frame note, play - pause- slider bar
         wdd = self.control_frame()
 
-        heq = self.equalizer_ui()
+        equalize_ctrl = Equalizer(self.mediaplayer)
+
+        #heq = self.equalizer_ui()
         # volume
-        vol = self.volume_ui()
+        vol = self.volume_ui(equalize_ctrl.get_preset())
         h2 = QHBoxLayout()
-        h2.addWidget(heq)
+        h2.addWidget(equalize_ctrl)
         h2.addLayout(vol)
 
         v2 = QVBoxLayout(self)
@@ -957,10 +1131,12 @@ class MusicPlayerDlg(QDialog):
         v2.addWidget(wdd)
         v2.addLayout(h2)
 
+    '''
     def get_band(self, i):
         f = vlc.libvlc_audio_equalizer_get_band_frequency(i)
         s = str(int(f / 1000.)) + 'kHz' if f >= 1000. else str(int(f)) + 'Hz'
         return s
+    '''
 
     def position_slider_ui(self):
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
@@ -1028,6 +1204,7 @@ class MusicPlayerDlg(QDialog):
         wdd.setLayout(v)
         return wdd
 
+    '''
     def equalizer_ui(self):
         self.init_equal()
         nf = vlc.libvlc_audio_equalizer_get_band_count()
@@ -1066,6 +1243,7 @@ class MusicPlayerDlg(QDialog):
         eq.setValue(int(v))
         he.addWidget(eq)
         return eq
+        
 
     def equal(self, wid):
         if isinstance(wid, QSlider) is True:
@@ -1124,6 +1302,7 @@ class MusicPlayerDlg(QDialog):
         eq_sav['preset'] = str(idx)
         ini.set_sez('EQUALIZER', eq_sav)
         ini.save()
+    '''
 
     def play_stop_ui(self):
         self.playbutton = QPushButton(self)
@@ -1197,12 +1376,14 @@ class MusicPlayerDlg(QDialog):
         self.index = -1
 
 
-    def volume_ui(self):
+    def volume_ui(self, cmb):
+        '''
         n = vlc.libvlc_audio_equalizer_get_preset_count()
         a = vlc.libvlc_audio_equalizer_get_preset_name(0)
         self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
                       for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
         self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
+        '''
 
         self.volumeDial = QDial(self)
         self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
@@ -1211,7 +1392,7 @@ class MusicPlayerDlg(QDialog):
         self.volumeDial.setMaximumHeight(80)
         self.volumeDial.valueChanged.connect(self.set_volume)
         v3 = QVBoxLayout()
-        v3.addWidget(self.cmb)
+        v3.addWidget(cmb)  #self.cmb)
         v3.addWidget(self.volumeDial)
         return v3
 
