@@ -4,5 +4,6 @@ installer/build
 installer/dist
 installer/*.spec
 #setup/
+*.exe
 exe/
 .idea/

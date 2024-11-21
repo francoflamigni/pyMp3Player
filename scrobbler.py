@@ -208,16 +208,23 @@ def get_title(url):
 
 def song_text(artist, song):
     txt = ''
-    api = genius.Genius('RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l', verbose=True, timeout=10,
-                        remove_section_headers=True)
+    api = genius.Genius('RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l', verbose=False, timeout=10,
+                        remove_section_headers=False, skip_non_songs=True, response_format='dom')
     waitCursor(True)
     try:
         #art = api.search_artist(artist, max_songs=0)
         song = api.search_song(song, artist, None, False)
         if song is not None:
             txt = song.lyrics
-            aa = txt.find('\n')
-            txt = txt[aa + 1:]
+            txt = re.sub(r'.*(?=[\[{])', r'\n', txt)
+
+            lines = txt.strip().split('\n')
+            lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
+            lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
+            lines[-1] = re.sub(r'\d+$', '', lines[-1])
+            lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
+            txt =  '\n'.join(lines)
+
             a = 0
     except ConnectionError as err:
         a = 0

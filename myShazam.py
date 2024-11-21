@@ -1,5 +1,6 @@
 import soundcard as sc
 import soundfile as sf
+from pyMyLib.qtUtils import waitCursor
 from shazamio import Shazam
 from threading import Thread
 import asyncio
@@ -37,6 +38,7 @@ class myShazam:
         except:
             out = 'errore'
         self.bck(out)
+        waitCursor()
 
     def speaker(self):
         try:
