@@ -118,7 +118,7 @@ class Player(FramelessDialog): #QMainWindow):
         self.tb.setCurrentIndex(2)
 
     def info(self):
-        informMessage('Music Player\nGestione mp3\nVersione 1.1.1\n29 Ottobre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
+        informMessage('Music Player\nGestione mp3\nVersione 1.1.0\n21 Novembre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
 
 
 if __name__ == "__main__":

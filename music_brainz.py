@@ -43,28 +43,39 @@ class MusicInfo:
         offset = 0
         limit = 100
         try:
-            while True:
-                artists = musicbrainzngs.search_artists(
-                    query=self.artist_name,
-                    offset=offset,
-                    limit=limit
-                )
-                for artist in artists['artist-list']:
-                    if similar(artist['name'], self.artist_name):
-                        self.album['artist'] = artist['name']
-                        self.id_artist = artist['id']
-                        return True
-
-                if len(artists['artist-list']) < limit:
-                    break
-                offset += limit
+            artists = musicbrainzngs.search_artists(
+                query=self.artist_name,
+                offset=offset,
+                limit=limit
+            )
+            for artist in artists['artist-list']:
+                if similar(artist['name'], self.artist_name):
+                    self.album['artist'] = artist['name']
+                    self.fill_artist(artist)
+                    self.id_artist = artist['id']
+                    return True
         except Exception as e:
             self.errMes = e
         return False
 
-    '''
-    ricerca gli album dato l'id di un artista
-    '''
+    def fill_artist(self, artist):
+        try:
+            if artist['type'] == 'Group':
+                if artist['life-span']['end']:
+                    self.album['info'] = f"{artist['begin-area']['name']} Dal {artist['life-span']['begin']} al {artist['life-span']['end']}"
+                else:
+                    self.album['info'] = f"{artist['begin-area']['name']} Dal {artist['life-span']['begin']}"
+            else:
+                if artist['life-span']['end']:
+                    self.album['info'] = (f"Nato a {artist['begin-area']['name']} il {artist['life-span']['begin']} "
+                                          f"Morto a {artist['end-area']['name']} il {artist['life-span']['end']}")
+                else:
+                    self.album['info'] = f"Nato a {artist['begin-area']['name']} il {artist['life-span']['begin']}"
+        except:
+            pass
+        return
+
+    ''' ricerca gli album dato l'id di un artista '''
     def get_album(self):
         offset = 0
         limit = 100
@@ -91,9 +102,7 @@ class MusicInfo:
 
         return False
 
-    '''
-    ritorna l'elenco delle tracce dato l'id di un album
-    '''
+    ''' ritorna l'elenco delle tracce dato l'id di un album '''
     def get_tracks(self):
         limit = 100
         offset = 0
@@ -336,7 +345,7 @@ def brainz(artist, album):
     album_details = mi.get_album_detail_string()
     dt1 = time.monotonic() - t0
 
-    if album_details is not None:
+    if album_details:
         AlbumInfoDlg.run(album_details, mi.get_album_detail_string)
 
     a = 0
