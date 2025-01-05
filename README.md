@@ -42,3 +42,9 @@ https://icon-icons.com/
 Genius:
 Acess Token RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l
 
+new Token
+clientID = 'vMXGN9eXhW_1JqnbqVGumj5wPK9b3y3rgCAZzxEqM2Hvkt-3p58cP4iYxFxhDVPV'
+secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
+token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
+installata versione 3.2.0
+
