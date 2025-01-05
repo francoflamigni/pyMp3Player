@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 import re
 import struct
-import lyricsgenius as genius
+from lyricsgenius import Genius
 logger = logging.getLogger(__package__)
 
 formatter = logging.Formatter(
@@ -207,19 +207,35 @@ def get_title(url):
     return title
 
 def song_text(artist, song):
+    oldtoken = 'RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l'
+
     txt = ''
-    api = genius.Genius('RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l', verbose=True, timeout=10,
-                        remove_section_headers=True)
+
+    clientID = 'vMXGN9eXhW_1JqnbqVGumj5wPK9b3y3rgCAZzxEqM2Hvkt-3p58cP4iYxFxhDVPV'
+    secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
+    token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
+
+    api = Genius(token, verbose=False, timeout=10,
+                        remove_section_headers=False, skip_non_songs=True, response_format='dom')
     waitCursor(True)
     try:
         #art = api.search_artist(artist, max_songs=0)
         song = api.search_song(song, artist, None, False)
         if song is not None:
             txt = song.lyrics
-            aa = txt.find('\n')
-            txt = txt[aa + 1:]
+            txt = re.sub(r'.*(?=[\[{])', r'\n', txt)
+
+            lines = txt.strip().split('\n')
+            lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
+            lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
+            lines[-1] = re.sub(r'\d+$', '', lines[-1])
+            lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
+            txt =  '\n'.join(lines)
+
             a = 0
     except ConnectionError as err:
+        a = 0
+    except Exception as er1:
         a = 0
     waitCursor()
     return txt
