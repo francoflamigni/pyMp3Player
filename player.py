@@ -56,6 +56,10 @@ class Player(FramelessDialog): #QMainWindow):
     def show(self):
         QMainWindow.show(self)
         QApplication.processEvents()
+        sz = self.dlg.prog.size()
+        sz.setWidth(100)
+        self.dlg.prog.setFixedSize(sz)
+
         self.dlg.process()
 
     def createTabBar(self):
