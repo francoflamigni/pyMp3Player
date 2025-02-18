@@ -31,6 +31,8 @@ pip install googletrans==3.1.0a0
 
 pip install lyricsgenius
 
+pip install python-dateutil
+
 pip install musicbrainzngs
 
 per le copertine dei cd
