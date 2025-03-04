@@ -9,7 +9,9 @@ from qframelesswindow import FramelessDialog, StandardTitleBar
 
 from pyMyLib.qtUtils import informMessage
 from pyMyLib.utils import iniConf
-from dialogs import RadioDlg, MusicIndexDlg, MusicPlayerDlg
+from dialogs import RadioDlg
+from music_index import MusicIndexDlg
+from music_player import MusicPlayerDlg
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -80,7 +82,6 @@ class Player(FramelessDialog): #QMainWindow):
         bi = QPushButton('?', self)
         bi.setMaximumWidth(30)
         bi.clicked.connect(self.info)
-        #tool.
         tool.addWidget(bi)
         return tool
 
@@ -93,7 +94,6 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab = QStackedWidget(self)
 
         self.dlg = MusicIndexDlg(self)
-        #self.dlg.setMinimumWidth(500)
         self.tab.addWidget(self.dlg)
 
         rd = RadioDlg(self)
