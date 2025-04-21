@@ -9,10 +9,12 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
 from mp3_tag import Music
 from music_brainz import brainz
 
-from pyMyLib.qtUtils import exitBtn, waitCursor, center_in_parent, set_background, yesNoMessage, informMessage
+from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
 from pyMyLib.utils import iniConf
 
-from dialogs import myList, myShazam, lyric_song, mySearch, myPlainText
+from dialogs import myList, lyric_song, mySearch, myPlainText
+#from threading import Thread
+from myShazam import myShazam
 
 def info_album(artist, album, parent=None):
     brainz(artist, album)
@@ -55,6 +57,7 @@ class MusicIndexDlg(QDialog):
         v = QVBoxLayout(self)
         v.setContentsMargins(1, 1, 1, 1)
         self.prog = QLabel('')
+        self.prog.setMinimumWidth(250)
 
         self.b1 = QPushButton(self)
         self.b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/folder_open.png')))

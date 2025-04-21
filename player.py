@@ -12,6 +12,7 @@ from pyMyLib.utils import iniConf
 from dialogs import RadioDlg
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
+from bluetooth import BluetoothManager
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -79,6 +80,12 @@ class Player(FramelessDialog): #QMainWindow):
         self.tb.currentChanged.connect(self.tab_changed)
         tool.addWidget(self.tb)
 
+        bt = QPushButton(self)
+        bt.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/bluetooth.png')))
+        bt.setMaximumWidth(30)
+        bt.clicked.connect(self.bluetooth)
+        tool.addWidget(bt)
+
         bi = QPushButton('?', self)
         bi.setMaximumWidth(30)
         bi.clicked.connect(self.info)
@@ -121,8 +128,13 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 
+    def bluetooth(self):
+        bt = BluetoothManager()
+        bt.exec()
+
+
     def info(self):
-        informMessage('Music Player\nGestione mp3\nVersione 1.1.0\n21 Novembre 2024', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
+        informMessage('Music Player\nGestione mp3\nVersione 1.1.1\n20 Aprile 2025', 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.ico'))
 
 
 if __name__ == "__main__":
