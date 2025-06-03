@@ -1,480 +1,511 @@
 import sys
 import os
+import re
 import soundfile as sf
 import lameenc
-
-from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QFileDialog,
-                             QVBoxLayout, QLabel, QProgressBar, QListWidget,
-                             QListWidgetItem, QDialog)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import numpy as np
-from pyMyLib.utils import iniConf
-
-
+from pathlib import Path
 from mutagen import File
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2, TPOS, APIC
+from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2
+
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
+                             QWidget, QPushButton, QTableWidget, QTableWidgetItem,
+                             QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
+                             QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent
+from PyQt6.QtGui import QFont
 
 
-class WorkerThread(QThread):
-    """Thread per eseguire la conversione audio."""
-    conversion_started = pyqtSignal(str)
-    conversion_progress = pyqtSignal(int, int)  # current_file, total_files
-    conversion_finished = pyqtSignal(str)
-    conversion_error = pyqtSignal(str, str)  # filename, error_message
+class AudioFile:
+    """Classe per rappresentare un file audio con i suoi metadati."""
 
-    def __init__(self, input_files, output_folder):
+    def __init__(self, file_path):
+        self.file_path = Path(file_path)
+        self.original_title = ""
+        self.generated_title = ""
+        self.artist = ""
+        self.album = ""
+        self.year = ""
+        self.genre = ""
+        self.track = ""
+        self.duration = ""
+        self.format_info = ""
+
+        self._extract_info()
+
+    def _extract_info(self):
+        """Estrae informazioni dal file."""
+        try:
+            # Info formato e durata
+            info = sf.info(str(self.file_path))
+            self.duration = f"{info.duration:.1f}s"
+            self.format_info = f"{info.format} - {info.samplerate}Hz"
+
+            # Genera titolo dal filename
+            self.generated_title = self._clean_filename_to_title()
+
+            # Estrai metadati esistenti
+            self._extract_existing_tags()
+
+        except Exception as e:
+            print(f"Errore lettura {self.file_path.name}: {e}")
+
+    def _clean_filename_to_title(self):
+        """Converte il nome file in un titolo pulito."""
+        title = self.file_path.stem
+        title = re.sub(r'^\d+[\s\-\.]*', '', title)  # Rimuovi numero traccia
+        title = re.sub(r'[_\-]+', ' ', title)  # Sostituisci _ e - con spazi
+        title = re.sub(r'\s+', ' ', title)  # Rimuovi spazi multipli
+        title = title.strip().title()
+
+        # Correzioni comuni
+        title = re.sub(r'\bFt\b', 'ft.', title)
+        title = re.sub(r'\bFeat\b', 'feat.', title)
+        return title
+
+    def _extract_existing_tags(self):
+        """Estrae tag esistenti dal file."""
+        try:
+            audio_file = File(str(self.file_path))
+            if audio_file and hasattr(audio_file, 'tags') and audio_file.tags:
+                tags = audio_file.tags
+
+                # Mappa tag comuni
+                tag_mappings = {
+                    'TIT2': 'original_title',
+                    'TITLE': 'original_title',
+                    'TPE1': 'artist',
+                    'ARTIST': 'artist',
+                    'TALB': 'album',
+                    'ALBUM': 'album',
+                    'TDRC': 'year',
+                    'DATE': 'year',
+                    'YEAR': 'year',
+                    'TCON': 'genre',
+                    'GENRE': 'genre',
+                    'TRCK': 'track',
+                    'TRACKNUMBER': 'track',
+                    'TRACK': 'track'
+                }
+
+                for tag_key, attr_name in tag_mappings.items():
+                    for key, value in tags.items():
+                        if key.upper() == tag_key:
+                            val = str(value[0]) if isinstance(value, list) and value else str(value)
+                            setattr(self, attr_name, val)
+                            break
+
+                # Estrai numero traccia dal filename se non presente nei tag
+                if not self.track:
+                    match = re.match(r'^(\d+)', self.file_path.stem)
+                    if match:
+                        self.track = match.group(1)
+
+        except Exception as e:
+            print(f"Errore estrazione tag da {self.file_path.name}: {e}")
+
+
+class ConversionWorker(QThread):
+    """Worker thread per la conversione dei file."""
+    progress = pyqtSignal(int)
+    file_converted = pyqtSignal(str, bool)
+    finished = pyqtSignal()
+
+    def __init__(self, audio_files, output_folder, bitrate):
         super().__init__()
-        self.input_files = input_files
-        self.output_folder = output_folder
-        self.is_running = True
+        self.audio_files = audio_files
+        self.output_folder = Path(output_folder)
+        self.bitrate = bitrate
 
     def run(self):
-        num_files = len(self.input_files)
-        for i, input_file in enumerate(self.input_files):
-            if not self.is_running:
-                break
-            output_file = os.path.join(self.output_folder, os.path.basename(input_file).rsplit('.', 1)[0] + ".mp3")
-            self.conversion_started.emit(os.path.basename(input_file))
-            if self.convert_audio_to_mp3_with_tags(input_file, output_file):
-                self.conversion_progress.emit(i + 1, num_files)
-            else:
-                # L'errore è già stato emesso in convert_single_audio
-                pass
-        self.conversion_finished.emit(self.output_folder)
+        """Esegue la conversione dei file."""
+        total_files = len(self.audio_files)
 
-    def stop(self):
-        self.is_running = False
-
-
-    '''
-    def convert_single_audio(self, aiff_file, mp3_file, bitrate="320k"):
-        """Converte un singolo file audio in MP3 usando soundfile e lameenc."""
-        try:
-            # Leggi il file AIFF
-            data, samplerate = sf.read(aiff_file)
-            print(f"Tipo di dati AIFF: {data.dtype}, Shape: {data.shape}")
-
-            # Converti a float32 se necessario (normalizzato tra -1 e 1)
-            if data.dtype != 'float32':
-                data = data.astype('float32')
-
-            # Assicurati che i dati siano nel range corretto [-1, 1]
-            if data.max() > 1.0 or data.min() < -1.0:
-                data = data / np.max(np.abs(data))
-                print("Dati normalizzati nel range [-1, 1]")
-
-            # Converti da float32 a int16 per lameenc
-            # Moltiplica per 32767 (max int16) e converti a int16
-            data_int16 = (data * 32767).astype('int16')
-            print(f"Convertito a int16, range: [{data_int16.min()}, {data_int16.max()}]")
-
-            # Determina il numero di canali
-            if data_int16.ndim == 1:
-                channels = 1
-            else:
-                channels = data_int16.shape[1]
-
-            print(f"Campioni: {samplerate}, Canali: {channels}")
-
-            # Crea l'encoder LAME
-            encoder = lameenc.Encoder(
-                rate=samplerate,
-                channels=channels,
-                bitrate=int(bitrate[:-1]),
-                quality=2
-            )
-
-            # Opzionale: salva un WAV intermedio per debug
-            #wav_intermediate = "intermediate.wav"
-            #sf.write(wav_intermediate, data_int16, samplerate, format='WAV', subtype='PCM_16')
-            #print(f"Salvato file intermedio (PCM_16): {wav_intermediate}")
-
-            # Codifica in MP3
-            mp3_data = encoder.encode(data_int16.tobytes())
-            mp3_data += encoder.flush()
-
-            # Salva il file MP3
-            with open(mp3_file, 'wb') as f:
-                f.write(mp3_data)
-
-            # Pulisci il file intermedio
-            #os.remove(wav_intermediate)
-
-            print(f"Conversione completata: {aiff_file} -> {mp3_file}")
-            return True
-
-        except Exception as e:
-            print(f"Errore durante la conversione: {e}")
-            return False
-
-
-
-    def convert_audio_to_mp3(self, input_file, mp3_file, bitrate="320k"):
-        """Converte file audio (AIFF, FLAC, WAV, etc.) in MP3 usando soundfile e lameenc."""
-        try:
-            # Leggi il file audio (funziona per AIFF, FLAC, WAV, etc.)
-            data, samplerate = sf.read(input_file)
-
-            # Identifica il formato dal file
-            file_format = input_file.split('.')[-1].upper()
-            print(f"Conversione {file_format}: {input_file}")
-            print(f"Tipo di dati: {data.dtype}, Shape: {data.shape}")
-
-            # Converti a float32 se necessario (normalizzato tra -1 e 1)
-            if data.dtype != 'float32':
-                data = data.astype('float32')
-
-            # Assicurati che i dati siano nel range corretto [-1, 1]
-            if data.max() > 1.0 or data.min() < -1.0:
-                data = data / np.max(np.abs(data))
-                print("Dati normalizzati nel range [-1, 1]")
-
-            # Converti da float32 a int16 per lameenc
-            # Moltiplica per 32767 (max int16) e converti a int16
-            data_int16 = (data * 32767).astype('int16')
-            print(f"Convertito a int16, range: [{data_int16.min()}, {data_int16.max()}]")
-
-            # Determina il numero di canali
-            if data_int16.ndim == 1:
-                channels = 1
-            else:
-                channels = data_int16.shape[1]
-
-            print(f"Campioni: {samplerate}, Canali: {channels}")
-
-            # Crea l'encoder LAME
-            encoder = lameenc.Encoder(
-                rate=samplerate,
-                channels=channels,
-                bitrate=int(bitrate[:-1]),
-                quality=2
-            )
-
-            # Codifica in MP3
-            mp3_data = encoder.encode(data_int16.tobytes())
-            mp3_data += encoder.flush()
-
-            # Salva il file MP3
-            with open(mp3_file, 'wb') as f:
-                f.write(mp3_data)
-
-            print(f"Conversione completata: {input_file} -> {mp3_file}")
-            return True
-
-        except Exception as e:
-            print(f"Errore durante la conversione di {input_file}: {e}")
-            return False
-    '''
-
-    def convert_audio_to_mp3_with_tags(self, input_file, mp3_file, bitrate="320k"):
-        """Converte file audio in MP3 conservando tutti i tag/metadati."""
-        try:
-            # STEP 1: Estrai i metadati dal file originale
-            print(f"Estraendo metadati da: {input_file}")
-            original_tags = self.extract_all_tags(input_file)
-
-            # STEP 2: Converti l'audio (come prima)
-            data, samplerate = sf.read(input_file)
-
-            file_format = input_file.split('.')[-1].upper()
-            print(f"Conversione {file_format}: {input_file}")
-            print(f"Tipo di dati: {data.dtype}, Shape: {data.shape}")
-
-            # Converti a float32 se necessario
-            if data.dtype != 'float32':
-                data = data.astype('float32')
-
-            # Normalizza nel range [-1, 1]
-            if data.max() > 1.0 or data.min() < -1.0:
-                data = data / np.max(np.abs(data))
-                print("Dati normalizzati nel range [-1, 1]")
-
-            # Converti a int16 per lameenc
-            data_int16 = (data * 32767).astype('int16')
-            print(f"Convertito a int16, range: [{data_int16.min()}, {data_int16.max()}]")
-
-            # Determina canali
-            if data_int16.ndim == 1:
-                channels = 1
-            else:
-                channels = data_int16.shape[1]
-
-            print(f"Campioni: {samplerate}, Canali: {channels}")
-
-            # Crea encoder LAME
-            encoder = lameenc.Encoder(
-                rate=samplerate,
-                channels=channels,
-                bitrate=int(bitrate[:-1]),
-                quality=2
-            )
-
-            # Codifica in MP3
-            mp3_data = encoder.encode(data_int16.tobytes())
-            mp3_data += encoder.flush()
-
-            # Salva il file MP3
-            with open(mp3_file, 'wb') as f:
-                f.write(mp3_data)
-
-            # STEP 3: Trasferisci tutti i tag al file MP3
-            print(f"Trasferendo {len(original_tags)} tag al file MP3...")
-            self.transfer_tags_to_mp3(original_tags, mp3_file)
-
-            print(f"Conversione completata con tag: {input_file} -> {mp3_file}")
-            return True
-
-        except Exception as e:
-            print(f"Errore durante la conversione: {e}")
-            return False
-
-
-    def extract_all_tags(self, file_path):
-        """Estrae tutti i tag/metadati dal file audio."""
-        try:
-            audio_file = File(file_path)
-            if audio_file is None:
-                print("Nessun tag trovato nel file")
-                return {}
-
-            tags = {}
-
-            # Tag comuni per tutti i formati
-            common_mappings = {
-                # Vorbis/FLAC tags -> ID3 tags
-                'TITLE': 'TIT2',
-                'ARTIST': 'TPE1',
-                'ALBUM': 'TALB',
-                'DATE': 'TDRC',
-                'YEAR': 'TDRC',
-                'GENRE': 'TCON',
-                'TRACKNUMBER': 'TRCK',
-                'TRACK': 'TRCK',
-                'ALBUMARTIST': 'TPE2',
-                'DISCNUMBER': 'TPOS',
-                'DISC': 'TPOS',
-                # ID3v2 tags (già in formato corretto)
-                'TIT2': 'TIT2',
-                'TPE1': 'TPE1',
-                'TALB': 'TALB',
-                'TDRC': 'TDRC',
-                'TCON': 'TCON',
-                'TRCK': 'TRCK',
-                'TPE2': 'TPE2',
-                'TPOS': 'TPOS'
-            }
-
-            # Estrai tutti i tag
-            for key, value in audio_file.tags.items() if hasattr(audio_file, 'tags') and audio_file.tags else []:
-                key_upper = key.upper()
-
-                # Mappa i tag comuni
-                if key_upper in common_mappings:
-                    id3_key = common_mappings[key_upper]
-                    if isinstance(value, list):
-                        tags[id3_key] = str(value[0]) if value else ""
-                    else:
-                        tags[id3_key] = str(value)
-                else:
-                    # Conserva anche tag non standard
-                    tags[key] = str(value[0]) if isinstance(value, list) and value else str(value)
-
-            # Estrai artwork se presente
-            if hasattr(audio_file, 'pictures') and audio_file.pictures:
-                # FLAC
-                tags['ARTWORK'] = audio_file.pictures[0].data
-            elif 'APIC:' in str(audio_file.tags) if hasattr(audio_file, 'tags') and audio_file.tags else False:
-                # MP3 con artwork
-                for key, value in audio_file.tags.items():
-                    if key.startswith('APIC'):
-                        tags['ARTWORK'] = value.data
-                        break
-
-            print(f"Estratti {len(tags)} tag: {list(tags.keys())}")
-            return tags
-
-        except Exception as e:
-            print(f"Errore estrazione tag: {e}")
-            return {}
-
-
-    def transfer_tags_to_mp3(self, tags, mp3_file):
-        """Trasferisce i tag al file MP3 usando ID3v2."""
-        try:
-            # Crea o carica i tag ID3
+        for i, audio_file in enumerate(self.audio_files):
             try:
-                id3_tags = ID3(mp3_file)
-            except:
+                success = self._convert_file(audio_file)
+                self.file_converted.emit(audio_file.file_path.name, success)
+
+            except Exception as e:
+                print(f"Errore conversione {audio_file.file_path.name}: {e}")
+                self.file_converted.emit(audio_file.file_path.name, False)
+
+            # Aggiorna progress
+            progress_percent = int((i + 1) / total_files * 100)
+            self.progress.emit(progress_percent)
+
+        self.finished.emit()
+
+    def _convert_file(self, audio_file):
+        """Converte un singolo file."""
+        try:
+            # Leggi audio
+            data, samplerate = sf.read(str(audio_file.file_path))
+
+            # Normalizza
+            if data.dtype != 'float32':
+                data = data.astype('float32')
+
+            if data.max() > 1.0 or data.min() < -1.0:
+                data = data / np.max(np.abs(data))
+
+            data_int16 = (data * 32767).astype('int16')
+
+            channels = 1 if data_int16.ndim == 1 else data_int16.shape[1]
+
+            # Encoder
+            encoder = lameenc.Encoder(
+                rate=samplerate,
+                channels=channels,
+                bitrate=int(self.bitrate[:-1]),
+                quality=2
+            )
+
+            # Converti
+            mp3_data = encoder.encode(data_int16.tobytes())
+            mp3_data += encoder.flush()
+
+            # Salva MP3
+            output_file = self.output_folder / f"{audio_file.file_path.stem}.mp3"
+            with open(output_file, 'wb') as f:
+                f.write(mp3_data)
+
+            # Aggiungi tag
+            self._add_tags(audio_file, output_file)
+
+            return True
+
+        except Exception as e:
+            print(f"Errore conversione: {e}")
+            return False
+
+    def _add_tags(self, audio_file, mp3_file):
+        """Aggiunge tag ID3 al file MP3."""
+        try:
+            try:
+                id3_tags = ID3(str(mp3_file))
+            except ID3NoHeaderError:
                 id3_tags = ID3()
 
-            # Mappa e aggiungi i tag
-            for key, value in tags.items():
-                if key == 'ARTWORK':
-                    # Aggiungi artwork
-                    id3_tags.add(APIC(
-                        encoding=3,  # UTF-8
-                        mime='image/jpeg',  # Assume JPEG
-                        type=3,  # Cover (front)
-                        desc='Cover',
-                        data=value
-                    ))
-                    continue
+            # Usa il titolo originale se presente, altrimenti quello generato
+            title = audio_file.original_title or audio_file.generated_title
 
-                # Tag di testo standard
-                if key == 'TIT2':
-                    id3_tags.add(TIT2(encoding=3, text=value))
-                elif key == 'TPE1':
-                    id3_tags.add(TPE1(encoding=3, text=value))
-                elif key == 'TALB':
-                    id3_tags.add(TALB(encoding=3, text=value))
-                elif key == 'TDRC':
-                    id3_tags.add(TDRC(encoding=3, text=value))
-                elif key == 'TCON':
-                    id3_tags.add(TCON(encoding=3, text=value))
-                elif key == 'TRCK':
-                    id3_tags.add(TRCK(encoding=3, text=value))
-                elif key == 'TPE2':
-                    id3_tags.add(TPE2(encoding=3, text=value))
-                elif key == 'TPOS':
-                    id3_tags.add(TPOS(encoding=3, text=value))
-                else:
-                    # Per tag non standard, prova ad aggiungerli comunque
-                    try:
-                        # Crea un frame generico se possibile
-                        frame_class = getattr(__import__('mutagen.id3', fromlist=[key]), key, None)
-                        if frame_class:
-                            id3_tags.add(frame_class(encoding=3, text=value))
-                    except:
-                        print(f"Tag non supportato ignorato: {key}")
+            # Aggiungi tag
+            if title:
+                id3_tags.add(TIT2(encoding=3, text=title))
+            if audio_file.artist:
+                id3_tags.add(TPE1(encoding=3, text=audio_file.artist))
+            if audio_file.album:
+                id3_tags.add(TALB(encoding=3, text=audio_file.album))
+            if audio_file.year:
+                id3_tags.add(TDRC(encoding=3, text=audio_file.year))
+            if audio_file.genre:
+                id3_tags.add(TCON(encoding=3, text=audio_file.genre))
+            if audio_file.track:
+                id3_tags.add(TRCK(encoding=3, text=audio_file.track))
 
-            # Salva i tag nel file MP3
-            id3_tags.save(mp3_file)
-            print(f"Tag salvati in: {mp3_file}")
+            id3_tags.save(str(mp3_file))
 
         except Exception as e:
-            print(f"Errore trasferimento tag: {e}")
+            print(f"Errore aggiunta tag: {e}")
 
-
-    # Funzione di utilità per verificare i tag
-    def verify_tags(self, mp3_file):
-        """Verifica i tag nel file MP3 creato."""
-        try:
-            audio_file = File(mp3_file)
-            if audio_file and hasattr(audio_file, 'tags') and audio_file.tags:
-                print(f"\nTag nel file MP3 '{mp3_file}':")
-                for key, value in audio_file.tags.items():
-                    print(f"  {key}: {value}")
-            else:
-                print(f"Nessun tag trovato in {mp3_file}")
-        except Exception as e:
-            print(f"Errore verifica tag: {e}")
 
 class AudioConverter(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Converti Audio in MP3")
-        self.setGeometry(100, 100, 400, 300)
-
-        self.input_folder = None
         self.audio_files = []
-        self.conversion_thread = None
+        self.current_folder = ""
+        self.init_ui()
 
-        self.folder_button = QPushButton("Seleziona Cartella")
+    def init_ui(self):
+        """Inizializza l'interfaccia utente."""
+        self.setWindowTitle("Audio Tagger & Converter")
+        self.setGeometry(100, 100, 1200, 800)
+
+        # Widget centrale
+        #central_widget = QWidget()
+        #self.setCentralWidget(central_widget)
+
+        # Layout principale
+        main_layout = QVBoxLayout(self)
+
+        # Sezione selezione cartella
+        folder_group = QGroupBox("Selezione Cartella")
+        folder_layout = QHBoxLayout(folder_group)
+
+        self.folder_label = QLabel("Nessuna cartella selezionata")
+        self.folder_button = QPushButton("Scegli Cartella")
         self.folder_button.clicked.connect(self.select_folder)
 
-        self.file_list_label = QLabel("File audio trovati:")
-        self.file_list_widget = QListWidget()
+        folder_layout.addWidget(self.folder_label)
+        folder_layout.addWidget(self.folder_button)
 
-        self.convert_button = QPushButton("Converti in MP3")
+        # Sezione informazioni globali
+        global_group = QGroupBox("Informazioni Globali Album")
+        global_layout = QGridLayout(global_group)
+
+        global_layout.addWidget(QLabel("Artista:"), 0, 0)
+        self.global_artist = QLineEdit()
+        global_layout.addWidget(self.global_artist, 0, 1)
+
+        global_layout.addWidget(QLabel("Album:"), 0, 2)
+        self.global_album = QLineEdit()
+        global_layout.addWidget(self.global_album, 0, 3)
+
+        global_layout.addWidget(QLabel("Anno:"), 1, 0)
+        self.global_year = QLineEdit()
+        global_layout.addWidget(self.global_year, 1, 1)
+
+        global_layout.addWidget(QLabel("Genere:"), 1, 2)
+        self.global_genre = QLineEdit()
+        global_layout.addWidget(self.global_genre, 1, 3)
+
+        # Bottoni per applicare info globali
+        apply_button = QPushButton("Applica Info Globali")
+        apply_button.clicked.connect(self.apply_global_info)
+        global_layout.addWidget(apply_button, 2, 0, 1, 4)
+
+        # Tabella file
+        self.table = QTableWidget()
+        self.setup_table()
+
+        # Sezione conversione
+        conversion_group = QGroupBox("Conversione")
+        conversion_layout = QHBoxLayout(conversion_group)
+
+        conversion_layout.addWidget(QLabel("Bitrate:"))
+        self.bitrate_combo = QComboBox()
+        self.bitrate_combo.addItems(["128k", "192k", "256k", "320k"])
+        self.bitrate_combo.setCurrentText("320k")
+        conversion_layout.addWidget(self.bitrate_combo)
+
+        conversion_layout.addStretch()
+
+        self.output_button = QPushButton("Scegli Cartella Output")
+        self.output_button.clicked.connect(self.select_output_folder)
+        conversion_layout.addWidget(self.output_button)
+
+        self.convert_button = QPushButton("Converti Tutti")
         self.convert_button.clicked.connect(self.start_conversion)
         self.convert_button.setEnabled(False)
+        conversion_layout.addWidget(self.convert_button)
 
+        # Progress bar
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setVisible(False)
 
-        self.log_label = QLabel("Stato:")
+        # Status label
+        self.status_label = QLabel("Pronto")
 
-        layout = QVBoxLayout()
-        layout.addWidget(self.folder_button)
-        layout.addWidget(self.file_list_label)
-        layout.addWidget(self.file_list_widget)
-        layout.addWidget(self.convert_button)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.log_label)
-        self.setLayout(layout)
+        # Aggiungi tutto al layout principale
+        main_layout.addWidget(folder_group)
+        main_layout.addWidget(global_group)
+        main_layout.addWidget(self.table, 1)  # Espandi la tabella
+        main_layout.addWidget(conversion_group)
+        main_layout.addWidget(self.progress_bar)
+        main_layout.addWidget(self.status_label)
+
+        # Variabili per cartella output
+        self.output_folder = ""
+        self.table.installEventFilter(self)
+
+    def setup_table(self):
+        """Configura la tabella dei file."""
+        headers = ["File", "Titolo", "Artista", "Album", "Anno", "Genere", "Traccia", "Durata", "Formato"]
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+
+        # Configura header
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # File
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Titolo
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Artista
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Album
+
+        # Abilita editing
+        self.table.itemChanged.connect(self.on_item_changed)
 
     def select_folder(self):
-        ini = iniConf('music_player')
-        last_folder = ini.get('CONF', 'last_folder')
-        """Apre una dialog per selezionare la cartella di input."""
-        folder = QFileDialog.getExistingDirectory(self, "Seleziona Cartella Audio", last_folder)
+        """Seleziona cartella con file audio."""
+        folder = QFileDialog.getExistingDirectory(self, "Seleziona cartella con file audio")
         if folder:
-            self.input_folder = folder
-            self.find_audio_files()
+            self.current_folder = folder
+            self.folder_label.setText(folder)
+            self.load_audio_files()
 
-    def find_audio_files(self):
-        """Trova i file audio non MP3 nella cartella selezionata."""
-        self.audio_files = []
-        self.file_list_widget.clear()
-        audio_extensions = ['.aiff', '.wav', '.flac', '.ogg', '.m4a']
-        for filename in os.listdir(self.input_folder):
-            if any(filename.lower().endswith(ext) for ext in audio_extensions) and not filename.lower().endswith('.mp3'):
-                self.audio_files.append(os.path.join(self.input_folder, filename))
-                item = QListWidgetItem(filename)
-                self.file_list_widget.addItem(item)
-
-        if self.audio_files:
-            self.convert_button.setEnabled(True)
-            self.log_label.setText(f"Trovati {len(self.audio_files)} file audio da convertire.")
-        else:
-            self.convert_button.setEnabled(False)
-            self.log_label.setText("Nessun file audio non MP3 trovato nella cartella.")
-
-    def start_conversion(self):
-        """Avvia la conversione audio in un thread separato."""
-        if not self.audio_files:
-            self.log_label.setText("Nessun file da convertire.")
+    def load_audio_files(self):
+        """Carica file audio dalla cartella selezionata."""
+        if not self.current_folder:
             return
 
-        #output_folder = os.path.join(self.input_folder, "mp3_converted")
-        output_folder = self.input_folder
-        os.makedirs(output_folder, exist_ok=True)
+        self.status_label.setText("Caricamento file in corso...")
+        self.audio_files = []
 
+        # Estensioni supportate
+        extensions = ['.aif', '.aiff', '.flac', '.wav', '.m4a', '.mp3', 'wma']
+
+        folder_path = Path(self.current_folder)
+        for ext in extensions:
+            for file_path in folder_path.glob(f"*{ext}"):
+                self.audio_files.append(AudioFile(file_path))
+            #for file_path in folder_path.glob(f"*{ext.upper()}"):
+            #    self.audio_files.append(AudioFile(file_path))
+
+        # Ordina per nome file
+        self.audio_files.sort(key=lambda x: x.file_path.name)
+
+        self.populate_table()
+        self.status_label.setText(f"Caricati {len(self.audio_files)} file audio")
+
+    def populate_table(self):
+        """Popola la tabella con i file audio."""
+        self.table.setRowCount(len(self.audio_files))
+
+        for row, audio_file in enumerate(self.audio_files):
+            # File (non editabile)
+            item = QTableWidgetItem(audio_file.file_path.name)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 0, item)
+
+            # Titolo (usa originale se presente, altrimenti generato)
+            title = audio_file.original_title or audio_file.generated_title
+            self.table.setItem(row, 1, QTableWidgetItem(title))
+
+            # Altri campi editabili
+            self.table.setItem(row, 2, QTableWidgetItem(audio_file.artist))
+            self.table.setItem(row, 3, QTableWidgetItem(audio_file.album))
+            self.table.setItem(row, 4, QTableWidgetItem(audio_file.year))
+            self.table.setItem(row, 5, QTableWidgetItem(audio_file.genre))
+            self.table.setItem(row, 6, QTableWidgetItem(audio_file.track))
+
+            # Durata e formato (non editabili)
+            duration_item = QTableWidgetItem(audio_file.duration)
+            duration_item.setFlags(duration_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 7, duration_item)
+
+            format_item = QTableWidgetItem(audio_file.format_info)
+            format_item.setFlags(format_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 8, format_item)
+
+    def eventFilter(self, obj, event):
+        # si gestiscono eventi di tastiera della table nel caso entering sia True
+        if obj == self.table and event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
+            rows = set(index.row() for index in self.table.selectedIndexes())
+            rows_to_delete = sorted(list(rows), reverse=True)
+            for row in rows_to_delete:
+                self.table.removeRow(row)
+
+                # Rimuovi l'elemento corrispondente dalla lista Python
+                if 0 <= row < len(self.audio_files): # Aggiungi un controllo di sicurezza sull'indice
+                    del self.audio_files[row]
+            return False
+        return super().eventFilter(obj, event)
+
+    def on_item_changed(self, item):
+        """Gestisce cambiamenti nella tabella."""
+        row = item.row()
+        col = item.column()
+
+        if row < len(self.audio_files):
+            audio_file = self.audio_files[row]
+            value = item.text()
+
+            # Mappa colonne agli attributi
+            if col == 1:  # Titolo
+                audio_file.original_title = value
+            elif col == 2:  # Artista
+                audio_file.artist = value
+            elif col == 3:  # Album
+                audio_file.album = value
+            elif col == 4:  # Anno
+                audio_file.year = value
+            elif col == 5:  # Genere
+                audio_file.genre = value
+            elif col == 6:  # Traccia
+                audio_file.track = value
+
+    def apply_global_info(self):
+        """Applica informazioni globali a tutti i file."""
+        artist = self.global_artist.text().strip()
+        album = self.global_album.text().strip()
+        year = self.global_year.text().strip()
+        genre = self.global_genre.text().strip()
+
+        for row, audio_file in enumerate(self.audio_files):
+            if artist and not audio_file.artist:
+                audio_file.artist = artist
+                self.table.setItem(row, 2, QTableWidgetItem(artist))
+
+            if album and not audio_file.album:
+                audio_file.album = album
+                self.table.setItem(row, 3, QTableWidgetItem(album))
+
+            if year and not audio_file.year:
+                audio_file.year = year
+                self.table.setItem(row, 4, QTableWidgetItem(year))
+
+            if genre and not audio_file.genre:
+                audio_file.genre = genre
+                self.table.setItem(row, 5, QTableWidgetItem(genre))
+
+        self.status_label.setText("Informazioni globali applicate")
+
+    def select_output_folder(self):
+        """Seleziona cartella di output."""
+        folder = QFileDialog.getExistingDirectory(self, "Seleziona cartella di output")
+        if folder:
+            self.output_folder = folder
+            self.output_button.setText(f"Output: {Path(folder).name}")
+            self.convert_button.setEnabled(bool(self.audio_files))
+
+    def start_conversion(self):
+        """Avvia la conversione dei file."""
+        if not self.output_folder:
+            QMessageBox.warning(self, "Errore", "Seleziona una cartella di output")
+            return
+
+        if not self.audio_files:
+            QMessageBox.warning(self, "Errore", "Nessun file da convertire")
+            return
+
+        # Configura UI per conversione
         self.convert_button.setEnabled(False)
-        self.progress_bar.setRange(0, len(self.audio_files))
+        self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.log_label.setText("Inizio conversione...")
+        self.status_label.setText("Conversione in corso...")
 
-        self.conversion_thread = WorkerThread(self.audio_files, output_folder)
-        self.conversion_thread.conversion_started.connect(self.update_status_start)
-        self.conversion_thread.conversion_progress.connect(self.update_progress)
-        self.conversion_thread.conversion_finished.connect(self.conversion_complete)
-        self.conversion_thread.conversion_error.connect(self.show_error)
-        self.conversion_thread.start()
+        # Avvia worker thread
+        self.worker = ConversionWorker(
+            self.audio_files,
+            self.output_folder,
+            self.bitrate_combo.currentText()
+        )
+        self.worker.progress.connect(self.progress_bar.setValue)
+        self.worker.file_converted.connect(self.on_file_converted)
+        self.worker.finished.connect(self.on_conversion_finished)
+        self.worker.start()
 
-    def update_status_start(self, filename):
-        self.log_label.setText(f"Conversione in corso: {filename}")
+    def on_file_converted(self, filename, success):
+        """Callback per file convertito."""
+        status = "✓" if success else "✗"
+        print(f"{status} {filename}")
 
-    def update_progress(self, current, total):
-        self.progress_bar.setValue(current)
-
-    def conversion_complete(self, output_folder):
-        self.log_label.setText(f"Conversione completata. I file MP3 sono in: {output_folder}")
+    def on_conversion_finished(self):
+        """Callback per conversione completata."""
+        self.progress_bar.setVisible(False)
         self.convert_button.setEnabled(True)
-        self.conversion_thread = None
+        self.status_label.setText("Conversione completata!")
 
-    def show_error(self, filename, error_message):
-        self.log_label.setText(f"Errore durante la conversione di {filename}: {error_message}")
-        self.convert_button.setEnabled(True)
-        self.conversion_thread = None
+        QMessageBox.information(self, "Completato",
+                                f"Conversione completata!\\nFile salvati in: {self.output_folder}")
 
-    def closeEvent(self, event):
-        """Gestisce la chiusura della finestra e ferma il thread se in esecuzione."""
-        if self.conversion_thread and self.conversion_thread.isRunning():
-            self.conversion_thread.stop()
-            self.conversion_thread.wait()
-        event.accept()
-
-if __name__ == '__main__':
+'''
+def main():
     app = QApplication(sys.argv)
-    converter = AudioConverter()
+    window = AudioTaggerGUI()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()'''
