@@ -19,7 +19,8 @@ class DispositivoAudioItem(QWidget):
         self.bluetooth_manager = bluetooth_manager  # Memorizza il riferimento
         self.layout = QHBoxLayout()
 
-        self.nome_label = QLabel(nome)
+        mes = f"<span style='font-size:12pt;'>{nome}:</span><span style='font-size:10pt; color:gray;'>({indirizzo_mac})</span>"
+        self.nome_label = QLabel(mes)
         self.layout.addWidget(self.nome_label)
 
         #self.stato_label = QLabel(f"({stato})")
@@ -75,7 +76,7 @@ class BluetoothManager(QDialog):
 
     def esegui_comando_esterno(self, comando):
         try:
-            risultato = subprocess.run(comando, capture_output=True, text=True, check=True)
+            risultato = subprocess.run(comando, capture_output=True, text=True, check=True, shell=True)
             return risultato.stdout.strip()
         except subprocess.CalledProcessError as e:
             print(f"Errore comando esterno: {e}")
@@ -113,7 +114,13 @@ class BluetoothManager(QDialog):
 
     def connetti_dispositivo(self, indirizzo_mac):
         #s110b s111e
-        comando = ["btcom", "-cs110b", "-b", indirizzo_mac] # Verifica la sintassi corretta con la tua versione di BT Tools
+        '''Valori
+        1101 no
+        111e Microfono
+        110e  no
+        110d '''
+        #comando = ["btcom", "-cs110b", "-b", indirizzo_mac] # Verifica la sintassi corretta con la tua versione di BT Tools
+        comando = ["btcom", "-cs110d", "-cs110e", "-b", indirizzo_mac] # Verifica la sintassi corretta con la tua versione di BT Tools
         risultato = self.esegui_comando_esterno(comando)
         if risultato:
             print(f"Connessione a {indirizzo_mac}: {risultato}")

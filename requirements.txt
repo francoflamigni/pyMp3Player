@@ -16,3 +16,4 @@ lyricsgenius
 musicbrainzngs
 -e C:/Users/franc/MySoft/pyMyLib/
 python-dateutil
+lameenc

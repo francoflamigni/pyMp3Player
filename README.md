@@ -35,6 +35,8 @@ pip install python-dateutil
 
 pip install musicbrainzngs
 
+pip install lameenc  
+
 per le copertine dei cd
 https://musicbrainz.org/
 
