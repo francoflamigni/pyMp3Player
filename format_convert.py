@@ -6,14 +6,18 @@ import lameenc
 import numpy as np
 from pathlib import Path
 from mutagen import File
-from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2
+from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2, APIC
+from mutagen.mp3 import MP3
+import shutil
 
 from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
-                             QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog)
+                             QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
+                             QSplitter, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtCore import QByteArray
 
 
 class AudioFile:
@@ -31,16 +35,27 @@ class AudioFile:
         self.track = ""
         self.duration = ""
         self.format_info = ""
+        self.is_mp3 = False
+        self.album_art = None  # Byte data della copertina
 
         self._extract_info()
 
     def _extract_info(self):
         """Estrae informazioni dal file."""
         try:
-            # Info formato e durata
-            info = sf.info(str(self.file_path))
-            self.duration = f"{info.duration:.1f}s"
-            self.format_info = f"{info.format} - {info.samplerate}Hz"
+            # Controlla se è già MP3
+            self.is_mp3 = self.file_path.suffix.lower() == '.mp3'
+
+            if self.is_mp3:
+                # Per MP3, usa mutagen per info di base
+                mp3_file = MP3(str(self.file_path))
+                self.duration = f"{mp3_file.info.length:.1f}s"
+                self.format_info = f"MP3 - {mp3_file.info.bitrate}kbps"
+            else:
+                # Per altri formati, usa soundfile
+                info = sf.info(str(self.file_path))
+                self.duration = f"{info.duration:.1f}s"
+                self.format_info = f"{info.format} - {info.samplerate}Hz"
 
             # Genera titolo dal filename
             self.generated_title, self.generated_track = self._clean_filename_to_title()
@@ -101,6 +116,10 @@ class AudioFile:
                             setattr(self, attr_name, val)
                             break
 
+                # Estrai copertina album (per MP3)
+                if self.is_mp3:
+                    self._extract_album_art(tags)
+
                 # Estrai numero traccia dal filename se non presente nei tag
                 if not self.track:
                     match = re.match(r'^(\d+)', self.file_path.stem)
@@ -109,6 +128,17 @@ class AudioFile:
 
         except Exception as e:
             print(f"Errore estrazione tag da {self.file_path.name}: {e}")
+
+    def _extract_album_art(self, tags):
+        """Estrae la copertina dell'album dai tag ID3."""
+        try:
+            # Cerca tag APIC (Attached Picture)
+            for key, value in tags.items():
+                if key.startswith('APIC'):
+                    self.album_art = value.data
+                    break
+        except Exception as e:
+            print(f"Errore estrazione copertina: {e}")
 
 
 class ConversionWorker(QThread):
@@ -129,11 +159,17 @@ class ConversionWorker(QThread):
 
         for i, audio_file in enumerate(self.audio_files):
             try:
-                success = self._convert_file(audio_file)
+                if audio_file.is_mp3:
+                    # Per MP3, copia e aggiorna solo i tag
+                    success = self._update_mp3_tags(audio_file)
+                else:
+                    # Per altri formati, converti
+                    success = self._convert_file(audio_file)
+
                 self.file_converted.emit(audio_file.file_path.name, success)
 
             except Exception as e:
-                print(f"Errore conversione {audio_file.file_path.name}: {e}")
+                print(f"Errore elaborazione {audio_file.file_path.name}: {e}")
                 self.file_converted.emit(audio_file.file_path.name, False)
 
             # Aggiorna progress
@@ -141,6 +177,21 @@ class ConversionWorker(QThread):
             self.progress.emit(progress_percent)
 
         self.finished.emit()
+
+    def _update_mp3_tags(self, audio_file):
+        """Aggiorna solo i tag di un file MP3 esistente."""
+        try:
+            # Copia il file MP3 nella cartella di output
+            output_file = self.output_folder / f"{audio_file.file_path.stem}.mp3"
+            shutil.copy2(str(audio_file.file_path), str(output_file))
+
+            # Aggiorna i tag
+            self._add_tags(audio_file, output_file)
+            return True
+
+        except Exception as e:
+            print(f"Errore aggiornamento tag MP3: {e}")
+            return False
 
     def _convert_file(self, audio_file):
         """Converte un singolo file."""
@@ -208,8 +259,32 @@ class ConversionWorker(QThread):
                 id3_tags.add(TDRC(encoding=3, text=audio_file.year))
             if audio_file.genre:
                 id3_tags.add(TCON(encoding=3, text=audio_file.genre))
-            if audio_file.track:
+            if track:
                 id3_tags.add(TRCK(encoding=3, text=track))
+
+            # Rimuovi tutte le copertine esistenti prima di aggiungere quella nuova
+            keys_to_remove = [key for key in id3_tags.keys() if key.startswith('APIC')]
+            for key in keys_to_remove:
+                del id3_tags[key]
+
+            # Aggiungi la copertina se presente
+            if audio_file.album_art:
+                # Determina il tipo MIME dall'header dei dati
+                mime_type = 'image/jpeg'  # default
+                if audio_file.album_art.startswith(b'\x89PNG'):
+                    mime_type = 'image/png'
+                elif audio_file.album_art.startswith(b'GIF'):
+                    mime_type = 'image/gif'
+                elif audio_file.album_art.startswith(b'BM'):
+                    mime_type = 'image/bmp'
+
+                id3_tags.add(APIC(
+                    encoding=3,
+                    mime=mime_type,
+                    type=3,  # Cover (front)
+                    desc=u'Cover',
+                    data=audio_file.album_art
+                ))
 
             id3_tags.save(str(mp3_file))
 
@@ -218,23 +293,26 @@ class ConversionWorker(QThread):
 
 
 class AudioConverter(QDialog):
-    def __init__(self):
+    def __init__(self, folder=''):
         super().__init__()
         self.audio_files = []
-        self.current_folder = ""
+        self.current_folder = folder
         self.init_ui()
+        if folder:
+            self.select_folder(folder)
 
     def init_ui(self):
         """Inizializza l'interfaccia utente."""
         self.setWindowTitle("Audio Tagger & Converter")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1400, 800)
 
-        # Widget centrale
-        #central_widget = QWidget()
-        #self.setCentralWidget(central_widget)
+        # Layout principale con splitter
+        #main_layout = QHBoxLayout(self)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Layout principale
-        main_layout = QVBoxLayout(self)
+        # Pannello sinistro - controlli principali
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
 
         # Sezione selezione cartella
         folder_group = QGroupBox("Selezione Cartella")
@@ -292,7 +370,7 @@ class AudioConverter(QDialog):
         self.output_button.clicked.connect(self.select_output_folder)
         conversion_layout.addWidget(self.output_button)
 
-        self.convert_button = QPushButton("Converti Tutti")
+        self.convert_button = QPushButton("Elabora Tutti")
         self.convert_button.clicked.connect(self.start_conversion)
         self.convert_button.setEnabled(False)
         conversion_layout.addWidget(self.convert_button)
@@ -304,37 +382,99 @@ class AudioConverter(QDialog):
         # Status label
         self.status_label = QLabel("Pronto")
 
-        # Aggiungi tutto al layout principale
-        main_layout.addWidget(folder_group)
-        main_layout.addWidget(global_group)
-        main_layout.addWidget(self.table, 1)  # Espandi la tabella
-        main_layout.addWidget(conversion_group)
-        main_layout.addWidget(self.progress_bar)
-        main_layout.addWidget(self.status_label)
+        # Aggiungi tutto al layout sinistro
+        left_layout.addWidget(folder_group)
+        left_layout.addWidget(global_group)
+        #left_layout.addWidget(self.table, 1)  # Espandi la tabella
+        #left_layout.addWidget(conversion_group)
+        #left_layout.addWidget(self.progress_bar)
+        #left_layout.addWidget(self.status_label)
 
-        # Variabili per cartella output
+        # Pannello destro - visualizzazione copertina
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+
+        # Gruppo copertina
+        cover_group = QGroupBox("Copertina Album")
+        cover_layout = QVBoxLayout(cover_group)
+
+        # Scroll area per la copertina
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumWidth(300)
+        scroll_area.setMaximumWidth(400)
+
+        self.cover_label = QLabel("Nessuna copertina")
+        self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cover_label.setStyleSheet("border: 2px dashed #ccc; padding: 20px;")
+        self.cover_label.setMinimumSize(250, 250)
+
+        scroll_area.setWidget(self.cover_label)
+        cover_layout.addWidget(scroll_area)
+
+        # Bottoni per gestire copertina
+        cover_buttons_layout = QHBoxLayout()
+
+        self.load_cover_button = QPushButton("Carica Copertina")
+        self.load_cover_button.clicked.connect(self.load_cover)
+        cover_buttons_layout.addWidget(self.load_cover_button)
+
+        self.remove_cover_button = QPushButton("Rimuovi Copertina")
+        self.remove_cover_button.clicked.connect(self.remove_cover)
+        self.remove_cover_button.setEnabled(False)
+        cover_buttons_layout.addWidget(self.remove_cover_button)
+
+        cover_layout.addLayout(cover_buttons_layout)
+        right_layout.addWidget(cover_group)
+        right_layout.addStretch()
+
+        # Aggiungi pannelli al splitter
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setSizes([1000, 400])  # Dimensioni relative
+
+        v = QVBoxLayout(self)
+        v.addWidget(splitter)
+        v.addWidget(self.table, 1)
+        v.addWidget(conversion_group)
+        v.addWidget(self.progress_bar)
+        v.addWidget(self.status_label)
+        #main_layout.addWidget(splitter)
+
+        # Variabili
         self.output_folder = ""
+        self.current_cover_data = None
         self.table.installEventFilter(self)
+
+        # Connetti selezione tabella a visualizzazione copertina
+        self.table.itemSelectionChanged.connect(self.on_selection_changed)
 
     def setup_table(self):
         """Configura la tabella dei file."""
-        headers = ["File", "Titolo", "Artista", "Album", "Anno", "Genere", "Traccia", "Durata", "Formato"]
+        headers = ["File", "Titolo", "Artista", "Album", "Anno", "Genere", "Traccia", "Durata", "Formato", "Tipo"]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
 
         # Configura header
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # File
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Titolo
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Artista
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Album
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Titolo
+        #header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Artista
+        #header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Album
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Anno
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Traccia
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Durata
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Tipo
 
         # Abilita editing
         self.table.itemChanged.connect(self.on_item_changed)
 
-    def select_folder(self):
+    def select_folder(self, f):
         """Seleziona cartella con file audio."""
-        folder = QFileDialog.getExistingDirectory(self, "Seleziona cartella con file audio")
+        if not f:
+            folder = QFileDialog.getExistingDirectory(self, "Seleziona cartella con file audio")
+        else:
+            folder = f
         if folder:
             self.current_folder = folder
             self.folder_label.setText(folder)
@@ -349,14 +489,12 @@ class AudioConverter(QDialog):
         self.audio_files = []
 
         # Estensioni supportate
-        extensions = ['.aif', '.aiff', '.flac', '.wav', '.m4a', '.mp3', 'wma']
+        extensions = ['.aif', '.aiff', '.flac', '.wav', '.m4a', '.mp3', '.wma']
 
         folder_path = Path(self.current_folder)
         for ext in extensions:
             for file_path in folder_path.glob(f"*{ext}"):
                 self.audio_files.append(AudioFile(file_path))
-            #for file_path in folder_path.glob(f"*{ext.upper()}"):
-            #    self.audio_files.append(AudioFile(file_path))
 
         # Ordina per nome file
         self.audio_files.sort(key=lambda x: x.file_path.name)
@@ -396,16 +534,105 @@ class AudioConverter(QDialog):
             format_item.setFlags(format_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 8, format_item)
 
+            # Tipo (MP3 o da convertire)
+            tipo_item = QTableWidgetItem("MP3 (solo tag)" if audio_file.is_mp3 else "Da convertire")
+            tipo_item.setFlags(tipo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, 9, tipo_item)
+
+        self.display_cover(self.audio_files[0].album_art)
+
+    def on_selection_changed(self):
+        """Gestisce la selezione nella tabella per mostrare la copertina."""
+        selected_rows = set(index.row() for index in self.table.selectedIndexes())
+        if selected_rows and len(selected_rows) == 1:
+            row = list(selected_rows)[0]
+            if row < len(self.audio_files):
+                audio_file = self.audio_files[row]
+                self.display_cover(audio_file.album_art)
+        else:
+            self.display_cover(None)
+
+    def display_cover(self, cover_data):
+        """Mostra la copertina nell'area dedicata."""
+        if cover_data:
+            try:
+                pixmap = QPixmap()
+                pixmap.loadFromData(QByteArray(cover_data))
+
+                # Scala l'immagine mantenendo le proporzioni
+                scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
+
+                self.cover_label.setPixmap(scaled_pixmap)
+                self.cover_label.setText("")
+                self.remove_cover_button.setEnabled(True)
+
+            except Exception as e:
+                print(f"Errore visualizzazione copertina: {e}")
+                self.cover_label.setText("Errore caricamento copertina")
+                self.cover_label.setPixmap(QPixmap())
+                self.remove_cover_button.setEnabled(False)
+        else:
+            self.cover_label.setText("Nessuna copertina")
+            self.cover_label.setPixmap(QPixmap())
+            self.remove_cover_button.setEnabled(False)
+
+    def load_cover(self):
+        """Carica una copertina da file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Seleziona copertina", "",
+            "Immagini (*.jpg *.jpeg *.png *.bmp *.gif)"
+        )
+
+        if file_path:
+            try:
+                with open(file_path, 'rb') as f:
+                    cover_data = f.read()
+
+                self.current_cover_data = cover_data
+                self.display_cover(cover_data)
+
+                # Applica a tutti i file selezionati o a tutti se nessuno selezionato
+                selected_rows = set(index.row() for index in self.table.selectedIndexes())
+                if not selected_rows:
+                    # Applica a tutti
+                    for audio_file in self.audio_files:
+                        audio_file.album_art = cover_data
+                else:
+                    # Applica solo ai selezionati
+                    for row in selected_rows:
+                        if row < len(self.audio_files):
+                            self.audio_files[row].album_art = cover_data
+
+                self.status_label.setText("Copertina caricata")
+
+            except Exception as e:
+                QMessageBox.warning(self, "Errore", f"Impossibile caricare la copertina: {e}")
+
+    def remove_cover(self):
+        """Rimuove la copertina dai file selezionati."""
+        selected_rows = set(index.row() for index in self.table.selectedIndexes())
+        if not selected_rows:
+            # Rimuovi da tutti
+            for audio_file in self.audio_files:
+                audio_file.album_art = None
+        else:
+            # Rimuovi solo dai selezionati
+            for row in selected_rows:
+                if row < len(self.audio_files):
+                    self.audio_files[row].album_art = None
+
+        self.display_cover(None)
+        self.status_label.setText("Copertina rimossa")
+
     def eventFilter(self, obj, event):
-        # si gestiscono eventi di tastiera della table nel caso entering sia True
+        """Gestisce eventi di tastiera della tabella."""
         if obj == self.table and event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
             rows = set(index.row() for index in self.table.selectedIndexes())
             rows_to_delete = sorted(list(rows), reverse=True)
             for row in rows_to_delete:
                 self.table.removeRow(row)
-
-                # Rimuovi l'elemento corrispondente dalla lista Python
-                if 0 <= row < len(self.audio_files): # Aggiungi un controllo di sicurezza sull'indice
+                if 0 <= row < len(self.audio_files):
                     del self.audio_files[row]
             return False
         return super().eventFilter(obj, event)
@@ -468,20 +695,20 @@ class AudioConverter(QDialog):
             self.convert_button.setEnabled(bool(self.audio_files))
 
     def start_conversion(self):
-        """Avvia la conversione dei file."""
+        """Avvia la conversione/elaborazione dei file."""
         if not self.output_folder:
             QMessageBox.warning(self, "Errore", "Seleziona una cartella di output")
             return
 
         if not self.audio_files:
-            QMessageBox.warning(self, "Errore", "Nessun file da convertire")
+            QMessageBox.warning(self, "Errore", "Nessun file da elaborare")
             return
 
         # Configura UI per conversione
         self.convert_button.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.status_label.setText("Conversione in corso...")
+        self.status_label.setText("Elaborazione in corso...")
 
         # Avvia worker thread
         self.worker = ConversionWorker(
@@ -502,19 +729,3 @@ class AudioConverter(QDialog):
     def on_conversion_finished(self):
         """Callback per conversione completata."""
         self.progress_bar.setVisible(False)
-        self.convert_button.setEnabled(True)
-        self.status_label.setText("Conversione completata!")
-
-        QMessageBox.information(self, "Completato",
-                                f"Conversione completata!\\nFile salvati in: {self.output_folder}")
-
-'''
-def main():
-    app = QApplication(sys.argv)
-    window = AudioTaggerGUI()
-    window.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()'''
