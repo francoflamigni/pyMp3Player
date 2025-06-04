@@ -19,6 +19,10 @@ from myShazam import myShazam
 def info_album(artist, album, parent=None):
     brainz(artist, album)
 
+def edit_album(artist, album, dir, parent=None):
+    from format_convert import AudioConverter
+    ac = AudioConverter(dir)
+    ac.exec()
 
 class infoDlg(QDialog):
     def __init__(self, parent, txt):
@@ -181,6 +185,15 @@ class MusicIndexDlg(QDialog):
                 ctx.addAction("Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
             else:
                 ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
+            if wd == self.albums:
+                album = self.albums.selectedItems()
+                if album and self.tracks.count():
+                    album = album[0].text()
+                    trk = self.tracks.item(0).text()
+                    v = self.music.tracks.name[trk + '@' + album]
+                    dir = os.path.dirname(v.file)
+                    ctx.addAction("Edit").triggered.connect(lambda x: edit_album(artist, album, dir, self.wparent))
+                a = 0
 
         ctx.exec(p)
 
