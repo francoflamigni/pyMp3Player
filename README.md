@@ -37,6 +37,8 @@ pip install musicbrainzngs
 
 pip install lameenc  
 
+pip install mutagen  
+
 per le copertine dei cd
 https://musicbrainz.org/
 

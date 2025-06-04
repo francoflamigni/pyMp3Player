@@ -8,7 +8,7 @@ from pathlib import Path
 from mutagen import File
 from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2
 
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
+from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog)
@@ -23,6 +23,7 @@ class AudioFile:
         self.file_path = Path(file_path)
         self.original_title = ""
         self.generated_title = ""
+        self.generated_track = ""
         self.artist = ""
         self.album = ""
         self.year = ""
@@ -42,7 +43,7 @@ class AudioFile:
             self.format_info = f"{info.format} - {info.samplerate}Hz"
 
             # Genera titolo dal filename
-            self.generated_title = self._clean_filename_to_title()
+            self.generated_title, self.generated_track = self._clean_filename_to_title()
 
             # Estrai metadati esistenti
             self._extract_existing_tags()
@@ -52,8 +53,13 @@ class AudioFile:
 
     def _clean_filename_to_title(self):
         """Converte il nome file in un titolo pulito."""
-        title = self.file_path.stem
-        title = re.sub(r'^\d+[\s\-\.]*', '', title)  # Rimuovi numero traccia
+        filename = self.file_path.stem
+
+        # Estrai il numero della traccia
+        track_match = re.match(r'^(\d+)[\s\-\.]*', filename)
+        track_number = str(int(track_match.group(1))) if track_match else ''
+
+        title = re.sub(r'^\d+[\s\-\.]*', '', filename)  # Rimuovi numero traccia
         title = re.sub(r'[_\-]+', ' ', title)  # Sostituisci _ e - con spazi
         title = re.sub(r'\s+', ' ', title)  # Rimuovi spazi multipli
         title = title.strip().title()
@@ -61,7 +67,7 @@ class AudioFile:
         # Correzioni comuni
         title = re.sub(r'\bFt\b', 'ft.', title)
         title = re.sub(r'\bFeat\b', 'feat.', title)
-        return title
+        return title, track_number
 
     def _extract_existing_tags(self):
         """Estrae tag esistenti dal file."""
@@ -189,6 +195,7 @@ class ConversionWorker(QThread):
 
             # Usa il titolo originale se presente, altrimenti quello generato
             title = audio_file.original_title or audio_file.generated_title
+            track = audio_file.track or audio_file.generated_track
 
             # Aggiungi tag
             if title:
@@ -202,7 +209,7 @@ class ConversionWorker(QThread):
             if audio_file.genre:
                 id3_tags.add(TCON(encoding=3, text=audio_file.genre))
             if audio_file.track:
-                id3_tags.add(TRCK(encoding=3, text=audio_file.track))
+                id3_tags.add(TRCK(encoding=3, text=track))
 
             id3_tags.save(str(mp3_file))
 
@@ -376,7 +383,9 @@ class AudioConverter(QDialog):
             self.table.setItem(row, 3, QTableWidgetItem(audio_file.album))
             self.table.setItem(row, 4, QTableWidgetItem(audio_file.year))
             self.table.setItem(row, 5, QTableWidgetItem(audio_file.genre))
-            self.table.setItem(row, 6, QTableWidgetItem(audio_file.track))
+
+            track = audio_file.track or audio_file.generated_track
+            self.table.setItem(row, 6, QTableWidgetItem(track))
 
             # Durata e formato (non editabili)
             duration_item = QTableWidgetItem(audio_file.duration)
