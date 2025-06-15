@@ -13,7 +13,6 @@ from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoM
 from pyMyLib.utils import iniConf
 
 from dialogs import myList, lyric_song, mySearch, myPlainText
-#from threading import Thread
 from myShazam import myShazam
 
 def info_album(artist, album, parent=None):

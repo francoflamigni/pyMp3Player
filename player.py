@@ -131,6 +131,7 @@ class Player(FramelessDialog): #QMainWindow):
 
         contextMenu.addAction("Dispositivi Bluetooth").triggered.connect(self.bluetooth)
         contextMenu.addAction("Converti da altri formati").triggered.connect(self.convert)
+        contextMenu.addAction("CD ripper").triggered.connect(self.cd_ripper)
         contextMenu.addAction("Informazioni").triggered.connect(self.info)
         contextMenu.exec(p)
 
@@ -163,6 +164,11 @@ class Player(FramelessDialog): #QMainWindow):
         from format_convert import AudioConverter
         ac = AudioConverter()
         ac.exec()
+
+    def cd_ripper(self):
+        from cd_ripper import CDRipperMainWindow
+        cr = CDRipperMainWindow()
+        cr.exec()
 
 
 if __name__ == "__main__":

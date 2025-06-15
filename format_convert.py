@@ -14,9 +14,9 @@ from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
-                             QSplitter, QScrollArea)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent
-from PyQt6.QtGui import QFont, QPixmap
+                             QSplitter, QScrollArea, QSizePolicy)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QSize
+from PyQt6.QtGui import QFont, QPixmap, QResizeEvent
 from PyQt6.QtCore import QByteArray
 
 
@@ -402,14 +402,16 @@ class AudioConverter(QDialog):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setMinimumWidth(300)
-        scroll_area.setMaximumWidth(400)
+        scroll_area.setMaximumWidth(300)
 
-        self.cover_label = QLabel("Nessuna copertina")
+        self.cover_label = QLabel("Nessuna copertina") #FixedSquareQLabel() #QLabel("Nessuna copertina")
         self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_label.setStyleSheet("border: 2px dashed #ccc; padding: 20px;")
-        self.cover_label.setMinimumSize(250, 250)
+        #self.cover_label.setStyleSheet("border: 2px dashed #ccc; padding: 20px;")
+        self.cover_label.setFixedSize(250, 250)
+        #self.cover_label.setMaximumSize(250, 250)
 
         scroll_area.setWidget(self.cover_label)
+        scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cover_layout.addWidget(scroll_area)
 
         # Bottoni per gestire copertina
@@ -461,9 +463,9 @@ class AudioConverter(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Titolo
         #header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Artista
         #header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Album
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Anno
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Traccia
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Durata
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Anno
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Traccia
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Durata
         header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Tipo
 
         # Abilita editing
@@ -560,10 +562,7 @@ class AudioConverter(QDialog):
                 pixmap.loadFromData(QByteArray(cover_data))
 
                 # Scala l'immagine mantenendo le proporzioni
-                scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio,
-                                              Qt.TransformationMode.SmoothTransformation)
-
-                self.cover_label.setPixmap(scaled_pixmap)
+                self.cover_label.setPixmap(pixmap.scaled(self.cover_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
                 self.cover_label.setText("")
                 self.remove_cover_button.setEnabled(True)
 
