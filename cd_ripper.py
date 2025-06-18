@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar,
     QGroupBox, QCheckBox, QFileDialog, QDialog,
-    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView
+    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
 )
 from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt, QMetaObject, Q_ARG
 from music_brainz import CDinfo
@@ -166,7 +166,9 @@ class CDRipperMainWindow(QDialog):
         # Barra di progresso e status
         self.progress_bar = QProgressBar()
         self.status_label = QLabel("Pronto")
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.status_progress = QLabel()
+        self.status_progress.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         h = QHBoxLayout()
         h.addWidget(self.status_label)
         h.addWidget(self.status_progress)
