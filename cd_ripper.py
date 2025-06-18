@@ -1,7 +1,7 @@
 import sys
 import os
 import subprocess
-import requests
+import re
 from pathlib import Path
 from typing import List, Dict
 from datetime import datetime
@@ -21,6 +21,8 @@ class FFmpegWorker(QThread):
     progress_updated = pyqtSignal(int)
     status_updated = pyqtSignal(str)
     finished_track = pyqtSignal(int, str)  # track_number, filename
+    progress_track = pyqtSignal(int)
+    status_track = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
 
     def __init__(self, cd_drive: str, tracks: List[Dict], output_dir: str, quality: str):
@@ -33,6 +35,27 @@ class FFmpegWorker(QThread):
 
     def stop(self):
         self.is_running = False
+
+    def converti_durata_in_secondi(self, log_string: str):
+        # Cattura HH, MM, SS e i millisecondi (parte decimale)
+        match = re.search(r"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})", log_string)
+
+        if match:
+            ore = int(match.group(1))
+            minuti = int(match.group(2))
+            secondi_interi = int(match.group(3))
+            millisecondi_str = match.group(4)  # Cattura i due decimali
+
+            # Converti i millisecondi (es. "72" -> 0.72)
+            # Assumiamo che siano centesimi di secondo per due cifre dopo il punto
+            millisecondi = float("0." + millisecondi_str) if millisecondi_str else 0.0
+
+            # Calcola i secondi totali
+            secondi_totali = (ore * 3600) + (minuti * 60) + secondi_interi + millisecondi
+            return secondi_totali
+        else:
+            #print("Formato 'time=HH:MM:SS.ms' non trovato nella stringa fornita.")
+            return None
 
     def run(self):
         try:
@@ -55,13 +78,14 @@ class FFmpegWorker(QThread):
                 self.status_updated.emit(f"Estraendo traccia {track_num}: {title}")
 
                 # Comando ffmpeg per estrarre la traccia specifica
+                durata = track["durata"]
                 cmd = [
                     'ffmpeg', '-y',
                     '-f', 'libcdio',
                     '-i', f'{self.cd_drive}:',
                     '-c:a', 'libmp3lame',
                     '-ss', f'{track["start"]}',
-                    '-t', f'{track["durata"]}',
+                    '-t', f'{durata}',
                     '-b:a', self.quality,
                     '-metadata', f'title={title}',
                     '-metadata', f'artist={artist}',
@@ -75,10 +99,18 @@ class FFmpegWorker(QThread):
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, #PIPE,
                     shell=True,
-                    universal_newlines=True
+                    universal_newlines=True,
+                    bufsize=1
                 )
+
+                for line in iter(process.stdout.readline, ''):
+                    t = self.converti_durata_in_secondi(line.strip())
+                    if t:
+                        pc = 100 * t / durata
+                        self.progress_track.emit(pc)
+                        #print(pc)
 
                 stdout, stderr = process.communicate()
 
@@ -87,7 +119,7 @@ class FFmpegWorker(QThread):
                     progress = int((i + 1) / total_tracks * 100)
                     self.progress_updated.emit(progress)
                 else:
-                    self.error_occurred.emit(f"Errore nell'estrazione traccia {track_num}: {stderr}")
+                    self.error_occurred.emit(f"Errore nell'estrazione traccia {track_num}: {stdout}")
 
         except Exception as e:
             self.error_occurred.emit(f"Errore generale: {str(e)}")
@@ -134,9 +166,15 @@ class CDRipperMainWindow(QDialog):
         # Barra di progresso e status
         self.progress_bar = QProgressBar()
         self.status_label = QLabel("Pronto")
+        self.status_progress = QLabel()
+        h = QHBoxLayout()
+        h.addWidget(self.status_label)
+        h.addWidget(self.status_progress)
+
 
         main_layout.addWidget(self.progress_bar)
-        main_layout.addWidget(self.status_label)
+        main_layout.addLayout(h)
+        #main_layout.addWidget(self.status_label)
 
     def setup_config_tab(self, layout):
         """Configura il tab delle impostazioni"""
@@ -363,6 +401,7 @@ class CDRipperMainWindow(QDialog):
         self.ffmpeg_worker.progress_updated.connect(self.progress_bar.setValue)
         self.ffmpeg_worker.status_updated.connect(self.status_label.setText)
         self.ffmpeg_worker.finished_track.connect(self.on_track_finished)
+        self.ffmpeg_worker.progress_track.connect(self.on_track_progress)
         self.ffmpeg_worker.error_occurred.connect(self.on_error)
         self.ffmpeg_worker.finished.connect(self.on_ripping_finished)
 
@@ -384,6 +423,10 @@ class CDRipperMainWindow(QDialog):
         """Chiamato quando una traccia è completata"""
         self.status_label.setText(f"Completata traccia {track_num}: {os.path.basename(filename)}")
 
+    def on_track_progress(self, progress: float):
+        self.status_progress.setText(f"{progress:.0f}%")
+        #print(progress)
+
     def on_error(self, error_msg: str):
         """Chiamato in caso di errore"""
         QMessageBox.critical(self, "Errore", error_msg)
@@ -394,5 +437,6 @@ class CDRipperMainWindow(QDialog):
         self.stop_btn.setEnabled(False)
         self.progress_bar.setValue(100)
         self.status_label.setText("Ripping completato!")
+        self.status_progress.setText("")
 
         QMessageBox.information(self, "Completato", "Ripping del CD completato con successo!")
