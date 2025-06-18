@@ -18,3 +18,4 @@ musicbrainzngs
 python-dateutil
 lameenc
 mutagen
+discid

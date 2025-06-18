@@ -28,7 +28,8 @@ class MusicInfo:
         self.finished = False
         self.setup_musicbrainz()
 
-    def setup_musicbrainz(self):
+    @staticmethod
+    def setup_musicbrainz():
         """Configure the MusicBrainz API client"""
         musicbrainzngs.set_useragent(
             "PythonMusicInfo",
@@ -226,6 +227,187 @@ class MusicInfo:
                 pass
             return html
         return ''
+
+class CDinfo:
+    def __init__(self, drive=''):
+        self.drive = drive
+        self.discid = None
+        MusicInfo.setup_musicbrainz()
+
+    def read_disc_id(self, device):
+        import discid
+
+        """
+        Legge il DiscID dal CD
+
+        Args:
+            device: Percorso del dispositivo CD (None per default)
+
+        Returns:
+            dict: Informazioni sul disco
+        """
+        try:
+            # Legge il disco
+            if device:
+                disc = discid.read(device)
+            else:
+                disc = discid.read()  # Usa il dispositivo default
+
+            return {
+                'id': disc.id,
+                'freedb_id': disc.freedb_id,
+                'tracks': disc.tracks,
+                'sectors': disc.sectors,
+                'length': disc.seconds,
+                'mcn': disc.mcn,
+                'track_count': len(disc.tracks),
+                'track_details': [
+                    {
+                        'number': track.number,
+                        'offset': track.offset,
+                        'length': track.length,
+                        'sectors': track.sectors
+                    }
+                    for track in disc.tracks
+                ]
+            }
+
+        except discid.DiscError as e:
+            print(f"Errore lettura disco: {e}")
+            return None
+        except Exception as e:
+            print(f"Errore generico: {e}")
+            return None
+
+    def search_musicbrainz_by_discid(self, id):
+        """
+        Cerca informazioni su MusicBrainz usando il DiscID
+        """
+
+        try:
+            # Cerca il release usando il DiscID
+            result = musicbrainzngs.get_releases_by_discid(
+                id,
+                includes=['artists', 'recordings', 'release-groups']
+            )
+
+            if 'disc' in result and 'release-list' in result['disc']:
+                releases = result['disc']['release-list']
+
+                release_info = []
+                for release in releases:
+                    info = {
+                        'id': release['id'],
+                        'title': release.get('title', 'N/A'),
+                        'date': release.get('date', 'N/A'),
+                        'country': release.get('country', 'N/A'),
+                        'barcode': release.get('barcode', 'N/A'),
+                        'artists': []
+                    }
+
+                    # Artisti
+                    if 'artist-credit' in release:
+                        for artist_credit in release['artist-credit']:
+                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                info['artists'].append({
+                                    'name': artist_credit['artist']['name'],
+                                    'id': artist_credit['artist']['id']
+                                })
+
+                    # Tracce (se disponibili)
+                    if 'medium-list' in release:
+                        info['tracks'] = []
+                        for medium in release['medium-list']:
+                            if 'track-list' in medium:
+                                for track in medium['track-list']:
+                                    recording = track.get('recording', 'N/A')
+                                    track_info = {
+                                        'position': track.get('position', 'N/A'),
+                                        'title': recording.get('title', 'N/A'),
+                                        'length': track.get('length', 'N/A')
+                                    }
+
+                                    # Artista della traccia
+                                    if 'artist-credit' in track:
+                                        track_artists = []
+                                        for artist_credit in track['artist-credit']:
+                                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                                track_artists.append(artist_credit['artist']['name'])
+                                        track_info['artists'] = track_artists
+
+                                    info['tracks'].append(track_info)
+
+                    release_info.append(info)
+
+                return {
+                    'discid': self.discid,
+                    'releases': release_info
+                }
+            else:
+                return {
+                    'discid': self.discid,
+                    'releases': [],
+                    'message': 'Nessun release trovato per questo DiscID'
+                }
+
+        except musicbrainzngs.WebServiceError as e:
+            print(f"Errore API MusicBrainz: {e}")
+            return None
+        except Exception as e:
+            print(f"Errore ricerca: {e}")
+            return None
+
+    def detects_info(self, df):
+        mb_info = self.search_musicbrainz_by_discid(df['id'])
+
+        if mb_info and mb_info['releases']:
+            print(f"Trovati {len(mb_info['releases'])} release:")
+
+            for i, release in enumerate(mb_info['releases'], 1):
+                df["titolo"] = f"{release['title']}"
+                df["artisti"] =  f"{', '.join([a['name'] for a in release['artists']])}"
+                df["data"] = f"{release['date']}"
+
+                trk = df['tracce']
+                if 'tracks' in release and release['tracks']:
+                    for track in release['tracks']:
+                        p =  track.get('position', '')
+                        if p:
+                            p = int(p) -1
+                            tr = trk[p]
+                            title = track.get('title', 'N/A')
+                            tr['title'] = title
+        return df
+
+    def detects_tracs(self):
+
+        MusicInfo.setup_musicbrainz()
+        disc_info = self.read_disc_id(f"{self.drive}:")
+        if not disc_info:
+            return {}
+
+        trks = []
+        trk_start = float(0.)
+        for track in disc_info['track_details']:
+            start = trk_start
+            lenght = float(track['length']) / 75.
+            trk = {
+                "traccia": f"{track['number']}",
+                "durata": lenght,
+                "start": start
+            }
+            trks.append(trk)
+            start += lenght
+
+        df = {
+            "id": f"{disc_info['id']}",
+            "numero tracce": f"{disc_info['track_count']}",
+            "durata totale":  f"{disc_info['length']}",
+            "tracce": trks
+        }
+        return self.detects_info(df)
+
+
 
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
 from PyQt6.QtCore import QThread, pyqtSignal

@@ -18,13 +18,13 @@ from bluetooth import BluetoothManager
 https://streamurl.link/ per trovare stazioni radio
 '''
 
-INFO_MES = 'Music Player\nGestione mp3\nVersione 1.1.2\n18 Maggio 2025'
+INFO_MES = 'Euterpe\nMusic manager\nVersione 1.1.3\n18 Maggio 2025'
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.setTitle("Media Player")
+        self.setTitle("Euterpe")
         self.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/player.ico')))
         self.maxBtn.hide()
         self.setDoubleClickEnabled(False)
@@ -158,7 +158,7 @@ class Player(FramelessDialog): #QMainWindow):
 
 
     def info(self):
-        informMessage(INFO_MES, 'Music Player', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.png'))
+        informMessage(INFO_MES, 'Εὐτέρπη', 15, True, os.path.join(os.getcwd(), 'icone/pentagram.png'))
 
     def convert(self):
         from format_convert import AudioConverter
