@@ -9,7 +9,7 @@ from qframelesswindow import FramelessDialog, StandardTitleBar
 
 from pyMyLib.qtUtils import informMessage
 from pyMyLib.utils import iniConf
-from dialogs import RadioDlg
+from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
 from bluetooth import BluetoothManager
@@ -18,7 +18,7 @@ from bluetooth import BluetoothManager
 https://streamurl.link/ per trovare stazioni radio
 '''
 
-INFO_MES = 'Euterpe\nMusic manager\nVersione 1.1.3\n18 Maggio 2025'
+INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.1.3\n18 Maggio 2025'
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
@@ -44,7 +44,7 @@ class Player(FramelessDialog): #QMainWindow):
 
         os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(), 'exe')
 
-        self.ini = iniConf('music_player')
+        self.ini = iniConf(AppConfig)
 
         self.splash = None
 

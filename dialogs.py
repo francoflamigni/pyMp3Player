@@ -20,6 +20,8 @@ from threading import Thread
 https://github.com/andreztz/pyradios/tree/main/pyradios
 '''
 
+AppConfig = 'Euterpe'
+
 def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
     pixmap = QPixmap(png_path)
     scaled_pixmap = pixmap.scaled(width, height)
@@ -458,7 +460,7 @@ class configDlg(QDialog):
         self.wparent = parent
 
         v = QVBoxLayout(self)
-        ini = iniConf('music_player')
+        ini = iniConf(AppConfig)
         md = ini.get('MAIN', 'splittermode')
         self.ui_mode = QCheckBox('Modo Splitter', self)
         if md == '1':
@@ -473,7 +475,7 @@ class configDlg(QDialog):
         if self.ui_mode.isChecked():
             v = '1'
 
-        ini = iniConf('music_player')
+        ini = iniConf(AppConfig)
         s = ini.get('MAIN')
         if s is None:
             s = {}

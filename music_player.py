@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, 
 
 from pyMyLib.qtUtils import set_background
 from pyMyLib.utils import iniConf
-from dialogs import lyric_song
+from dialogs import lyric_song, AppConfig
 import scrobbler
 
 def get_tm(secs):
@@ -507,7 +507,7 @@ class Equalizer(QFrame):
 
     ''' richiamato quando si finisce di spostare uno slider '''
     def equal_sav(self, wid):
-        ini = iniConf('music_player')
+        ini = iniConf(AppConfig)
         eq_sav = ini.get('EQUALIZER')
         if eq_sav is None:
             eq_sav = {}
@@ -524,7 +524,7 @@ class Equalizer(QFrame):
         ini.save()
 
     def equal_load(self):
-        ini = iniConf('music_player')
+        ini = iniConf(AppConfig)
         eq_sav = ini.get('EQUALIZER')
         if eq_sav is None:
             return

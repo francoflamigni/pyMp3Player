@@ -12,7 +12,7 @@ from music_brainz import brainz
 from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
 from pyMyLib.utils import iniConf
 
-from dialogs import myList, lyric_song, mySearch, myPlainText
+from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
 from myShazam import myShazam
 
 def info_album(artist, album, parent=None):
@@ -53,7 +53,7 @@ class MusicIndexDlg(QDialog):
         self.setObjectName("mp3_widget")
         set_background(self)
 
-        ini = iniConf('music_player')
+        ini = iniConf(AppConfig)
         self.last_folder = ini.get('CONF', 'last_folder')
 
         self.music = Music(parent)
