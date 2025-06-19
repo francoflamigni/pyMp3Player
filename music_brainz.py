@@ -2,6 +2,7 @@ import musicbrainzngs
 
 from difflib import SequenceMatcher
 import time
+from datetime import datetime
 
 def similar(a, b, threshold=0.85):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio() > threshold
@@ -302,6 +303,7 @@ class CDinfo:
                         'date': release.get('date', 'N/A'),
                         'country': release.get('country', 'N/A'),
                         'barcode': release.get('barcode', 'N/A'),
+                        'genre': release.get('genre', ''),
                         'artists': []
                     }
 
@@ -364,9 +366,12 @@ class CDinfo:
             print(f"Trovati {len(mb_info['releases'])} release:")
 
             for i, release in enumerate(mb_info['releases'], 1):
-                df["titolo"] = f"{release['title']}"
+                df["album"] = f"{release['title']}"
                 df["artisti"] =  f"{', '.join([a['name'] for a in release['artists']])}"
-                df["data"] = f"{release['date']}"
+
+                anno = datetime.strptime(release['date'], "%Y-%m-%d").year
+                df["anno"] = f"{anno}"
+                df["genere"] = f"{release['genre']}"
 
                 trk = df['tracce']
                 if 'tracks' in release and release['tracks']:
@@ -376,7 +381,7 @@ class CDinfo:
                             p = int(p) -1
                             tr = trk[p]
                             title = track.get('title', 'N/A')
-                            tr['title'] = title
+                            tr['titolo'] = title
         return df
 
     def detects_tracs(self):

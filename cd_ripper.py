@@ -1,18 +1,14 @@
-import sys
 import os
 import subprocess
 import re
 from pathlib import Path
 from typing import List, Dict
-from datetime import datetime
 
 from PyQt6.QtWidgets import (
-    QApplication, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar,
-    QGroupBox, QCheckBox, QFileDialog, QDialog,
-    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
+    QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar, QTableWidgetItem,
+    QGroupBox, QCheckBox, QFileDialog, QDialog, QMessageBox, QTableWidget, QHeaderView, QSizePolicy
 )
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt, QMetaObject, Q_ARG
+from PyQt6.QtCore import QThread, pyqtSignal
 from music_brainz import CDinfo
 
 class FFmpegWorker(QThread):
@@ -66,10 +62,11 @@ class FFmpegWorker(QThread):
                     break
 
                 track_num = int(track['traccia'])
-                title = track['title']
+                title = track['titolo']
                 artist = track.get('artisti', 'Unknown Artist')
                 album = track.get('album', 'Unknown Album')
                 anno = track.get('anno', 'Unknown Anno')
+                genere = track.get('genere', 'Unknown Genre')
 
                 # Sanitizza il nome del file
                 safe_title = self.sanitize_filename(f"{track_num:02d} - {title}")
@@ -92,6 +89,7 @@ class FFmpegWorker(QThread):
                     '-metadata', f'album={album}',
                     '-metadata', f'year={anno}',
                     '-metadata', f'track={track_num}',
+                    '-metadata', f'genre={genere}',
                     output_file
                 ]
 
@@ -110,7 +108,6 @@ class FFmpegWorker(QThread):
                     if t:
                         pc = 100 * t / durata
                         self.progress_track.emit(pc)
-                        #print(pc)
 
                 stdout, stderr = process.communicate()
 
@@ -151,8 +148,6 @@ class CDRipperMainWindow(QDialog):
 
     def init_ui(self):
         """Inizializza l'interfaccia utente"""
-        #central_widget = QWidget()
-        #self.setCentralWidget(central_widget)
 
         # Layout principale
         main_layout = QVBoxLayout(self)
@@ -173,10 +168,8 @@ class CDRipperMainWindow(QDialog):
         h.addWidget(self.status_label)
         h.addWidget(self.status_progress)
 
-
         main_layout.addWidget(self.progress_bar)
         main_layout.addLayout(h)
-        #main_layout.addWidget(self.status_label)
 
     def setup_config_tab(self, layout):
         """Configura il tab delle impostazioni"""
@@ -235,6 +228,7 @@ class CDRipperMainWindow(QDialog):
         self.artist_edit = QLineEdit()
         self.album_edit = QLineEdit()
         self.anno_edit = QLineEdit()
+        self.genere_edit = QLineEdit()
 
         search_layout.addWidget(QLabel("Artista:"))
         search_layout.addWidget(self.artist_edit)
@@ -242,7 +236,8 @@ class CDRipperMainWindow(QDialog):
         search_layout.addWidget(self.album_edit)
         search_layout.addWidget(QLabel("Anno:"))
         search_layout.addWidget(self.anno_edit)
-        #search_layout.addWidget(self.search_btn)
+        search_layout.addWidget(QLabel("Genere:"))
+        search_layout.addWidget(self.genere_edit)
 
         metadata_layout.addLayout(search_layout)
 
@@ -262,7 +257,6 @@ class CDRipperMainWindow(QDialog):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tracks_table)
-
 
     def create_control_panel(self):
         """Crea il pannello di controllo"""
@@ -319,9 +313,11 @@ class CDRipperMainWindow(QDialog):
         """Aggiorna la tabella delle tracce"""
         if tracks_data is not None:
             self.tracks_data = tracks_data
+
         self.artist_edit.setText(tracks_data.get("artisti", ""))
-        self.album_edit.setText(tracks_data.get("titolo", ""))
-        self.anno_edit.setText(tracks_data.get("data", ""))
+        self.album_edit.setText(tracks_data.get("album", ""))
+        self.anno_edit.setText(tracks_data.get("anno", ""))
+        self.genere_edit.setText(tracks_data.get("genere", ""))
 
         self.tracks_table.setRowCount(len(self.tracks_data['tracce']))
 
@@ -335,7 +331,7 @@ class CDRipperMainWindow(QDialog):
             self.tracks_table.setItem(row, 1, QTableWidgetItem(str(track['traccia'])))
 
             # Titolo (editabile)
-            title = track.get('title', f"Traccia-{row + 1:}")
+            title = track.get('titolo', f"Traccia-{row + 1:}")
             title_item = QTableWidgetItem(title)
             self.tracks_table.setItem(row, 2, title_item)
 
@@ -349,6 +345,22 @@ class CDRipperMainWindow(QDialog):
             if isinstance(duration, (int, float)):
                 duration = f"{int(duration // 60)}:{int(duration % 60):02d}"
             self.tracks_table.setItem(row, 4, QTableWidgetItem(str(duration)))
+
+    def update_track_data(self):
+        self.tracks_data['artisti'] = self.artist_edit.text()
+        self.tracks_data['album'] = self.album_edit.text()
+        self.tracks_data['anno'] = self.anno_edit.text()
+        self.tracks_data['genere'] = self.genere_edit.text()
+
+        for row in range(self.tracks_table.rowCount()):
+            track = self.tracks_data['tracce'][row]
+            track['titolo'] = self.tracks_table.item(row, 2).text()
+            artista = self.tracks_table.item(row, 3).text()
+            track['artisti'] = artista if artista else self.artist_edit.text()
+            album =  self.tracks_data['album']
+            track['album'] = album if album else self.album_edit.text()
+            track['anno'] = self.tracks_data['anno']
+            track['genere'] = self.tracks_data['genere']
 
     def start_ripping(self):
         """Avvia il processo di ripping"""
@@ -366,25 +378,23 @@ class CDRipperMainWindow(QDialog):
             QMessageBox.warning(self, "Attenzione", "Seleziona una directory di output")
             return
 
+        self.update_track_data()
         output_dir = os.path.join(output_dir, f"{self.tracks_data['artisti']}")
-        output_dir = os.path.join(output_dir, f"{self.tracks_data['titolo']}")
+        output_dir = os.path.join(output_dir, f"{self.tracks_data['album']}")
         # Crea directory se non esiste
         os.makedirs(output_dir, exist_ok=True)
 
         # Aggiorna dati tracce dalla tabella
         selected_tracks = []
         tracks = self.tracks_data['tracce']
-        date_object = datetime.strptime( self.tracks_data['data'], "%Y-%m-%d")
-        anno = date_object.year
         for row in range(self.tracks_table.rowCount()):
             checkbox = self.tracks_table.cellWidget(row, 0)
             if checkbox.isChecked():
                 track = tracks[row].copy()
-                #track['title'] = self.tracks_table.item(row, 2).text()
-                #track['artist'] = self.tracks_table.item(row, 3).text()
                 track['artisti'] = self.tracks_data['artisti']
-                track['album'] = self.tracks_data['titolo']
-                track['anno'] = anno
+                track['album'] = self.tracks_data['album']
+                track['anno'] = self.tracks_data['anno']
+                track['genere'] = self.tracks_data['genere']
                 selected_tracks.append(track)
 
         if not selected_tracks:
@@ -427,7 +437,6 @@ class CDRipperMainWindow(QDialog):
 
     def on_track_progress(self, progress: float):
         self.status_progress.setText(f"{progress:.0f}%")
-        #print(progress)
 
     def on_error(self, error_msg: str):
         """Chiamato in caso di errore"""

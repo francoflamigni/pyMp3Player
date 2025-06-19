@@ -183,7 +183,8 @@ class ConversionWorker(QThread):
         try:
             # Copia il file MP3 nella cartella di output
             output_file = self.output_folder / f"{audio_file.file_path.stem}.mp3"
-            shutil.copy2(str(audio_file.file_path), str(output_file))
+            if output_file != audio_file.file_path:
+                shutil.copy2(str(audio_file.file_path), str(output_file))
 
             # Aggiorna i tag
             self._add_tags(audio_file, output_file)
@@ -417,9 +418,13 @@ class AudioConverter(QDialog):
         # Bottoni per gestire copertina
         cover_buttons_layout = QHBoxLayout()
 
-        self.load_cover_button = QPushButton("Carica Copertina")
-        self.load_cover_button.clicked.connect(self.load_cover)
-        cover_buttons_layout.addWidget(self.load_cover_button)
+        self.load_cover_file_button = QPushButton("Copertina da file")
+        self.load_cover_file_button.clicked.connect(self.load_cover_from_file)
+        cover_buttons_layout.addWidget(self.load_cover_file_button)
+
+        self.load_cover_clip_button = QPushButton("Copertina da clipboard")
+        self.load_cover_clip_button.clicked.connect(self.load_cover_from_clipboard)
+        cover_buttons_layout.addWidget(self.load_cover_clip_button)
 
         self.remove_cover_button = QPushButton("Rimuovi Copertina")
         self.remove_cover_button.clicked.connect(self.remove_cover)
@@ -576,7 +581,7 @@ class AudioConverter(QDialog):
             self.cover_label.setPixmap(QPixmap())
             self.remove_cover_button.setEnabled(False)
 
-    def load_cover(self):
+    def load_cover_from_file(self):
         """Carica una copertina da file."""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Seleziona copertina", "",
@@ -588,7 +593,9 @@ class AudioConverter(QDialog):
                 with open(file_path, 'rb') as f:
                     cover_data = f.read()
 
-                self.current_cover_data = cover_data
+                #self.current_cover_data = cover_data
+                self._load_cover(cover_data)
+                '''
                 self.display_cover(cover_data)
 
                 # Applica a tutti i file selezionati o a tutti se nessuno selezionato
@@ -604,9 +611,61 @@ class AudioConverter(QDialog):
                             self.audio_files[row].album_art = cover_data
 
                 self.status_label.setText("Copertina caricata")
+                '''
 
             except Exception as e:
                 QMessageBox.warning(self, "Errore", f"Impossibile caricare la copertina: {e}")
+
+    def load_cover_from_clipboard(self):
+        from utility import qpixmap_to_bytes
+        """Carica una copertina dal clipboard con ridimensionamento."""
+        try:
+            clipboard = QApplication.clipboard()
+
+            # Controlla se c'è un'immagine nel clipboard
+            if not clipboard.mimeData().hasImage():
+                QMessageBox.information(self, "Info", "Nessuna immagine trovata nel clipboard")
+                return
+
+            # Ottieni l'immagine dal clipboard
+            pixmap = clipboard.pixmap()
+            if pixmap.isNull():
+                QMessageBox.warning(self, "Errore", "Impossibile ottenere l'immagine dal clipboard")
+                return
+
+            # Converte QPixmap in dati binari
+            image_data = qpixmap_to_bytes(pixmap)
+
+            self._load_cover(image_data)
+
+        except Exception as e:
+            QMessageBox.warning(self, "Errore", f"Impossibile caricare dal clipboard: {e}")
+
+    def _load_cover(self, image_data):
+        from utility import resize_image_data
+        # Ridimensiona l'immagine
+        resized_data = resize_image_data(
+            image_data,
+            target_size=(400, 400),
+            quality=85
+        )
+        self.current_cover_data = resized_data
+
+        self.display_cover(resized_data)
+
+        # Applica a tutti i file selezionati o a tutti se nessuno selezionato
+        selected_rows = set(index.row() for index in self.table.selectedIndexes())
+        if not selected_rows:
+            # Applica a tutti
+            for audio_file in self.audio_files:
+                audio_file.album_art = resized_data
+        else:
+            # Applica solo ai selezionati
+            for row in selected_rows:
+                if row < len(self.audio_files):
+                    self.audio_files[row].album_art = resized_data
+
+        self.status_label.setText("Copertina caricata")
 
     def remove_cover(self):
         """Rimuove la copertina dai file selezionati."""
