@@ -1,7 +1,8 @@
 import os
 import time
+from utility import get_resource_path_pathlib
 
-vlc_path = os.path.join(os.getcwd(), 'exe/VLC')
+vlc_path = str(get_resource_path_pathlib('exe/vlc')) #os.path.join(os.getcwd(), 'exe/VLC')
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
@@ -175,13 +176,13 @@ class MusicPlayerDlg(QDialog):
 
         self.lyricbutton = QPushButton(self)
         self.lyricbutton.setMaximumWidth(30)
-        self.lyricbutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/lyric.png')))
+        self.lyricbutton.setIcon(QIcon(os.path.join(get_resource_path_pathlib('icone'), 'lyric.png')))
         self.lyricbutton.setToolTip('testo brano')
         self.lyricbutton.clicked.connect(self.songLyrics)
 
         self.titlebutton = QPushButton(self)
         self.titlebutton.setMaximumWidth(30)
-        self.titlebutton.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/shazam.png')))
+        self.titlebutton.setIcon(QIcon(os.path.join(get_resource_path_pathlib('icone'), 'shazam.png')))
         self.titlebutton.setToolTip('riconosce brano')
         self.titlebutton.clicked.connect(self.wparent.songTitle)
         hbt.addWidget(self.lyricbutton)

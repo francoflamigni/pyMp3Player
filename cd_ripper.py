@@ -319,32 +319,33 @@ class CDRipperMainWindow(QDialog):
         self.anno_edit.setText(tracks_data.get("anno", ""))
         self.genere_edit.setText(tracks_data.get("genere", ""))
 
-        self.tracks_table.setRowCount(len(self.tracks_data['tracce']))
+        if 'tracce' in tracks_data.keys():
+            self.tracks_table.setRowCount(len(self.tracks_data['tracce']))
 
-        for row, track in enumerate(self.tracks_data['tracce']):
-            # Checkbox selezione
-            checkbox = QCheckBox()
-            checkbox.setChecked(True)
-            self.tracks_table.setCellWidget(row, 0, checkbox)
+            for row, track in enumerate(self.tracks_data['tracce']):
+                # Checkbox selezione
+                checkbox = QCheckBox()
+                checkbox.setChecked(True)
+                self.tracks_table.setCellWidget(row, 0, checkbox)
 
-            # Numero traccia
-            self.tracks_table.setItem(row, 1, QTableWidgetItem(str(track['traccia'])))
+                # Numero traccia
+                self.tracks_table.setItem(row, 1, QTableWidgetItem(str(track['traccia'])))
 
-            # Titolo (editabile)
-            title = track.get('titolo', f"Traccia-{row + 1:}")
-            title_item = QTableWidgetItem(title)
-            self.tracks_table.setItem(row, 2, title_item)
+                # Titolo (editabile)
+                title = track.get('titolo', f"Traccia-{row + 1:}")
+                title_item = QTableWidgetItem(title)
+                self.tracks_table.setItem(row, 2, title_item)
 
-            # Artista (editabile)
-            artista = tracks_data.get('artisti', "")
-            artist_item = QTableWidgetItem(artista)
-            self.tracks_table.setItem(row, 3, artist_item)
+                # Artista (editabile)
+                artista = tracks_data.get('artisti', "")
+                artist_item = QTableWidgetItem(artista)
+                self.tracks_table.setItem(row, 3, artist_item)
 
-            # Durata
-            duration = track['durata']
-            if isinstance(duration, (int, float)):
-                duration = f"{int(duration // 60)}:{int(duration % 60):02d}"
-            self.tracks_table.setItem(row, 4, QTableWidgetItem(str(duration)))
+                # Durata
+                duration = track['durata']
+                if isinstance(duration, (int, float)):
+                    duration = f"{int(duration // 60)}:{int(duration % 60):02d}"
+                self.tracks_table.setItem(row, 4, QTableWidgetItem(str(duration)))
 
     def update_track_data(self):
         self.tracks_data['artisti'] = self.artist_edit.text()

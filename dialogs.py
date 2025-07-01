@@ -12,7 +12,7 @@ from googletrans import Translator
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage
 from pyMyLib.utils import iniConf
-
+from utility import get_resource_path_pathlib
 
 from threading import Thread
 
@@ -52,7 +52,7 @@ class myList(QListWidget):
             if it != self.itc:
                 self.unsetCursor()
             else:
-                self.setCursor(create_cursor('icone/play.png'))
+                self.setCursor(create_cursor(os.path.join(get_resource_path_pathlib('icone'), 'play.png')))
 
         super(QListWidget, self).mouseMoveEvent(event)
 
