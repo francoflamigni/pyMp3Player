@@ -19,7 +19,7 @@ from utility import get_resource_path_pathlib
 https://streamurl.link/ per trovare stazioni radio
 '''
 
-INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.1.3\n18 Maggio 2025'
+INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.1.4\n01 Luglio 2025'
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
