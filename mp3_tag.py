@@ -151,7 +151,7 @@ class Music:
         a = 0
     def get_mp3(self, path):
         for root, dirs, files in os.walk(path):
-            self.print(root)
+            self.print(os.path.basename(root))
             for file in files:
                 self.inp.put((root, file))
 
