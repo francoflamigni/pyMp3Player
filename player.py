@@ -8,12 +8,11 @@ from PyQt6.QtGui import QIcon, QPixmap, QCursor
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
 from pyMyLib.qtUtils import informMessage
-from pyMyLib.utils import iniConf
+from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
 from bluetooth import BluetoothManager
-from utility import get_resource_path_pathlib
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -26,7 +25,7 @@ class MyTitleBar(StandardTitleBar):
         super().__init__(parent)
 
         self.setTitle("Euterpe")
-        self.setIcon(QIcon(os.path.join(get_resource_path_pathlib('icone'), 'player.ico')))
+        self.setIcon(QIcon(get_resource_file(__file__, 'icone', 'player.ico')))
         self.maxBtn.hide()
         self.setDoubleClickEnabled(False)
 
@@ -43,13 +42,13 @@ class Player(FramelessDialog): #QMainWindow):
         self.setTitleBar(MyTitleBar(self))
         self.setResizeEnabled(False)
 
-        os.environ["PATH"] += os.pathsep + str(get_resource_path_pathlib('exe'))
+        os.environ["PATH"] += os.pathsep + str(get_resource_path_pathlib(__file__, 'exe'))
 
         self.ini = iniConf(AppConfig)
 
         self.splash = None
 
-        f = os.path.join(get_resource_path_pathlib('icone'),  'splash.bmp')
+        f = get_resource_file(__file__, 'icone',  'splash.bmp')
         if os.path.isfile(f):
             self.splash = QSplashScreen(QPixmap(f))
             self.splash.show()
@@ -74,20 +73,20 @@ class Player(FramelessDialog): #QMainWindow):
         tool = QToolBar()
 
         bt = QPushButton(self)
-        bt.setIcon(QIcon(os.path.join(get_resource_path_pathlib('icone'), 'menu.png')))
+        bt.setIcon(QIcon(get_resource_file(__file__, 'icone', 'menu.png')))
         bt.setMaximumWidth(30)
         bt.clicked.connect(self.options)
         tool.addWidget(bt)
 
         self.tb = QTabBar()
         self.tb.addTab('')
-        self.tb.setTabIcon(0, QIcon(os.path.join(get_resource_path_pathlib('icone'), 'mp3.png')))
+        self.tb.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'mp3.png')))
         self.tb.setTabToolTip(0, 'Mp3')
         self.tb.addTab('')
-        self.tb.setTabIcon(1, QIcon(os.path.join(get_resource_path_pathlib('icone'), 'radio.png')))
+        self.tb.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'radio.png')))
         self.tb.setTabToolTip(1, 'Radio')
         self.tb.addTab('')
-        self.tb.setTabIcon(2, QIcon(os.path.join(get_resource_path_pathlib('icone'), 'stereo.png')))
+        self.tb.setTabIcon(2, QIcon(get_resource_file(__file__, 'icone', 'stereo.png')))
         self.tb.setTabToolTip(2, 'player')
         self.tb.currentChanged.connect(self.tab_changed)
 
@@ -159,7 +158,7 @@ class Player(FramelessDialog): #QMainWindow):
 
 
     def info(self):
-        informMessage(INFO_MES, 'Εὐτέρπη', 15, True, os.path.join(get_resource_path_pathlib('icone'), 'pentagram.png'))
+        informMessage(INFO_MES, 'Εὐτέρπη', 15, True, get_resource_file(__file__, 'icone', 'pentagram.png'))
 
     def convert(self):
         from format_convert import AudioConverter

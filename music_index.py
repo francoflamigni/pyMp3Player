@@ -10,7 +10,7 @@ from mp3_tag import Music
 from music_brainz import brainz
 
 from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
-from pyMyLib.utils import iniConf
+from pyMyLib.utils import iniConf, get_resource_file
 
 from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
 from myShazam import myShazam
@@ -63,7 +63,7 @@ class MusicIndexDlg(QDialog):
         self.prog.setMinimumWidth(250)
 
         self.b1 = QPushButton(self)
-        self.b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/folder_open.png')))
+        self.b1.setIcon(QIcon(get_resource_file(__file__, 'icone', 'folder_open.png')))
         self.b1.setMaximumWidth(30)
         self.b1.clicked.connect(self.index2)
 
@@ -73,7 +73,7 @@ class MusicIndexDlg(QDialog):
         self.te.returnPressed.connect(self.search)
 
         b2 = QPushButton(self)
-        b2.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
+        b2.setIcon(QIcon(get_resource_file(__file__, 'icone', 'search.png')))
         b2.setMaximumWidth(30)
         b2.clicked.connect(self.search)
 
@@ -119,11 +119,11 @@ class MusicIndexDlg(QDialog):
         self.plst = myList(self)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tab.addTab(self.pix, '')
-        self.tab.setTabIcon(0, QIcon(os.path.join(os.getcwd(), 'icone/cover.png')))
+        self.tab.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
         self.tab.setTabToolTip(0, 'copertina')
 
         self.tab.addTab(self.plst, '')
-        self.tab.setTabIcon(1, QIcon(os.path.join(os.getcwd(), 'icone/playlist.png')))
+        self.tab.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
         self.tab.setTabToolTip(1, 'playlist')
 
         self.h = QHBoxLayout()

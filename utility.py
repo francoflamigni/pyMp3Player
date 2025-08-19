@@ -1,7 +1,6 @@
 from PIL import Image, ImageQt
 import io
-import sys
-from pathlib import Path
+
 
 def qpixmap_to_bytes(pixmap):
     """Converte un QPixmap in dati binari."""
@@ -63,13 +62,3 @@ def resize_image_data(image_data, target_size=(400, 400), quality=85):
     except Exception as e:
         raise Exception(f"Errore nel ridimensionamento dell'immagine: {e}")
 
-def get_resource_path_pathlib(relative_path):
-    """
-    Versione con pathlib per percorsi più robusti
-    """
-    try:
-        base_path = Path(sys._MEIPASS)
-    except AttributeError:
-        base_path = Path(__file__).parent
-
-    return base_path / relative_path
