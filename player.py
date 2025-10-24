@@ -172,19 +172,18 @@ class Player(FramelessDialog): #QMainWindow):
         cr.exec()
 
     def create_playlist(self):
-        preferences = [
-            {"nome": "Luciano Ligabue", "peso": 20},
-            {"nome": "Gianna Nannini", "peso": 8},
-            {"nome": "Loreena McKennitt", "peso": 10},
-            {"nome": "Bob Dylan", "peso": 12},
-            {"nome": "Bruce Springsteen", "peso": 15}
-        ]
         index = self.dlg.music
-        duration = 5400 #durata in secondi
-        from playlist import Create_playlist
-        lst = Create_playlist(index, preferences, duration)
-        for t in lst:
-            self.dlg.add_playlist(*t)
+
+        from playlist import PlayListDlg
+        plldlg = PlayListDlg(self, index)
+        ret = plldlg.exec()
+        if ret:
+            lst = plldlg.get_playlist()
+            self.dlg.clear_playlist()
+            for t in lst:
+                self.dlg.add_playlist(*t)
+
+            self.dlg.tab.setCurrentIndex(1)
 
 
 if __name__ == "__main__":

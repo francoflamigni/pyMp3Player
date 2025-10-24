@@ -1,7 +1,7 @@
 import os
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtGui import QPixmap, QIcon, QCursor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QTabWidget,
                              QAbstractItemView, QMenu)
@@ -116,13 +116,23 @@ class MusicIndexDlg(QDialog):
 
         self.pix = QLabel()
 
+        vl = QVBoxLayout()
         self.plst = myList(self)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        bp = QPushButton(self)
+        bp.setIcon(QIcon(get_resource_file(__file__, 'icone', 'play.png')))
+        bp.clicked.connect(lambda x: self.play_playlist(1))
+        vl.addWidget(self.plst)
+        vl.addWidget(bp)
+        wd = QWidget(self)
+        wd.setContentsMargins(0, 0, 0, 0)
+        wd.setLayout(vl)
+
         self.tab.addTab(self.pix, '')
         self.tab.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
         self.tab.setTabToolTip(0, 'copertina')
 
-        self.tab.addTab(self.plst, '')
+        self.tab.addTab(wd, '')
         self.tab.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
         self.tab.setTabToolTip(1, 'playlist')
 
@@ -202,6 +212,9 @@ class MusicIndexDlg(QDialog):
         elif lst == self.tracks:
             self.play_song()
 
+    def clear_playlist(self):
+        self.plst.clear()
+
     def add_playlist(self, artist, album, track):
         if track != '':
             vi = [self.music.tracks.name[track + '@' + album]]
@@ -218,6 +231,8 @@ class MusicIndexDlg(QDialog):
         for r in range(self.plst.count()):
             qi = self.plst.item(r)
             p = qi.data(Qt.ItemDataRole.UserRole)
+            mes = f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}"
+            qi.setToolTip(mes)
             tot_time += p.tm_sec
 
         h = int(tot_time / 3600)
