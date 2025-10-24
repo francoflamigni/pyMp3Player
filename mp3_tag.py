@@ -229,6 +229,7 @@ class Music:
 
         fp.close
 
+
 class artists:
     def __init__(self):
         self.name = {}

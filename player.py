@@ -132,6 +132,7 @@ class Player(FramelessDialog): #QMainWindow):
         contextMenu.addAction("Dispositivi Bluetooth").triggered.connect(self.bluetooth)
         contextMenu.addAction("Converti da altri formati").triggered.connect(self.convert)
         contextMenu.addAction("CD ripper").triggered.connect(self.cd_ripper)
+        contextMenu.addAction("Crea PlayList").triggered.connect(self.create_playlist)
         contextMenu.addAction("Informazioni").triggered.connect(self.info)
         contextMenu.exec(p)
 
@@ -169,6 +170,21 @@ class Player(FramelessDialog): #QMainWindow):
         from cd_ripper import CDRipperMainWindow
         cr = CDRipperMainWindow()
         cr.exec()
+
+    def create_playlist(self):
+        preferences = [
+            {"nome": "Luciano Ligabue", "peso": 20},
+            {"nome": "Gianna Nannini", "peso": 8},
+            {"nome": "Loreena McKennitt", "peso": 10},
+            {"nome": "Bob Dylan", "peso": 12},
+            {"nome": "Bruce Springsteen", "peso": 15}
+        ]
+        index = self.dlg.music
+        duration = 5400 #durata in secondi
+        from playlist import Create_playlist
+        lst = Create_playlist(index, preferences, duration)
+        for t in lst:
+            self.dlg.add_playlist(*t)
 
 
 if __name__ == "__main__":

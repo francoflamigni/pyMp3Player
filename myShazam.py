@@ -6,7 +6,6 @@ from threading import Thread
 import asyncio
 import os
 
-
 class myShazam:
     def __init__(self, bck, time=10):
         self.bck = bck
@@ -41,11 +40,19 @@ class myShazam:
         waitCursor()
 
     def speaker(self):
+        with sc.get_microphone(
+            id=str(sc.default_speaker().name), include_loopback=True
+        ).recorder(samplerate=44100) as speaker:
+            self.data = speaker.record(numframes=44100 * self.seconds)
+            sf.write(file=self.nome, data=self.data, samplerate=44100)
+
+        '''
         try:
             with sc.get_microphone(
                 id=str(sc.default_speaker().name), include_loopback=True
             ).recorder(samplerate=44100) as speaker:
                 self.data = speaker.record(numframes=44100 * self.seconds)
                 sf.write(file=self.nome, data=self.data, samplerate=44100)
-        except:
+        except Exception as e:
             a = 0
+        '''
