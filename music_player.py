@@ -37,7 +37,17 @@ class MusicPlayerDlg(QDialog):
         self.tracks = []
         self.index = -1
 
-        self.instance = vlc.Instance(['--gain=40.0', '--audio-visual=visual'] ) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
+        type = 'spectrum'
+        args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
+        if type == 'spectrum':
+            args.extend(['--effect-list=spectrum', '--visual-nbbands=160', '--visual-peaks', '--visual-amp=3.0'])
+        elif type == 'vumeter':
+            args.extend(['--effect-list=vuMeter'])
+        elif type == 'scope':
+            args.extend(['--effect-list=scope', '--visual-amp=2.0'])
+        else:
+            args.extend(['--effect-list=spectrometer', '--visual-amp=2.0'])
+        self.instance = vlc.Instance(args) # Projectm,goom,visual,glspectrum,none}', '--logfile=vlc-log.txt'])
         self.mediaplayer = self.instance.media_player_new()
 
         self.mode = MusicPlayerDlg.Mode_None
@@ -297,6 +307,7 @@ class MusicPlayerDlg(QDialog):
     def play_song(self):
         self.tm = self.tracks[self.index].tm_sec
         filename = self.tracks[self.index].file
+        #loudness = calculate_single_loudness(filename)
         self.t_time.setText(get_tm(self.tm))
         self.media = self.instance.media_new(filename)
         self._play()
@@ -606,3 +617,25 @@ def eq_slider_style():
     }
     """
     return QSS
+
+
+from typing import Optional
+import soundfile as sf
+import  pyloudnorm as pln
+
+def calculate_single_loudness(file_path: str) -> Optional[float]:
+    """
+    Funzione per la Fase 1: Calcola il loudness di un singolo file.
+    """
+    try:
+        # Carica i dati audio con soundfile
+        data, rate = sf.read(file_path, dtype='float32')
+
+        # Misura il loudness con pyloudnorm
+        meter = pln.Meter(rate, block_size=0.400)  # Block size 400ms per lo standard EBU R128
+        loudness = meter.integrated_loudness(data)
+
+        return loudness
+    except Exception as e:
+        print(f"Impossibile calcolare il loudness per {file_path}: {e}")
+        return None
