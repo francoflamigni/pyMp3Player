@@ -1,5 +1,6 @@
 from PIL import Image, ImageQt
 import io
+import sys
 
 
 def qpixmap_to_bytes(pixmap):
@@ -62,3 +63,6 @@ def resize_image_data(image_data, target_size=(400, 400), quality=85):
     except Exception as e:
         raise Exception(f"Errore nel ridimensionamento dell'immagine: {e}")
 
+def get_windows_flag():
+    CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
+    return CREATE_NO_WINDOW

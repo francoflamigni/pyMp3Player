@@ -5,20 +5,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QListWidget,
                              QListWidgetItem, QGroupBox, QMessageBox, QSplitter, QDialog, QStatusBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QIcon, QFont
 
-# Flag per nascondere la finestra console su Windows
-def set_windows_flag():
-    if sys.platform == 'win32':
-        import platform
-        if platform.release() >= '10':
-            CREATE_NO_WINDOW = 0x08000000
-        else:
-            CREATE_NO_WINDOW = 0x08000000
-    else:
-        CREATE_NO_WINDOW = 0
+from utility import get_windows_flag
 
-CREATE_NO_WINDOW = 0x08000000
 class BluetoothWorker(QThread):
     """Thread separato per operazioni Bluetooth che potrebbero bloccare l'UI"""
     finished = pyqtSignal(object)
@@ -53,7 +42,7 @@ class BluetoothAudioManager:
         result = subprocess.run(
             ["powershell", "-Command", check_script],
             capture_output=True,
-            text=True, creationflags=CREATE_NO_WINDOW
+            text=True, creationflags=get_windows_flag()
         )
 
         if "NOT_INSTALLED" in result.stdout:
@@ -63,7 +52,7 @@ class BluetoothAudioManager:
             """
             subprocess.run(
                 ["powershell", "-Command", install_script],
-                check=True, creationflags=CREATE_NO_WINDOW
+                check=True, creationflags=get_windows_flag()
             )
             return "INSTALLED"
         return "ALREADY_INSTALLED"
@@ -114,7 +103,7 @@ class BluetoothAudioManager:
             ["powershell", "-Command", ps_script],
             capture_output=True,
             text=True,
-            timeout=10, creationflags=CREATE_NO_WINDOW
+            timeout=10, creationflags=get_windows_flag()
         )
 
         if result.returncode == 0 and result.stdout.strip():
@@ -137,7 +126,7 @@ class BluetoothAudioManager:
             ["powershell", "-Command", ps_script],
             capture_output=True,
             text=True,
-            timeout=5, creationflags=CREATE_NO_WINDOW
+            timeout=5, creationflags=get_windows_flag()
         )
 
         if result.returncode == 0 and result.stdout.strip():
@@ -150,6 +139,7 @@ class BluetoothAudioManager:
                 return []
         return []
 
+    '''
     @staticmethod
     def connect_bluetooth_device(device_name):
         """Connette un dispositivo Bluetooth per nome"""
@@ -202,10 +192,11 @@ class BluetoothAudioManager:
             ["powershell", "-Command", ps_script],
             capture_output=True,
             text=True,
-            timeout=15, creationflags=CREATE_NO_WINDOW
+            timeout=15, creationflags=get_windows_flag()
         )
 
         return result.stdout.strip()
+    '''
 
     @staticmethod
     def set_default_audio_device(device_name):
@@ -223,7 +214,7 @@ class BluetoothAudioManager:
             ["powershell", "-Command", ps_script],
             capture_output=True,
             text=True,
-            timeout=5, creationflags=CREATE_NO_WINDOW
+            timeout=5, creationflags=get_windows_flag()
         )
 
         return result.stdout.strip()
@@ -243,7 +234,7 @@ class BluetoothManager(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bluetooth Audio Manager")
-        self.setMinimumSize(650, 300)
+        self.setMinimumSize(750, 300)
 
         # Check modulo PowerShell
         self.check_powershell_module()
@@ -397,9 +388,10 @@ class BluetoothManager(QDialog):
 
         for device in devices:
             status_icon = "🟢" if device['Connected'] else "⚪"
-            status_text = "Connesso" if device['Connected'] else "Accoppiato"
+            status_text = "Connesso" if device['Connected'] else ""
+            address = device['DeviceId'].rsplit('-', 1)[1]
 
-            item = QListWidgetItem(f"{status_icon} {device['Name']} - {status_text}")
+            item = QListWidgetItem(f"{status_icon} {device['Name']} ({address})  {status_text}")
             item.setData(Qt.ItemDataRole.UserRole, device)
             self.bluetooth_list.addItem(item)
 
@@ -437,6 +429,7 @@ class BluetoothManager(QDialog):
             is_default = device.get('Default', False)
             self.btn_set_default.setEnabled(not is_default)
 
+    '''
     def connect_device(self):
         """Connette il dispositivo Bluetooth selezionato"""
         current_item = self.bluetooth_list.currentItem()
@@ -453,6 +446,7 @@ class BluetoothManager(QDialog):
         worker.finished.connect(lambda result: self.on_connect_finished(device_name, result))
         worker.error.connect(self.on_error)
         worker.start()
+    '''
 
     def on_connect_finished(self, device_name, result):
         """Gestisce il risultato della connessione"""
@@ -472,6 +466,7 @@ class BluetoothManager(QDialog):
 
         self.refresh_devices()
 
+    '''
     def disconnect_device(self):
         """Disconnette il dispositivo (apre impostazioni)"""
         current_item = self.bluetooth_list.currentItem()
@@ -490,6 +485,7 @@ class BluetoothManager(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             BluetoothAudioManager.open_bluetooth_settings()
+    '''
 
     def set_default_device(self):
         """Imposta il dispositivo audio come predefinito"""
@@ -524,6 +520,7 @@ class BluetoothManager(QDialog):
         self.statusBar.showMessage("Errore durante l'operazione")
 
 
+'''
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')  # Stile moderno
@@ -536,3 +533,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''

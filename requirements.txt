@@ -16,7 +16,6 @@ lyricsgenius
 musicbrainzngs
 C:/Users/franc/MySoft/pyMyLib/
 python-dateutil
-lameenc
 mutagen
 discid
 pillow

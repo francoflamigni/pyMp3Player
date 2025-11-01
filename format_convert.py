@@ -1,9 +1,7 @@
-import sys
-import os
+import subprocess
 import re
 import soundfile as sf
-import lameenc
-import numpy as np
+
 from pathlib import Path
 from mutagen import File
 from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2, APIC
@@ -15,10 +13,15 @@ from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
                              QSplitter, QScrollArea, QSizePolicy)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QSize
-from PyQt6.QtGui import QFont, QPixmap, QResizeEvent
-from PyQt6.QtCore import QByteArray
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
+from PyQt6.QtGui import QPixmap
+from utility import get_windows_flag
 
+from enum import Enum
+
+class Mode(Enum):
+    TAG_EDIT = 1
+    FORMAT_CONVERT = 2
 
 class AudioFile:
     """Classe per rappresentare un file audio con i suoi metadati."""
@@ -197,44 +200,26 @@ class ConversionWorker(QThread):
     def _convert_file(self, audio_file):
         """Converte un singolo file."""
         try:
-            # Leggi audio
-            data, samplerate = sf.read(str(audio_file.file_path))
-
-            # Normalizza
-            if data.dtype != 'float32':
-                data = data.astype('float32')
-
-            if data.max() > 1.0 or data.min() < -1.0:
-                data = data / np.max(np.abs(data))
-
-            data_int16 = (data * 32767).astype('int16')
-
-            channels = 1 if data_int16.ndim == 1 else data_int16.shape[1]
-
-            # Encoder
-            encoder = lameenc.Encoder(
-                rate=samplerate,
-                channels=channels,
-                bitrate=int(self.bitrate[:-1]),
-                quality=2
-            )
-
-            # Converti
-            mp3_data = encoder.encode(data_int16.tobytes())
-            mp3_data += encoder.flush()
-
-            # Salva MP3
             output_file = self.output_folder / f"{audio_file.file_path.stem}.mp3"
-            with open(output_file, 'wb') as f:
-                f.write(mp3_data)
+
+            # Converti con ffmpeg
+            cmd = [
+                'ffmpeg',
+                '-i', str(audio_file.file_path),
+                '-codec:a', 'libmp3lame',
+                '-b:a', self.bitrate,  # es. "320k"
+                '-q:a', '0',  # qualità massima VBR (se usi VBR)
+                '-y',  # sovrascrivi se esiste
+                str(output_file)
+            ]
+
+            subprocess.run(cmd, check=True, capture_output=True, text=True, creationflags=get_windows_flag())
 
             # Aggiungi tag
             self._add_tags(audio_file, output_file)
 
             return True
-
         except Exception as e:
-            print(f"Errore conversione: {e}")
             return False
 
     def _add_tags(self, audio_file, mp3_file):
@@ -298,6 +283,8 @@ class AudioConverter(QDialog):
         super().__init__()
         self.audio_files = []
         self.current_folder = folder
+        self.populating = False
+        self.mode = Mode.TAG_EDIT
         self.init_ui()
         if folder:
             self.select_folder(folder)
@@ -305,59 +292,88 @@ class AudioConverter(QDialog):
     def init_ui(self):
         """Inizializza l'interfaccia utente."""
         self.setWindowTitle("Audio Tagger & Converter")
-        self.setGeometry(100, 100, 1400, 800)
+        self.setGeometry(100, 100, 1500, 800)
 
-        # Layout principale con splitter
-        #main_layout = QHBoxLayout(self)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Sezione selezione cartella
+        folder_group = self.setup_folder()
+
+        # Sezione informazioni globali
+        global_group = self.setup_global()
+
+        # Gruppo copertina
+        cover_group = self.setup_cover()
 
         # Pannello sinistro - controlli principali
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
-
-        # Sezione selezione cartella
-        folder_group = QGroupBox("Selezione Cartella")
-        folder_layout = QHBoxLayout(folder_group)
-
-        self.folder_label = QLabel("Nessuna cartella selezionata")
-        self.folder_button = QPushButton("Scegli Cartella")
-        self.folder_button.clicked.connect(self.select_folder)
-
-        folder_layout.addWidget(self.folder_label)
-        folder_layout.addWidget(self.folder_button)
-
-        # Sezione informazioni globali
-        global_group = QGroupBox("Informazioni Globali Album")
-        global_layout = QGridLayout(global_group)
-
-        global_layout.addWidget(QLabel("Artista:"), 0, 0)
-        self.global_artist = QLineEdit()
-        global_layout.addWidget(self.global_artist, 0, 1)
-
-        global_layout.addWidget(QLabel("Album:"), 0, 2)
-        self.global_album = QLineEdit()
-        global_layout.addWidget(self.global_album, 0, 3)
-
-        global_layout.addWidget(QLabel("Anno:"), 1, 0)
-        self.global_year = QLineEdit()
-        global_layout.addWidget(self.global_year, 1, 1)
-
-        global_layout.addWidget(QLabel("Genere:"), 1, 2)
-        self.global_genre = QLineEdit()
-        global_layout.addWidget(self.global_genre, 1, 3)
-
-        # Bottoni per applicare info globali
-        apply_button = QPushButton("Applica Info Globali")
-        apply_button.clicked.connect(self.apply_global_info)
-        global_layout.addWidget(apply_button, 2, 0, 1, 4)
+        left_layout.addWidget(global_group)
+        left_layout.addWidget(cover_group)
 
         # Tabella file
         self.table = QTableWidget()
-        self.setup_table()
+        #self.table = self.setup_table()
+
+        # Layout principale con splitter
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(left_widget)
+        splitter.addWidget(self.table)
+        splitter.setSizes([200, 1100])  # Dimensioni relative
+
 
         # Sezione conversione
+        conversion_group = self.setup_conversion()
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+
+        # Status label
+        self.status_label = QLabel("Pronto")
+
+        # Aggiungi tutto al layout sinistro
+        #left_layout.addWidget(folder_group)
+        #left_layout.addWidget(global_group)
+        #left_layout.addWidget(self.table, 1)  # Espandi la tabella
+        #left_layout.addWidget(conversion_group)
+        #left_layout.addWidget(self.progress_bar)
+        #left_layout.addWidget(self.status_label)
+
+        # Pannello destro - visualizzazione copertina
+        #right_widget = QWidget()
+        #right_layout = QVBoxLayout(right_widget)
+
+
+        #right_layout.addWidget(cover_group)
+        #right_layout.addStretch()
+
+        # Aggiungi pannelli al splitter
+        #splitter.addWidget(left_widget)
+        #splitter.addWidget(right_widget)
+
+        v = QVBoxLayout(self)
+        v.addWidget(folder_group)
+        v.addWidget(splitter, stretch=1)
+
+        #v.addWidget(self.table, 1)
+        v.addWidget(conversion_group)
+        v.addStretch()
+        v.addWidget(self.progress_bar)
+        v.addWidget(self.status_label)
+        #main_layout.addWidget(splitter)
+
+        # Variabili
+        self.output_folder = ""
+        self.current_cover_data = None
+        self.table.installEventFilter(self)
+
+        # Connetti selezione tabella a visualizzazione copertina
+        self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.hide_conversion()
+
+    def setup_conversion(self):
         conversion_group = QGroupBox("Conversione")
         conversion_layout = QHBoxLayout(conversion_group)
+        conversion_layout.setContentsMargins(5, 5, 5, 5)
 
         conversion_layout.addWidget(QLabel("Bitrate:"))
         self.bitrate_combo = QComboBox()
@@ -376,39 +392,84 @@ class AudioConverter(QDialog):
         self.convert_button.setEnabled(False)
         conversion_layout.addWidget(self.convert_button)
 
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
+        conversion_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
+            QSizePolicy.Policy.Maximum  # verticale - altezza minima
+        )
+        return conversion_group
 
-        # Status label
-        self.status_label = QLabel("Pronto")
+    def hide_conversion(self):
+        hide = self.mode == Mode.FORMAT_CONVERT
+        """Mostra o nasconde i controlli di conversione senza usare nuovi membri della classe"""
+        # Trova il QGroupBox per nome
+        for group in self.findChildren(QGroupBox, None):
+            if group and group.title() == "Conversione":
+                group.setVisible(hide)
+                # Nascondi/mostra tutti i widget figli
+                for widget in group.findChildren(QWidget):
+                    widget.setVisible(hide)
+                break
 
-        # Aggiungi tutto al layout sinistro
-        left_layout.addWidget(folder_group)
-        left_layout.addWidget(global_group)
-        #left_layout.addWidget(self.table, 1)  # Espandi la tabella
-        #left_layout.addWidget(conversion_group)
-        #left_layout.addWidget(self.progress_bar)
-        #left_layout.addWidget(self.status_label)
+    def setup_folder(self):
+        folder_group = QGroupBox("Selezione Cartella")
+        folder_layout = QHBoxLayout(folder_group)
+        folder_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Pannello destro - visualizzazione copertina
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
+        self.folder_label = QLabel("Nessuna cartella selezionata")
+        self.folder_button = QPushButton("Scegli Cartella")
+        self.folder_button.clicked.connect(self.select_folder)
 
-        # Gruppo copertina
+        self.save_button = QPushButton("Salva")
+        self.save_button.clicked.connect(self.save)
+
+        folder_layout.addWidget(self.folder_label)
+        folder_layout.addWidget(self.folder_button)
+        folder_layout.addWidget(self.save_button)
+
+        folder_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
+            QSizePolicy.Policy.Maximum  # verticale - altezza minima
+        )
+        return folder_group
+
+    def setup_global(self):
+        global_group = QGroupBox("Informazioni Globali Album")
+        global_layout = QGridLayout(global_group)
+
+        global_layout.addWidget(QLabel("Artista:"), 0, 0)
+        self.global_artist = QLineEdit()
+        global_layout.addWidget(self.global_artist, 0, 1)
+
+        global_layout.addWidget(QLabel("Album:"), 1, 0)
+        self.global_album = QLineEdit()
+        global_layout.addWidget(self.global_album, 1, 1)
+
+        global_layout.addWidget(QLabel("Anno:"), 2, 0)
+        self.global_year = QLineEdit()
+        global_layout.addWidget(self.global_year, 2, 1)
+
+        global_layout.addWidget(QLabel("Genere:"), 3, 0)
+        self.global_genre = QLineEdit()
+        global_layout.addWidget(self.global_genre, 3, 1)
+
+        # Bottoni per applicare info globali
+        apply_button = QPushButton("Applica Info Globali")
+        apply_button.clicked.connect(self.apply_global_info)
+        global_layout.addWidget(apply_button, 4, 0, 1, 4)
+        return global_group
+
+    def setup_cover(self):
         cover_group = QGroupBox("Copertina Album")
         cover_layout = QVBoxLayout(cover_group)
 
         # Scroll area per la copertina
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumWidth(300)
-        scroll_area.setMaximumWidth(300)
+        scroll_area.setMinimumWidth(250)
+        scroll_area.setMaximumWidth(250)
 
-        self.cover_label = QLabel("Nessuna copertina") #FixedSquareQLabel() #QLabel("Nessuna copertina")
+        self.cover_label = QLabel("Nessuna copertina")
         self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         #self.cover_label.setStyleSheet("border: 2px dashed #ccc; padding: 20px;")
-        self.cover_label.setFixedSize(250, 250)
+        self.cover_label.setFixedSize(200, 200)
         #self.cover_label.setMaximumSize(250, 250)
 
         scroll_area.setWidget(self.cover_label)
@@ -418,60 +479,41 @@ class AudioConverter(QDialog):
         # Bottoni per gestire copertina
         cover_buttons_layout = QHBoxLayout()
 
-        self.load_cover_file_button = QPushButton("Copertina da file")
+        self.load_cover_file_button = QPushButton("Da file")
         self.load_cover_file_button.clicked.connect(self.load_cover_from_file)
         cover_buttons_layout.addWidget(self.load_cover_file_button)
 
-        self.load_cover_clip_button = QPushButton("Copertina da clipboard")
+        self.load_cover_clip_button = QPushButton("Da clipboard")
         self.load_cover_clip_button.clicked.connect(self.load_cover_from_clipboard)
         cover_buttons_layout.addWidget(self.load_cover_clip_button)
 
-        self.remove_cover_button = QPushButton("Rimuovi Copertina")
+        self.remove_cover_button = QPushButton("Rimuovi")
         self.remove_cover_button.clicked.connect(self.remove_cover)
         self.remove_cover_button.setEnabled(False)
         cover_buttons_layout.addWidget(self.remove_cover_button)
 
         cover_layout.addLayout(cover_buttons_layout)
-        right_layout.addWidget(cover_group)
-        right_layout.addStretch()
 
-        # Aggiungi pannelli al splitter
-        splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setSizes([1000, 400])  # Dimensioni relative
-
-        v = QVBoxLayout(self)
-        v.addWidget(splitter)
-        v.addWidget(self.table, 1)
-        v.addWidget(conversion_group)
-        v.addWidget(self.progress_bar)
-        v.addWidget(self.status_label)
-        #main_layout.addWidget(splitter)
-
-        # Variabili
-        self.output_folder = ""
-        self.current_cover_data = None
-        self.table.installEventFilter(self)
-
-        # Connetti selezione tabella a visualizzazione copertina
-        self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        cover_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
+                                   QSizePolicy.Policy.Maximum  # verticale - altezza minima
+                                   )
+        return cover_group
 
     def setup_table(self):
+        self.table.clear()
         """Configura la tabella dei file."""
-        headers = ["File", "Titolo", "Artista", "Album", "Anno", "Genere", "Traccia", "Durata", "Formato", "Tipo"]
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
+        self.headers = []
+        if self.mode == Mode.FORMAT_CONVERT:
+            self.headers = ["Sel"]
+        self.headers.extend(["File", "Titolo", "Artista", "Album", "Anno", "Genere", "Traccia", "Durata", "Formato"])
+        self.table.setColumnCount(len(self.headers))
+        self.table.setHorizontalHeaderLabels(self.headers)
 
         # Configura header
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # File
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Titolo
-        #header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Artista
-        #header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Album
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Anno
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Traccia
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Durata
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Tipo
+        tab_header = self.table.horizontalHeader()
+        for i, header in enumerate(self.headers):
+            if header != "Artista" and header != "Album":
+                tab_header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)  # File
 
         # Abilita editing
         self.table.itemChanged.connect(self.on_item_changed)
@@ -487,6 +529,11 @@ class AudioConverter(QDialog):
             self.folder_label.setText(folder)
             self.load_audio_files()
 
+    def save(self):
+        self.output_folder = self.current_folder
+        self.start_conversion()
+        a = 0
+
     def load_audio_files(self):
         """Carica file audio dalla cartella selezionata."""
         if not self.current_folder:
@@ -501,52 +548,94 @@ class AudioConverter(QDialog):
         folder_path = Path(self.current_folder)
         for ext in extensions:
             for file_path in folder_path.glob(f"*{ext}"):
-                self.audio_files.append(AudioFile(file_path))
+                audio = AudioFile(file_path)
+                if audio.format_info != '':
+                    self.audio_files.append(audio)
+
+        count = 0
+        for audio_file in self.audio_files:
+            if audio_file.is_mp3:
+                count += 1
+        if count == len(self.audio_files):
+            self.mode = Mode.TAG_EDIT
+            self.save_button.setVisible(True)
+
+        else:
+            self.mode = Mode.FORMAT_CONVERT
+            self.save_button.setVisible(False)
+
+        self.hide_conversion()
 
         # Ordina per nome file
         self.audio_files.sort(key=lambda x: x.file_path.name)
 
+        self.setup_table()
         self.populate_table()
         self.status_label.setText(f"Caricati {len(self.audio_files)} file audio")
 
+    def _checkItem(self, row, checked=False):
+        check_item = QTableWidgetItem()
+
+        # 2. Imposta i flag: rende la cella selezionabile e checkable
+        check_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable)
+
+        # 3. Imposta lo stato iniziale (Checked o Unchecked)
+        if checked:
+            check_item.setCheckState(Qt.CheckState.Checked)
+        else:
+            check_item.setCheckState(Qt.CheckState.Unchecked)
+
+        # Inserisce l'oggetto checkbox nella prima colonna
+        self.table.setItem(row, 0, check_item)
+
     def populate_table(self):
+        self.populating = True
         """Popola la tabella con i file audio."""
         self.table.setRowCount(len(self.audio_files))
 
+        off = 0
+        if self.mode == Mode.FORMAT_CONVERT:
+            off = 1
+
         for row, audio_file in enumerate(self.audio_files):
+            if self.mode == Mode.FORMAT_CONVERT:
+                self._checkItem(row)
             # File (non editabile)
             item = QTableWidgetItem(audio_file.file_path.name)
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 0, item)
+            self.table.setItem(row, off, item)
 
             # Titolo (usa originale se presente, altrimenti generato)
             title = audio_file.original_title or audio_file.generated_title
-            self.table.setItem(row, 1, QTableWidgetItem(title))
+            self.table.setItem(row, off + 1, QTableWidgetItem(title))
 
             # Altri campi editabili
-            self.table.setItem(row, 2, QTableWidgetItem(audio_file.artist))
-            self.table.setItem(row, 3, QTableWidgetItem(audio_file.album))
-            self.table.setItem(row, 4, QTableWidgetItem(audio_file.year))
-            self.table.setItem(row, 5, QTableWidgetItem(audio_file.genre))
+            self.table.setItem(row, off + 2, QTableWidgetItem(audio_file.artist))
+            self.table.setItem(row, off + 3, QTableWidgetItem(audio_file.album))
+            self.table.setItem(row, off + 4, QTableWidgetItem(audio_file.year))
+            self.table.setItem(row, off + 5, QTableWidgetItem(audio_file.genre))
 
             track = audio_file.track or audio_file.generated_track
-            self.table.setItem(row, 6, QTableWidgetItem(track))
+            self.table.setItem(row, off + 6, QTableWidgetItem(track))
 
             # Durata e formato (non editabili)
             duration_item = QTableWidgetItem(audio_file.duration)
             duration_item.setFlags(duration_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 7, duration_item)
+            self.table.setItem(row, off + 7, duration_item)
 
             format_item = QTableWidgetItem(audio_file.format_info)
             format_item.setFlags(format_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 8, format_item)
+            self.table.setItem(row, off + 8, format_item)
 
             # Tipo (MP3 o da convertire)
             tipo_item = QTableWidgetItem("MP3 (solo tag)" if audio_file.is_mp3 else "Da convertire")
             tipo_item.setFlags(tipo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 9, tipo_item)
+           # self.table.setItem(row, 10, tipo_item)
 
-        self.display_cover(self.audio_files[0].album_art)
+        if self.audio_files:
+            self.display_cover(self.audio_files[0].album_art)
+
+        self.populating = False
 
     def on_selection_changed(self):
         """Gestisce la selezione nella tabella per mostrare la copertina."""
@@ -696,26 +785,30 @@ class AudioConverter(QDialog):
         return super().eventFilter(obj, event)
 
     def on_item_changed(self, item):
+        if self.populating:
+            return
         """Gestisce cambiamenti nella tabella."""
         row = item.row()
         col = item.column()
+
+        off = 0 if self.mode == Mode.TAG_EDIT else 1
 
         if row < len(self.audio_files):
             audio_file = self.audio_files[row]
             value = item.text()
 
             # Mappa colonne agli attributi
-            if col == 1:  # Titolo
+            if col == off + 1:  # Titolo
                 audio_file.original_title = value
-            elif col == 2:  # Artista
+            elif col == off + 2 :  # Artista
                 audio_file.artist = value
-            elif col == 3:  # Album
+            elif col == off + 3:  # Album
                 audio_file.album = value
-            elif col == 4:  # Anno
+            elif col == off + 4:  # Anno
                 audio_file.year = value
-            elif col == 5:  # Genere
+            elif col == off + 5:  # Genere
                 audio_file.genre = value
-            elif col == 6:  # Traccia
+            elif col == off + 6:  # Traccia
                 audio_file.track = value
 
     def apply_global_info(self):
@@ -725,22 +818,24 @@ class AudioConverter(QDialog):
         year = self.global_year.text().strip()
         genre = self.global_genre.text().strip()
 
-        for row, audio_file in enumerate(self.audio_files):
-            if artist and not audio_file.artist:
-                audio_file.artist = artist
-                self.table.setItem(row, 2, QTableWidgetItem(artist))
+        off = 0 if self.mode == Mode.TAG_EDIT else 1
 
-            if album and not audio_file.album:
+        for row, audio_file in enumerate(self.audio_files):
+            if artist and not audio_file.artist or artist and artist != audio_file.artist:
+                audio_file.artist = artist
+                self.table.setItem(row, off + 2, QTableWidgetItem(artist))
+
+            if album and not audio_file.album or album and album != audio_file.album:
                 audio_file.album = album
-                self.table.setItem(row, 3, QTableWidgetItem(album))
+                self.table.setItem(row, off + 3, QTableWidgetItem(album))
 
             if year and not audio_file.year:
                 audio_file.year = year
-                self.table.setItem(row, 4, QTableWidgetItem(year))
+                self.table.setItem(row, off + 4, QTableWidgetItem(year))
 
             if genre and not audio_file.genre:
                 audio_file.genre = genre
-                self.table.setItem(row, 5, QTableWidgetItem(genre))
+                self.table.setItem(row, off + 5, QTableWidgetItem(genre))
 
         self.status_label.setText("Informazioni globali applicate")
 
@@ -758,7 +853,16 @@ class AudioConverter(QDialog):
             QMessageBox.warning(self, "Errore", "Seleziona una cartella di output")
             return
 
-        if not self.audio_files:
+        self.audio_toconvert = []
+        if self.mode == Mode.TAG_EDIT:
+            self.audio_toconvert = self.audio_files
+        else:
+            for i in range (self.table.rowCount()):
+                ck = self.table.item(i, 0).checkState()
+                if self.table.item(i, 0).checkState() == Qt.CheckState.Checked:
+                    self.audio_toconvert.append(self.audio_files[i])
+
+        if not self.audio_toconvert:
             QMessageBox.warning(self, "Errore", "Nessun file da elaborare")
             return
 
@@ -770,7 +874,7 @@ class AudioConverter(QDialog):
 
         # Avvia worker thread
         self.worker = ConversionWorker(
-            self.audio_files,
+            self.audio_toconvert,
             self.output_folder,
             self.bitrate_combo.currentText()
         )
@@ -787,3 +891,4 @@ class AudioConverter(QDialog):
     def on_conversion_finished(self):
         """Callback per conversione completata."""
         self.progress_bar.setVisible(False)
+        self.status_label.setText("Elaborazione terminata")
