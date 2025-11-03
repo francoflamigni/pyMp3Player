@@ -30,6 +30,7 @@ class infoDlg(QDialog):
         self.txt = txt
         center_in_parent(self, parent, 300, 100)
         self.setWindowTitle('Shazam')
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
 
         v = QVBoxLayout(self)
         self.txt_box = myPlainText(self)
