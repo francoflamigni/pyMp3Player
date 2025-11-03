@@ -1,5 +1,6 @@
 import musicbrainzngs
 
+from pyMyLib.utils import get_resource_file
 from difflib import SequenceMatcher
 import time
 from datetime import datetime
@@ -416,7 +417,8 @@ class CDinfo:
 
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
 from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics
+from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon
+
 
 class Worker(QThread):
     finished = pyqtSignal(list)  # Signal to notify when the task is done
@@ -484,7 +486,8 @@ class AlbumInfoDlg(QDialog):
 
     def initUI(self):
 
-        self.setWindowTitle('info')
+        self.setWindowTitle('Album info')
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'album_info.png')))
         self.worker = Worker(self.run)  # Create the worker thread
         self.worker.finished.connect(self.update)
 

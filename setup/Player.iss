@@ -1,9 +1,9 @@
-#define MyAppName "Player"
+#define MyAppName "Euterpe"
 #define MyReleaseVersion "1"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.5"
 #define MyAppPublisher "Mysoft"
 #define MyAppURL ""
-#define MyAppExeName "Player.exe"
+#define MyAppExeName "Euterpe.exe"
 
 #define MyBaseDir "C:\Users\franc\MySoft\PyMp3Player"
 

@@ -309,7 +309,8 @@ class MusicIndexDlg(QDialog):
         if self.shaz:
             return
         self.shaz = True
-        ms = myShazam(self._find_song, time=time)
+        ms = myShazam(time=time)
+        ms.found_song.connect(self._find_song)
         waitCursor(True)
         ms.guess()
 

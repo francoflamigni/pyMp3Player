@@ -1,12 +1,14 @@
 import subprocess
 import json
-import sys
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLabel, QListWidget,
+
+
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
                              QListWidgetItem, QGroupBox, QMessageBox, QSplitter, QDialog, QStatusBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 
 from utility import get_windows_flag
+from pyMyLib.utils import iniConf, get_resource_file
 
 class BluetoothWorker(QThread):
     """Thread separato per operazioni Bluetooth che potrebbero bloccare l'UI"""
@@ -234,6 +236,7 @@ class BluetoothManager(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bluetooth Audio Manager")
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'Bluetooth.png')))
         self.setMinimumSize(750, 300)
 
         # Check modulo PowerShell

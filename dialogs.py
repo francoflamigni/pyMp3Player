@@ -1,7 +1,7 @@
 import os
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle, QCheckBox,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu)
@@ -295,6 +295,29 @@ class myPlainText(QPlainTextEdit):
         self.verticalScrollBar().valueChanged.connect(self.handle_value_changed)
         self.cur = QTextCursor(self.document())
 
+    def adjustWidthToContent(self, txt):
+        # Ottieni il font del widget
+        font = self.font()
+        fm = QFontMetrics(font)
+
+        # Trova la riga più lunga
+        #text = self.toPlainText()
+        lines = txt.split('\n')
+
+        max_width = 0
+        for line in lines:
+            line_width = fm.horizontalAdvance(line)  # PyQt5 >= 5.11, usa width() per versioni precedenti
+            max_width = max(max_width, line_width)
+
+        # Aggiungi un margine extra (padding, scrollbar, ecc.)
+        # Tipicamente: margini interni + scrollbar verticale + un po' di spazio extra
+        extra_space = 40  # Puoi regolare questo valore
+
+        optimal_width = max_width + extra_space
+
+        # Imposta la larghezza del widget
+        self.setFixedWidth(optimal_width)
+
     def setSlave(self, slave):
         self.slave = slave
         self.slave.setStyleSheet("""
@@ -308,6 +331,7 @@ class myPlainText(QPlainTextEdit):
     def setText(self, txt):
         self.cur.movePosition(QTextCursor.MoveOperation.End)
         self.cur.insertText(txt)
+        self.adjustWidthToContent(txt)
 
     def handle_value_changed(self, position):
         if self.slave is None:
@@ -331,12 +355,16 @@ class lyricsDlg(QDialog):
         self.txt = txt.lstrip()
         center_in_parent(self, parent, 600, 500)
         self.setWindowTitle(track)
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'lyric.png')))
 
         v = QVBoxLayout(self)
         self.h = QHBoxLayout()
+        self.h.setContentsMargins(3, 3, 3, 3)
+        self.h.setSpacing(5)
         self.txt_box = myPlainText(self)
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
+        self.tr_box = None
 
         self.txt_box.setText(self.txt)
         self.h.addWidget(self.txt_box)
@@ -348,19 +376,29 @@ class lyricsDlg(QDialog):
             self.bt.clicked.connect(self.traduci)
             v.addWidget(self.bt)
 
+        self.adjustWindowSize()
+
     def traduci(self):
-        tr_box = myPlainText(self)
-        self.txt_box.setSlave(tr_box)
-        self.h.addWidget(tr_box)
+        self.tr_box = myPlainText(self)
+        self.txt_box.setSlave(self.tr_box)
+        self.h.addWidget(self.tr_box)
         txt1 = self.tr.translate(self.txt, 'it')
         self.bt.hide()
 
         self.txt_box.selectionChanged.connect(self.sync)
 
-        tr_box.setText(txt1.text)
+        self.tr_box.setText(txt1.text)
         sz = self.size()
         sz.setWidth(sz.width() * 2)
         self.resize(sz)
+
+    def adjustWindowSize(self):
+        sz = self.size()
+        width = self.txt_box.width()
+
+        sz.setWidth(width +5)
+        self.resize(sz)
+
 
     def sync(self):
         line_number = self.txt_box.textCursor().blockNumber()

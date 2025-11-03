@@ -4,12 +4,15 @@ import re
 from pathlib import Path
 from typing import List, Dict
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar, QTableWidgetItem,
     QGroupBox, QCheckBox, QFileDialog, QDialog, QMessageBox, QTableWidget, QHeaderView, QSizePolicy
 )
 from PyQt6.QtCore import QThread, pyqtSignal
 from music_brainz import CDinfo
+
+from pyMyLib.utils import get_resource_file
 
 class FFmpegWorker(QThread):
     """Worker thread per le operazioni ffmpeg"""
@@ -106,7 +109,7 @@ class FFmpegWorker(QThread):
                 for line in iter(process.stdout.readline, ''):
                     t = self.converti_durata_in_secondi(line.strip())
                     if t:
-                        pc = 100 * t / durata
+                        pc = int(100 * t / durata)
                         self.progress_track.emit(pc)
 
                 stdout, stderr = process.communicate()
@@ -140,6 +143,7 @@ class CDRipperMainWindow(QDialog):
         self.tracks_data = []
 
         self.setWindowTitle("CD Ripper con FFmpeg")
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_ripper.png')))
         self.setGeometry(100, 100, 1000, 700)
 
         self.init_ui()

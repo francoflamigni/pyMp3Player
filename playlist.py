@@ -1,10 +1,12 @@
 import random
-from typing import List, Dict, Set, Tuple
+from typing import Set, Tuple
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QIntValidator
+from PyQt6.QtGui import QIntValidator, QIcon
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QAbstractItemView, QTableWidgetItem, QPushButton, \
     QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout
+
+from pyMyLib.utils import get_resource_file
 
 from mp3_tag import Music
 
@@ -73,37 +75,10 @@ class GeneratorePesato:
         # Fallback (non dovrebbe mai accadere)
         return self.attori[-1]['nome']
 
-def get_casual(item):
-    n = len(item) - 1
-    casuale = int(random.random() * n)
-    return item[casuale]
 
 def Create_playlist(index: Music, preference, duration):
     gen = GeneratorePesato(index)
     play = gen.plst(preference, duration)
-    '''
-    gen = GeneratorePesato(preference)
-    
-
-    goon = True
-    tot = 0
-    play = []
-    while goon:
-        artist = gen.seleziona()
-        if artist in index.artists.name.keys():
-            albums = index.find_albums(artist)
-            album = get_casual(albums)
-            tracks = index.find_tracks(album.title, artist)
-            track = get_casual(tracks)
-            dur = index.tracks.name[track + '@' + album.title].tm_sec
-            tot = tot + dur
-            if tot > duration:
-                goon = False
-            else:
-                play.append((artist, album.title, track))
-            a =0
-    '''
-
     return play
 
 
@@ -131,12 +106,6 @@ class DurationWidget(QGroupBox):
 
         # Campo minuti
         self.minutes_label = QLabel("Minuti:")
-        '''
-        self.minutes_edit = QLineEdit()
-        self.minutes_edit.setMaximumWidth(50)
-        self.minutes_edit.setText("0")
-        self.minutes_edit.setValidator(QIntValidator(0, 59))
-        '''
 
         # SpinBox per incrementare/decrementare i minuti
         self.minutes_spin = QSpinBox()
@@ -282,6 +251,7 @@ class PlayListDlg(QDialog):
         super().__init__(parent)
         self.index = index
         self.setWindowTitle("Crea Playlist")
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
         self.setMinimumSize(300, 500)
         self.setup_ui()
 

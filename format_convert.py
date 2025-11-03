@@ -3,10 +3,12 @@ import re
 import soundfile as sf
 
 from pathlib import Path
+
 from mutagen import File
 from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2, APIC
 from mutagen.mp3 import MP3
 import shutil
+from pyMyLib.utils import get_resource_file
 
 from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
@@ -14,7 +16,7 @@ from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
                              QSplitter, QScrollArea, QSizePolicy)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QIcon
 from utility import get_windows_flag
 
 from enum import Enum
@@ -293,6 +295,7 @@ class AudioConverter(QDialog):
         """Inizializza l'interfaccia utente."""
         self.setWindowTitle("Audio Tagger & Converter")
         self.setGeometry(100, 100, 1500, 800)
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'tag-edit.png')))
 
         # Sezione selezione cartella
         folder_group = self.setup_folder()

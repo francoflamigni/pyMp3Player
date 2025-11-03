@@ -7,7 +7,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QCursor
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
-from pyMyLib.qtUtils import informMessage
+from pyMyLib.qtUtils import informMessage, AddMenuItem
 from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
@@ -18,7 +18,7 @@ from bluetooth import BluetoothManager
 https://streamurl.link/ per trovare stazioni radio
 '''
 
-INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.1.4\n01 Luglio 2025'
+INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.1.5\n02 Novembre 2025'
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
@@ -92,18 +92,6 @@ class Player(FramelessDialog): #QMainWindow):
 
         tool.addWidget(self.tb)
 
-        '''
-        bt = QPushButton(self)
-        bt.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/bluetooth.png')))
-        bt.setMaximumWidth(30)
-        bt.clicked.connect(self.bluetooth)
-        tool.addWidget(bt)
-
-        bi = QPushButton('?', self)
-        bi.setMaximumWidth(30)
-        bi.clicked.connect(self.info)
-        tool.addWidget(bi)
-        '''
         return tool
 
     def tab_changed(self, index):
@@ -128,17 +116,24 @@ class Player(FramelessDialog): #QMainWindow):
     def options(self):
         p = QCursor.pos()
         contextMenu = QMenu(self)
-
-        contextMenu.addAction("Dispositivi Bluetooth").triggered.connect(self.bluetooth)
-        contextMenu.addAction("Converti da altri formati").triggered.connect(self.convert)
-        contextMenu.addAction("CD ripper").triggered.connect(self.cd_ripper)
-        contextMenu.addAction("Crea PlayList").triggered.connect(self.create_playlist)
-        contextMenu.addAction("Informazioni").triggered.connect(self.info)
+        actions = [
+            AddMenuItem("Dispositivi Bluetooth", fun=self.bluetooth,
+                            ico=get_resource_file(__file__, 'icone', 'Bluetooth.png')),
+            AddMenuItem("Converti da altri formati", fun=self.convert,
+                            ico=get_resource_file(__file__, 'icone', 'tag-edit.png')),
+            AddMenuItem("CD ripper", fun=self.cd_ripper,
+                            ico=get_resource_file(__file__, 'icone', 'cd_ripper.png')),
+            AddMenuItem("Crea PlayList", fun=self.create_playlist),
+            AddMenuItem("Sincronizza", fun=self.sync_folder),
+            AddMenuItem("Informazioni", fun=self.info)
+        ]
+        contextMenu.addActions(actions)
         contextMenu.exec(p)
 
     def get_track_pix(self, album, artist, cover):
         self.dlg.get_track_pix(album, artist, cover)
 
+    ''' Chiama Shazam per avere il titolo'''
     def songTitle(self):
         wd = self.tab.widget(0)
         wd.find_song()
@@ -157,7 +152,6 @@ class Player(FramelessDialog): #QMainWindow):
         bt = BluetoothManager()
         bt.exec()
 
-
     def info(self):
         informMessage(INFO_MES, 'Εὐτέρπη', 15, True, get_resource_file(__file__, 'icone', 'pentagram.png'))
 
@@ -170,6 +164,11 @@ class Player(FramelessDialog): #QMainWindow):
         from cd_ripper import CDRipperMainWindow
         cr = CDRipperMainWindow()
         cr.exec()
+
+    def sync_folder(self):
+        from sync_folders import MusicSyncGUI
+        msg = MusicSyncGUI(self, self.dlg.last_folder)
+        msg.exec()
 
     def create_playlist(self):
         index = self.dlg.music
