@@ -296,7 +296,8 @@ class CDRipperMainWindow(QDialog):
                 except:
                     # Fallback: aggiungi tutti i drive trovati
                     self.cd_drive_combo.addItem(letter)
-        self.detect_tracks()
+        #self.detect_tracks()
+        self.detect_tracks_byartist()
 
     def browse_output_dir(self):
         """Seleziona directory di output"""
@@ -312,6 +313,14 @@ class CDRipperMainWindow(QDialog):
         cdi = CDinfo(drive)
         df = cdi.detects_tracs()
         self.update_tracks_table(df)
+
+    def detect_tracks_byartist(self):
+        artist = self.artist_edit.text()
+        album = self.album_edit.text()
+        if artist and album:
+            cdi = CDinfo()
+            df = cdi.search_musicbrainz_by_metadata(artist, album)
+
 
     def update_tracks_table(self, tracks_data=None):
         """Aggiorna la tabella delle tracce"""

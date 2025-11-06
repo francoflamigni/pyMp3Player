@@ -10,7 +10,7 @@ import scrobbler
 from pyradios import RadioBrowser
 from googletrans import Translator
 
-from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage
+from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
 from pyMyLib.utils import iniConf, get_resource_file
 
 from threading import Thread
@@ -134,9 +134,11 @@ class RadioDlg(QDialog):
     def search(self):
         src = self.ed.text()
         if len(src) > 0:
+            waitCursor(True)
             rb = RadioBrowser()
             a = rb.search(name=src, name_exact=False, hidebroken=True)
             self.fill_table(a)
+            waitCursor()
 
     def load_icons(self, list):
         row = 0
@@ -456,6 +458,7 @@ class mySearch(QDialog):
         if len(txt) == 0:
             return
         mes = []
+        waitCursor(True)
 
         a1 = [k for k in self.music.artists.name.keys() if k is not None and txt in k.lower()]
         kk = 1
@@ -477,6 +480,7 @@ class mySearch(QDialog):
 
         self.list.clear()
         self.list.addItems(mes)
+        waitCursor()
 
     def selection(self):
         s = self.list.selectedItems()

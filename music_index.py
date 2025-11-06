@@ -81,6 +81,7 @@ class MusicIndexDlg(QDialog):
         h0 = QHBoxLayout()
         h0.addWidget(self.b1)
         h0.addWidget(self.prog)
+        h0.addSpacing(10)
         h0.addWidget(self.te)
         h0.addWidget(b2)
 
@@ -265,28 +266,28 @@ class MusicIndexDlg(QDialog):
     ''' Cerca canzone artista album'''
     def search(self):
         txt = self.te.text()
+
         sel = mySearch.run(self.wparent, self.music, txt)
-        if sel is None:
-            return
-        if 'artista' in sel:
-            a = sel.split(':')[1].strip()
-            self._select_artist(a)
-        elif 'album' in sel:
-            a1 = sel.split(':')[1].strip()
-            a2 = a1.split(';')
-            artist = a2[0].strip()
-            self._select_artist(artist)
-            album = a2[1].strip()
-            self._select_album(album)
-        elif 'traccia' in sel:
-            a1 = sel.split(':')[1].strip()
-            a2 = a1.split(';')
-            artist = a2[0].strip()
-            self._select_artist(artist)
-            album = a2[1].strip()
-            self._select_album(album)
-            track = a2[2].strip()
-            self._select_track(track)
+        if sel:
+            if 'artista' in sel:
+                a = sel.split(':')[1].strip()
+                self._select_artist(a)
+            elif 'album' in sel:
+                a1 = sel.split(':')[1].strip()
+                a2 = a1.split(';')
+                artist = a2[0].strip()
+                self._select_artist(artist)
+                album = a2[1].strip()
+                self._select_album(album)
+            elif 'traccia' in sel:
+                a1 = sel.split(':')[1].strip()
+                a2 = a1.split(';')
+                artist = a2[0].strip()
+                self._select_artist(artist)
+                album = a2[1].strip()
+                self._select_album(album)
+                track = a2[2].strip()
+                self._select_track(track)
 
     def _select_artist(self, name):
         item = self.artists.findItems(name, Qt.MatchFlag.MatchContains)

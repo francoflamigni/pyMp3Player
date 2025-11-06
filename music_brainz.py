@@ -138,6 +138,8 @@ class MusicInfo:
     def find(self, work, t):
         n1 = 0
         n2 = len(work) -1
+        if n2 < 0:
+            return None
         while True:
             n = int((n1 + n2) / 2)
             w = work[n]
@@ -412,6 +414,114 @@ class CDinfo:
             "tracce": trks
         }
         return self.detects_info(df)
+
+
+    def search_musicbrainz_by_metadata(self, artist=None, album=None):
+        """
+        Cerca informazioni su MusicBrainz usando artista e/o titolo album
+
+        Args:
+            artist: Nome dell'artista
+            album: Titolo dell'album
+
+        Returns:
+            dict: Informazioni sui release trovati
+        """
+        try:
+            # Costruisce la query di ricerca
+            query_parts = []
+            if artist:
+                query_parts.append(f'artist:"{artist}"')
+            if album:
+                query_parts.append(f'release:"{album}"')
+
+            if not query_parts:
+                return {
+                    'releases': [],
+                    'message': 'Specificare almeno artista o album'
+                }
+
+            query = ' AND '.join(query_parts)
+
+            # Esegue la ricerca
+            result = musicbrainzngs.search_releases(
+                query=query,
+                limit=10,  # Limita i risultati
+                strict=False  # Ricerca fuzzy
+            )
+
+            if 'release-list' in result:
+                releases = result['release-list']
+                release_info = []
+
+                for release in releases:
+                    # Per ogni release trovato, ottiene i dettagli completi
+                    detailed_release = musicbrainzngs.get_release_by_id(
+                        release['id'],
+                        includes=['artists', 'recordings', 'release-groups']
+                    )
+
+                    rel = detailed_release['release']
+                    info = {
+                        'id': rel['id'],
+                        'title': rel.get('title', 'N/A'),
+                        'date': rel.get('date', 'N/A'),
+                        'country': rel.get('country', 'N/A'),
+                        'barcode': rel.get('barcode', 'N/A'),
+                        'score': release.get('ext:score', '0'),  # Score di matching
+                        'artists': []
+                    }
+
+                    # Artisti
+                    if 'artist-credit' in rel:
+                        for artist_credit in rel['artist-credit']:
+                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                info['artists'].append({
+                                    'name': artist_credit['artist']['name'],
+                                    'id': artist_credit['artist']['id']
+                                })
+
+                    # Tracce
+                    if 'medium-list' in rel:
+                        info['tracks'] = []
+                        for medium in rel['medium-list']:
+                            if 'track-list' in medium:
+                                for track in medium['track-list']:
+                                    recording = track.get('recording', {})
+                                    track_info = {
+                                        'position': track.get('position', 'N/A'),
+                                        'title': recording.get('title', 'N/A'),
+                                        'length': track.get('length', 'N/A')
+                                    }
+
+                                    # Artista della traccia
+                                    if 'artist-credit' in track:
+                                        track_artists = []
+                                        for artist_credit in track['artist-credit']:
+                                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                                track_artists.append(artist_credit['artist']['name'])
+                                        track_info['artists'] = track_artists
+
+                                    info['tracks'].append(track_info)
+
+                    release_info.append(info)
+
+                return {
+                    'releases': release_info,
+                    'count': len(release_info)
+                }
+            else:
+                return {
+                    'releases': [],
+                    'message': 'Nessun release trovato'
+                }
+
+        except musicbrainzngs.WebServiceError as e:
+            print(f"Errore API MusicBrainz: {e}")
+            return None
+        except Exception as e:
+            print(f"Errore ricerca: {e}")
+            return None
 
 
 

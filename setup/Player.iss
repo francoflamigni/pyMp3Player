@@ -29,7 +29,7 @@ UsePreviousAppDir=yes
 WizardImageStretch=no
 SetupIconFile=.\icone\player.ico
 WizardImageFile=.\icone\splash.bmp
-WizardSmallImageFile=.\icone\splash.bmp
+WizardSmallImageFile=.\icone\splash_mini.bmp
 
 BackColor=$EBEAFC
 BackColor2=$5BA17D

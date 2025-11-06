@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout,
+from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor
 
@@ -77,6 +77,10 @@ class Player(FramelessDialog): #QMainWindow):
         bt.setMaximumWidth(30)
         bt.clicked.connect(self.options)
         tool.addWidget(bt)
+        #tool.addSeparator()
+        spacer_fixed = QLabel()
+        spacer_fixed.setFixedWidth(60) # Imposta una larghezza fissa di 50px
+        tool.addWidget(spacer_fixed)
 
         self.tb = QTabBar()
         self.tb.addTab('')
