@@ -170,8 +170,8 @@ class Player(FramelessDialog): #QMainWindow):
         cr.exec()
 
     def sync_folder(self):
-        from sync_folders import MusicSyncGUI
-        msg = MusicSyncGUI(self, self.dlg.last_folder)
+        from sync_folders import SyncApp
+        msg = SyncApp(self, self.dlg.last_folder)
         msg.exec()
 
     def create_playlist(self):

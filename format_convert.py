@@ -322,7 +322,6 @@ class AudioConverter(QDialog):
         splitter.addWidget(self.table)
         splitter.setSizes([200, 1100])  # Dimensioni relative
 
-
         # Sezione conversione
         conversion_group = self.setup_conversion()
 
@@ -333,36 +332,14 @@ class AudioConverter(QDialog):
         # Status label
         self.status_label = QLabel("Pronto")
 
-        # Aggiungi tutto al layout sinistro
-        #left_layout.addWidget(folder_group)
-        #left_layout.addWidget(global_group)
-        #left_layout.addWidget(self.table, 1)  # Espandi la tabella
-        #left_layout.addWidget(conversion_group)
-        #left_layout.addWidget(self.progress_bar)
-        #left_layout.addWidget(self.status_label)
-
-        # Pannello destro - visualizzazione copertina
-        #right_widget = QWidget()
-        #right_layout = QVBoxLayout(right_widget)
-
-
-        #right_layout.addWidget(cover_group)
-        #right_layout.addStretch()
-
-        # Aggiungi pannelli al splitter
-        #splitter.addWidget(left_widget)
-        #splitter.addWidget(right_widget)
-
         v = QVBoxLayout(self)
         v.addWidget(folder_group)
         v.addWidget(splitter, stretch=1)
 
-        #v.addWidget(self.table, 1)
         v.addWidget(conversion_group)
         v.addStretch()
         v.addWidget(self.progress_bar)
         v.addWidget(self.status_label)
-        #main_layout.addWidget(splitter)
 
         # Variabili
         self.output_folder = ""
@@ -832,11 +809,11 @@ class AudioConverter(QDialog):
                 audio_file.album = album
                 self.table.setItem(row, off + 3, QTableWidgetItem(album))
 
-            if year and not audio_file.year:
+            if year and not audio_file.year or year and year != audio_file.year:
                 audio_file.year = year
                 self.table.setItem(row, off + 4, QTableWidgetItem(year))
 
-            if genre and not audio_file.genre:
+            if genre and not audio_file.genre or genre and genre != audio_file.genre:
                 audio_file.genre = genre
                 self.table.setItem(row, off + 5, QTableWidgetItem(genre))
 
