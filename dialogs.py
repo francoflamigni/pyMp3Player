@@ -47,8 +47,10 @@ class myList(QListWidget):
             return
 
         it = self.itemAt(event.pos())
+        x = event.pos().x()
+        print(x)
         if self.itc is not None:
-            if it != self.itc:
+            if it != self.itc or x > 50:
                 self.unsetCursor()
             else:
                 self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
@@ -63,12 +65,15 @@ class myList(QListWidget):
                 self.wparent.contextMenu(p, self, it)
         elif event.button() == Qt.MouseButton.LeftButton:
             it = self.itemAt(event.pos())
-            if it == self.itc:
+            x = event.pos().x()
+            if it == self.itc and x <= 50:
                 try:
                     self.unsetCursor()
                     self.wparent.play_item(self)
                 except:
                     pass
+            elif it != self.itc and x <= 50:
+                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
         super(QListWidget, self).mousePressEvent(event)
 
 def lyric_song(artist, track, parent=None):
