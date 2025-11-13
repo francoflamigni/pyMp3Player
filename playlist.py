@@ -251,7 +251,7 @@ class PlayListDlg(QDialog):
         super().__init__(parent)
         self.index = index
         self.setWindowTitle("Crea Playlist")
-        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'create_playlist.png')))
         self.setMinimumSize(300, 500)
         self.setup_ui()
 

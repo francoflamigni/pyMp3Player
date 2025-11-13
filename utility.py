@@ -66,3 +66,27 @@ def resize_image_data(image_data, target_size=(400, 400), quality=85):
 def get_windows_flag():
     CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
     return CREATE_NO_WINDOW
+
+def textwrap(txt, l):
+    v = txt.split(' ')
+    stri = ''
+    l0 = 0
+    for t in v:
+        t1 = t.split('\n')
+        if len(t1) == 1:
+            stri += t + ' '
+            if len(stri) > l + l0:
+                stri += '\n'
+                l0 = len(stri)
+        else:
+            first = True
+            for t2 in t1:
+                if first is False:
+                    stri += '\n'
+                else:
+                    first = False
+                stri += t2
+            stri += ' '
+            l0 = len(stri)
+
+    return stri

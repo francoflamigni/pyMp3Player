@@ -19,6 +19,8 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
 from PyQt6.QtGui import QPixmap, QIcon
 from utility import get_windows_flag
 
+from mp3_tag import Generi
+
 from enum import Enum
 
 class Mode(Enum):
@@ -427,8 +429,13 @@ class AudioConverter(QDialog):
         global_layout.addWidget(self.global_year, 2, 1)
 
         global_layout.addWidget(QLabel("Genere:"), 3, 0)
-        self.global_genre = QLineEdit()
+        self.global_genre = QComboBox() #QLineEdit()
+        self.global_genre.setEditable(True)
         global_layout.addWidget(self.global_genre, 3, 1)
+        generi = Generi()
+        v = [generi[i] for i in generi.ids]
+        self.global_genre.addItems(v)
+        a = 0
 
         # Bottoni per applicare info globali
         apply_button = QPushButton("Applica Info Globali")
@@ -539,10 +546,12 @@ class AudioConverter(QDialog):
         if count == len(self.audio_files):
             self.mode = Mode.TAG_EDIT
             self.save_button.setVisible(True)
+            self.folder_button.setVisible(False)
 
         else:
             self.mode = Mode.FORMAT_CONVERT
             self.save_button.setVisible(False)
+            self.folder_button.setVisible(True)
 
         self.hide_conversion()
 

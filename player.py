@@ -127,8 +127,11 @@ class Player(FramelessDialog): #QMainWindow):
                             ico=get_resource_file(__file__, 'icone', 'tag-edit.png')),
             AddMenuItem("CD ripper", fun=self.cd_ripper,
                             ico=get_resource_file(__file__, 'icone', 'cd_ripper.png')),
-            AddMenuItem("Crea PlayList", fun=self.create_playlist),
-            AddMenuItem("Sincronizza", fun=self.sync_folder),
+            AddMenuItem("Crea PlayList", fun=self.create_playlist,
+                        ico=get_resource_file(__file__, 'icone', 'create_playlist.png')
+                        ),
+            AddMenuItem("Sincronizza", fun=self.sync_folder,
+                        ico=get_resource_file(__file__, 'icone', 'folders_sync.png')),
             AddMenuItem("Informazioni", fun=self.info)
         ]
         contextMenu.addActions(actions)
@@ -175,6 +178,7 @@ class Player(FramelessDialog): #QMainWindow):
         msg.exec()
 
     def create_playlist(self):
+        self.get_generi()
         index = self.dlg.music
 
         from playlist import PlayListDlg
@@ -187,6 +191,16 @@ class Player(FramelessDialog): #QMainWindow):
                 self.dlg.add_playlist(*t)
 
             self.dlg.tab.setCurrentIndex(1)
+
+    def get_generi(self):
+        from collections import defaultdict
+        musica = self.dlg.music
+        art_gen = defaultdict(set)
+        for t in musica.tracks.name.values():
+            if t.genre:
+                art_gen[t.artist].add(t.genre)
+            a = 0
+        b = 0
 
 
 if __name__ == "__main__":

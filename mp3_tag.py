@@ -1,12 +1,14 @@
 import eyed3
+from eyed3.id3 import genres
 import os
 from threading import Thread, Lock
 from queue import Empty, Queue
 import json
 import glob
-from pyMyLib.utils import ts_date2
+from pyMyLib.utils import ts_date2, iniConf
 import hashlib
 import time
+from collections import defaultdict
 
 
 def find_last(path):
@@ -17,14 +19,17 @@ def find_last(path):
     v = os.path.getmtime(latest_file)
     t = ts_date2(v)
     return {r: v}
+
+
+
 class Music:
     NO_INDEX = -1  # manca l'indice
     INDEX_LOADED = 0  # indice caricacato
     NO_FILE = 1  # la cartella indicata non contiene file
     NO_FOLDER = 2  # manca il nome della cartella o questa non è una cartella
     OLD_INDEX = 3  # indice presente ma non aggiornato
-    def __init__(self, parent, path=''):
-        self.parent = parent
+    def __init__(self, conf: iniConf, path=''):
+        self.conf = conf
         self.path = path
         self.print = None
         self.clear()
@@ -40,13 +45,15 @@ class Music:
         self.tracks = tracks()
         self.album_artist = album_artist()
         self.album_track = album_track()
+        self.artist_genre = defaultdict(set)
+        self.genre = set()
 
     def init(self, folder):
         if folder == '' or os.path.isdir(folder) is False:
             return Music.NO_FOLDER
 
-        self.parent.ini.set('CONF', 'last_folder', folder)
-        self.parent.ini.save()
+        self.conf.set('CONF', 'last_folder', folder)
+        self.conf.save()
         hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
 
         self.clear()
@@ -61,7 +68,7 @@ class Music:
         lst = lst[0]
 
         # trova la data di ultima modifica registrata
-        lst_t = self.parent.ini.get('CONF', hash)
+        lst_t = self.conf.get('CONF', hash)
         if lst_t == '':
             return Music.NO_INDEX
         if float(lst) > float(lst_t):
@@ -103,8 +110,16 @@ class Music:
         self.save(jf)
         v = os.path.getmtime(jf)
         hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
-        self.parent.ini.set('CONF', hash, str(v))
-        self.parent.ini.save()
+        self.conf.set('CONF', hash, str(v))
+        self.conf.save()
+
+    def get_generi(self):
+        for t in self.tracks.name.values():
+            if t.genre:
+                self.genre.add(t.genre)
+                self.artist_genre[t.artist].add(t.genre)
+            a = 0
+        b = 0
 
     def process(self, nome):
         count = 0
@@ -228,6 +243,7 @@ class Music:
         self.album_track.load(data[4])
 
         fp.close
+        self.get_generi()
 
 
 class artists:
@@ -251,7 +267,7 @@ class artists:
         a = 0
 
 class track:
-    def __init__(self, title='', album='', artist='', id=0, file='', num=0, tm_sec=0.):
+    def __init__(self, title='', album='', artist='', id=0, file='', num=0, tm_sec=0., genre=''):
         self.title = title
         self.album = album
         self.artist = artist
@@ -259,6 +275,7 @@ class track:
         self.file = file
         self.num = num
         self.tm_sec = tm_sec
+        self.genre = genre
 
     def set(self, value):
         self.title = value['title']
@@ -268,6 +285,7 @@ class track:
         self.file = value['file']
         self.num = value['num']
         self.tm_sec = value['tm_sec']
+        self.genre = value.get('genre', '')
 
 
 class tracks:
@@ -281,7 +299,12 @@ class tracks:
             return self.name[nome].id
 
         self.id += 1
-        self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs)
+        genre = ''
+        if tag.genre:
+            # L'attributo .name decodifica automaticamente il codice numerico
+            # (es. 12 -> 'Other') o restituisce la stringa se non è numerico.
+            genre = tag.genre.name
+        self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs, genre)
         return self.id
 
     def find(self, ids, art=''):
@@ -398,10 +421,6 @@ class album_track:
     def load(self, lst):
         self.a_t = json.loads(lst)
 
-'''
-def music_index(folderpath):
-    m = music(folderpath)
-    MusicIndexDlg.run(None, m)
 
-    a = 0
-'''
+def Generi():
+    return genres

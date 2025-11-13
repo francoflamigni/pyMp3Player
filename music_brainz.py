@@ -232,6 +232,53 @@ class MusicInfo:
             return html
         return ''
 
+
+    def get_genres_from_album(self) -> list[tuple[str, int]]:
+        """Cerca il genere di un album su MusicBrainz e restituisce (genere, voto)."""
+
+        # Passaggio 1: Ricerca del Gruppo di Pubblicazione (Release Group)
+        try:
+            # Cerchiamo l'album con l'artista specificato
+            result = musicbrainzngs.search_release_groups(
+                artist=self.artist_name,
+                releasegroup=self.album_title
+            )
+        except musicbrainzngs.ResponseError as e:
+            print(f"Errore di connessione a MusicBrainz: {e}")
+            return []
+
+        release_groups = result.get('release-group-list')
+
+        if not release_groups:
+            print(f"Nessun Gruppo di Pubblicazione trovato per '{self.artist_name}' - '{self.album_title}'.")
+            return []
+
+        # Prendiamo il risultato più probabile (il primo)
+        rg_id = release_groups[0]['id']
+
+        # Passaggio 2: Lookup per ottenere i generi
+        try:
+            # Usiamo l'MBID trovato e includiamo i generi
+            rg_details = musicbrainzngs.get_release_group_by_id(
+                rg_id,
+                includes=['tags']
+            )
+        except musicbrainzngs.ResponseError as e:
+            print(f"Errore durante il recupero dei dettagli (MBID: {rg_id}): {e}")
+            return []
+
+        # 3. Accesso ai dati
+        # I generi si trovano ora nella lista 'tag-list'
+        tags_data = rg_details.get('release-group', {}).get('tag-list', [])
+
+        # Estrai il nome del tag e il suo conteggio (voto)
+        genres_list = [(t['name'], int(t['count'])) for t in tags_data]
+
+        # Ordina per voto decrescente
+        genres_list.sort(key=lambda item: item[1], reverse=True)
+
+        return genres_list
+
 class CDinfo:
     def __init__(self, drive=''):
         self.drive = drive

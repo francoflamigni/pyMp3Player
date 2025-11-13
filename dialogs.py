@@ -48,7 +48,7 @@ class myList(QListWidget):
 
         it = self.itemAt(event.pos())
         x = event.pos().x()
-        print(x)
+        #print(x)
         if self.itc is not None:
             if it != self.itc or x > 50:
                 self.unsetCursor()

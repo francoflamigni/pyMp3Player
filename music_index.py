@@ -1,10 +1,11 @@
 import os
 
-from PyQt6.QtCore import Qt
+import wikipedia
+from PyQt6.QtCore import Qt, QEvent, QRect
 from PyQt6.QtGui import QPixmap, QIcon, QCursor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QTabWidget,
-                             QAbstractItemView, QMenu)
+                             QAbstractItemView, QMenu, QToolTip)
 
 from mp3_tag import Music
 from music_brainz import brainz
@@ -13,12 +14,16 @@ from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoM
 from pyMyLib.utils import iniConf, get_resource_file
 
 from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
+from utility import textwrap
 from myShazam import myShazam
 
 def info_album(artist, album, parent=None):
     brainz(artist, album)
 
 def edit_album(artist, album, dir, parent=None):
+    from music_brainz import MusicInfo
+    mi = MusicInfo(artist, album)
+    genneri = mi.get_genres_from_album()
     from format_convert import AudioConverter
     ac = AudioConverter(dir)
     ac.exec()
@@ -57,7 +62,7 @@ class MusicIndexDlg(QDialog):
         ini = iniConf(AppConfig)
         self.last_folder = ini.get('CONF', 'last_folder')
 
-        self.music = Music(parent)
+        self.music = Music(parent.ini)
         v = QVBoxLayout(self)
         v.setContentsMargins(1, 1, 1, 1)
         self.prog = QLabel('')
@@ -154,6 +159,29 @@ class MusicIndexDlg(QDialog):
         elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(self.last_folder)
+
+        self.artists.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.ToolTip and obj == self.artists:
+            qp = QCursor.pos()
+            p = self.artists.mapFromGlobal(qp)
+            qi = self.artists.itemAt(p)
+            if qi is not None:
+                txt = qi.text()
+                if txt:
+                    wikipedia.set_lang("it")
+                    waitCursor(True)
+                    try:
+                        result = wikipedia.summary(txt, sentences=5)
+                        if len(result) > 1: #and dt.cognome in result:
+                            t = textwrap(result, 50)
+                            QToolTip.showText(qp, t, self, QRect(), 60000)
+                    except:
+                        pass
+                    waitCursor()
+        return super().eventFilter(obj, event)
+
 
     def list_search(self):
         txt = self.te.text()
