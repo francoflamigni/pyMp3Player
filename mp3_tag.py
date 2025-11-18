@@ -10,6 +10,16 @@ import hashlib
 import time
 from collections import defaultdict
 
+GENRE = [
+    'Pop', 'Pop-Folk',
+    'Rock', 'Hard Rock', 'Folk-Rock', 'Progressive Rock', 'Psychedelic Rock', 'Symphonic Rock',
+    'Punk Rock', 'Rock & Roll', 'Classic Rock',
+    'Beat', 'Heavy Metal', 'Folk', 'Celtic', 'Jazz', 'Acid Jazz', 'Blues', 'Gospel', 'Soul', 'Swing', 'New Wave',
+    'Latin', 'Punk', 'Ethnic', 'Classical', 'Baroque', 'Opera', 'Chamber Music', 'Sonata', 'Symphony',
+    'A Cappella', 'Country', 'Dance', 'Merengue', 'Salsa', 'Disco', 'Funk', 'Hip-Hop', 'Metal', 'New Age',
+    'Rap', 'Reggae', 'Techno', 'Fusion', 'Musical', 'Audiobook', 'Soundtrack'
+]
+
 
 def find_last(path):
     f = os.path.join(path, '**')
@@ -258,6 +268,15 @@ class artists:
         self.id += 1
         self.name[nome] = self.id
         return self.id
+
+    def filter(self, filt):
+        dizionario_filtrato = {
+            chiave: valore
+            for chiave, valore in self.name.items()
+            if chiave in filt
+        }
+        if dizionario_filtrato:
+            self.name = dizionario_filtrato
 
     def save(self):
         return json.dumps(self.name, indent=4)

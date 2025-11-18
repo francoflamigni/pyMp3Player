@@ -174,9 +174,11 @@ def get_thumbnail(url):
     if len(url) > 0:
         try:
             im = urllib.request.urlopen(url).read()
+            if "DOCTYPE" in str(im):
+                return None
             return im
-            with open("c:/temp/test.png", "wb") as f:
-                f.write(im)
+            #with open("c:/temp/test.png", "wb") as f:
+            #    f.write(im)
         except:
             pass
     return None
@@ -189,7 +191,10 @@ def get_title(url):
     except:
         return title
 
-    metaint = int(response.headers['icy-metaint'])
+    metas = response.headers.get('icy-metaint', '')
+    if not metas:
+        return title
+    metaint = int(metas)
     for _ in range(10):  # # title may be empty initially, try several times
         response.read(metaint)  # skip to metadata
         metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte

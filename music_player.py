@@ -9,9 +9,9 @@ import vlc
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame,  QDial, QSlider)
+                             QFrame, QDial, QSlider, QMessageBox)
 
-from pyMyLib.qtUtils import set_background
+from pyMyLib.qtUtils import set_background, waitCursor
 
 from dialogs import lyric_song, AppConfig
 import scrobbler
@@ -40,7 +40,7 @@ class MusicPlayerDlg(QDialog):
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
         if type == 'spectrum':
-            args.extend(['--effect-list=spectrum', '--visual-nbbands=160', '--visual-peaks', '--visual-amp=3.0'])
+            args.extend(['--effect-list=spectrum', '--visual-peaks'])
         elif type == 'vumeter':
             args.extend(['--effect-list=vuMeter'])
         elif type == 'scope':
@@ -275,7 +275,9 @@ class MusicPlayerDlg(QDialog):
 
         # Set the title of the track as window title
         self.media = self.instance.media_new(url)
-        self._play()
+        if not self._play():
+            QMessageBox.warning(self, "Attenzione", "Nessun segnale ricevuto")
+            return False
         self.mode = MusicPlayerDlg.Mode_Radio
         self.timer.setInterval(5000)
 
@@ -291,6 +293,8 @@ class MusicPlayerDlg(QDialog):
                 self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
         else:
             self.cover.clear()
+
+        return True
 
     def open_file(self, tracks=None):
         if self.mode != MusicPlayerDlg.Mode_None:
@@ -341,14 +345,18 @@ class MusicPlayerDlg(QDialog):
 
         self.play_pause()
         tm0 = time.monotonic()
+        waitCursor(True)
         while not self.mediaplayer.is_playing():
             dt = time.monotonic() - tm0
             if dt > 10:
                 self.add_note('timeout')
                 self.stop()
-                break
-            pass
+                waitCursor()
+                return False
+            time.sleep(1.0)
         self.update_ui()
+        waitCursor()
+        return True
 
     def currentChanged (self, index):
         if index == 1:

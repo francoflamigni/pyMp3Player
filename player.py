@@ -2,17 +2,18 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu)
+                             QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
-from pyMyLib.qtUtils import informMessage, AddMenuItem
+from pyMyLib.qtUtils import informMessage, AddMenuItem, set_application_icon
 from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
 from bluetooth import BluetoothManager
+from mp3_tag import GENRE
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -79,7 +80,7 @@ class Player(FramelessDialog): #QMainWindow):
         tool.addWidget(bt)
         #tool.addSeparator()
         spacer_fixed = QLabel()
-        spacer_fixed.setFixedWidth(60) # Imposta una larghezza fissa di 50px
+        spacer_fixed.setFixedWidth(30) # Imposta una larghezza fissa di 50px
         tool.addWidget(spacer_fixed)
 
         self.tb = QTabBar()
@@ -93,13 +94,67 @@ class Player(FramelessDialog): #QMainWindow):
         self.tb.setTabIcon(2, QIcon(get_resource_file(__file__, 'icone', 'stereo.png')))
         self.tb.setTabToolTip(2, 'player')
         self.tb.currentChanged.connect(self.tab_changed)
+        self.tb.setStyleSheet("""
+            QTabBar::tab {
+                /* Aggiunge il bordo intorno alla scheda */
+                border: 1px solid gray; 
+
+                /* Spazio interno al testo della scheda */
+                padding: 3px 3px; 
+
+                /* Raggio per angoli arrotondati (solo in alto) */
+                border-top-left-radius: 3px; 
+                border-top-right-radius: 3px;
+            }
+
+            /* Rimuovi il bordo inferiore per creare l'illusione di connessione con il QTabWidget */
+            QTabBar::tab:!selected {
+                border-bottom-color: #C2C7CB; /* Stesso colore dello sfondo del QTabWidget/barra */
+            }
+
+            /* Stile della scheda selezionata */
+            QTabBar::tab:selected {
+                border-color: blue;
+                border-bottom-color: white; /* Per far sembrare che sia attaccata alla pagina sottostante */
+            }
+        """)
 
         tool.addWidget(self.tb)
+        spacer_fixed2 = QLabel()
+        spacer_fixed2.setFixedWidth(30) # Imposta una larghezza fissa di 50px
+        tool.addWidget(spacer_fixed2)
+
+        self.genre_combo = QComboBox()
+
+        self.genre_combo.setStyleSheet("""
+            QComboBox {
+                border: 1px solid;  /* Spessore del bordo (ad esempio 2 pixel) */
+                border-color: #555555; /* Colore del bordo (ad esempio un grigio scuro) */
+
+                
+                border-radius: 3px; /* Raggio per angoli arrotondati (opzionale) */
+
+                /* Padding opzionale per evitare che il testo tocchi il bordo */
+                padding: 2px 10px 2px 5px; 
+            }
+        """)
+
+        v = [""]
+        v.extend((GENRE))
+        self.genre_combo.addItems(v)
+        self.genre_combo.currentIndexChanged.connect(self.filter_genre)
+        self.combo_action = tool.addWidget(self.genre_combo)
 
         return tool
 
     def tab_changed(self, index):
+        visible = False if index != 0 else True
+        self.combo_action .setVisible(visible)
         self.tab.setCurrentIndex(index)
+
+    def filter_genre(self, index):
+        gen = self.genre_combo.currentText()
+        self.dlg.filter(gen)
 
     def create_ui(self):
         v = QVBoxLayout(self)
@@ -107,9 +162,11 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab = QStackedWidget(self)
 
         self.dlg = MusicIndexDlg(self)
+        self.dlg.play_signal.connect(self.open_file)
         self.tab.addWidget(self.dlg)
 
         rd = RadioDlg(self)
+        rd.radio_signal.connect(self.open_radio)
         self.tab.addWidget(rd)
 
         self.ply = MusicPlayerDlg(self)
@@ -146,9 +203,9 @@ class Player(FramelessDialog): #QMainWindow):
         wd.find_song()
 
     def open_radio(self, url='', fav=''):
-        self.ply.open_radio(url, fav)
-        self.tab.setCurrentIndex(2)
-        self.tb.setCurrentIndex(2)
+        if self.ply.open_radio(url, fav):
+            self.tab.setCurrentIndex(2)
+            self.tb.setCurrentIndex(2)
 
     def open_file(self, tracks=None):
         self.ply.open_file(tracks)
@@ -178,7 +235,7 @@ class Player(FramelessDialog): #QMainWindow):
         msg.exec()
 
     def create_playlist(self):
-        self.get_generi()
+        #self.get_generi()
         index = self.dlg.music
 
         from playlist import PlayListDlg
@@ -189,6 +246,18 @@ class Player(FramelessDialog): #QMainWindow):
             self.dlg.clear_playlist()
             for t in lst:
                 self.dlg.add_playlist(*t)
+
+            tip = self.dlg.tab.tabToolTip(1)
+            stat = {}
+            for t in lst:
+                if t[0] in stat.keys():
+                    n = stat[t[0]]
+                    stat[t[0]] = n + 1
+                else:
+                    stat[t[0]] = 1
+            lines = [f"{key}: {value}" for key, value in stat.items()]
+            tip = f"{tip}\n {'\n'.join(lines)}"
+            self.dlg.tab.setTabToolTip(1, tip)
 
             self.dlg.tab.setCurrentIndex(1)
 
@@ -205,5 +274,7 @@ class Player(FramelessDialog): #QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    set_application_icon(app, f'Mysoft.{AppConfig}.v1', get_resource_file(__file__, 'icone', 'player.ico'))
+    #app.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'player.ico')))
     player = Player()
     sys.exit(app.exec())

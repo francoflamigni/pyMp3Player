@@ -1,8 +1,8 @@
 import os
 
-import wikipedia
-from PyQt6.QtCore import Qt, QEvent, QRect
-from PyQt6.QtGui import QPixmap, QIcon, QCursor
+import copy
+from PyQt6.QtCore import Qt, QEvent, QRect, QThreadPool, pyqtSignal
+from PyQt6.QtGui import QPixmap, QIcon, QCursor, QAction
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QTabWidget,
                              QAbstractItemView, QMenu, QToolTip)
@@ -14,7 +14,7 @@ from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoM
 from pyMyLib.utils import iniConf, get_resource_file
 
 from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
-from utility import textwrap
+from utility import WikipediaWorker
 from myShazam import myShazam
 
 def info_album(artist, album, parent=None):
@@ -50,11 +50,15 @@ class infoDlg(QDialog):
 
 
 class MusicIndexDlg(QDialog):
+    play_signal = pyqtSignal(list)
     def __init__(self, parent):
         super(MusicIndexDlg, self).__init__(parent)
         self.wparent = parent
         self.shaz = False
         self.play_cur = False
+        self._current_worker = None
+        self.artists_sav = None
+        self.threadpool = QThreadPool()
 
         self.setObjectName("mp3_widget")
         set_background(self)
@@ -78,24 +82,38 @@ class MusicIndexDlg(QDialog):
         self.te.textChanged.connect(self.list_search)
         self.te.returnPressed.connect(self.search)
 
-        b2 = QPushButton(self)
-        b2.setIcon(QIcon(get_resource_file(__file__, 'icone', 'search.png')))
-        b2.setMaximumWidth(30)
-        b2.clicked.connect(self.search)
+        icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
+        azione_cerca = QAction(icona_cerca, "Cerca", self)
+        azione_cerca.triggered.connect(self.search)
+        self.te.addAction(
+            azione_cerca,
+            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
+        )
 
         h0 = QHBoxLayout()
         h0.addWidget(self.b1)
         h0.addWidget(self.prog)
         h0.addSpacing(10)
         h0.addWidget(self.te)
-        h0.addWidget(b2)
 
         self.artists = myList(self, 'artisti')
+        self.artists.setStyleSheet("""
+            QListWidget::item:selected {
+                background-color: #FFFF77; /* Colore di sfondo della selezione */
+                color: black;            /* Colore del testo della selezione */
+            }
+        """)
         self.artists.setSortingEnabled(True)
         self.artists.itemSelectionChanged.connect(self.artist_changed)
         self.artists.setMinimumHeight(200)
 
         self.albums = myList(self, 'album')
+        self.albums.setStyleSheet("""
+              QListWidget::item:selected {
+                  background-color: #77FFFF; /* Colore di sfondo della selezione */
+                  color: black;            /* Colore del testo della selezione */
+              }
+          """)
         self.albums.setSortingEnabled(False)
         self.albums.itemSelectionChanged.connect(self.album_changed)
         self.albums.doubleClicked.connect(self.play_album)
@@ -107,6 +125,12 @@ class MusicIndexDlg(QDialog):
         splitter1.addWidget(self.albums)
 
         self.tracks = myList(self, 'tracce')
+        self.tracks.setStyleSheet("""
+              QListWidget::item:selected {
+                  background-color: #FF77FF; /* Colore di sfondo della selezione */
+                  color: black;            /* Colore del testo della selezione */
+              }
+          """)
         self.tracks.setMinimumWidth(250)
         self.tracks.setSortingEnabled(False)
         self.tracks.itemSelectionChanged.connect(self.track_changed)
@@ -155,6 +179,7 @@ class MusicIndexDlg(QDialog):
         v.addWidget(splitter2)
         self.res = self.music.init(self.last_folder)
         if self.res == self.music.INDEX_LOADED:
+            self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
         elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
             self.print('La cartella indicata non esiste o non contiene file')
@@ -164,23 +189,46 @@ class MusicIndexDlg(QDialog):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.ToolTip and obj == self.artists:
-            qp = QCursor.pos()
+            qp = QCursor.pos()  # Posizione globale del cursore
             p = self.artists.mapFromGlobal(qp)
             qi = self.artists.itemAt(p)
+
             if qi is not None:
                 txt = qi.text()
-                if txt:
-                    wikipedia.set_lang("it")
-                    waitCursor(True)
-                    try:
-                        result = wikipedia.summary(txt, sentences=5)
-                        if len(result) > 1: #and dt.cognome in result:
-                            t = textwrap(result, 50)
-                            QToolTip.showText(qp, t, self, QRect(), 60000)
-                    except:
-                        pass
-                    waitCursor()
+
+                # 1. Annulla il worker precedente, se presente
+                if self._current_worker is not None:
+                     self._current_worker = None  # Rimuovi il riferimento
+
+                # 2. Crea un nuovo worker per la richiesta attuale
+                worker = WikipediaWorker(txt, qp)
+
+                # 3. Connetti i segnali
+                worker.signals.result.connect(self.show_tooltip_result)
+                # Collega il segnale 'finished' per resettare il riferimento al worker
+                worker.signals.finished.connect(self.worker_finished)
+
+                # 4. Assegna il nuovo worker per il tracciamento e avvia il thread
+                self._current_worker = worker
+                self.threadpool.start(worker)
+
+                # Ritorna True per indicare che abbiamo gestito l'evento
+                # e prevenire il tooltip di default vuoto.
+                return True
+
+                # Per tutti gli altri eventi, usa il comportamento di default
         return super().eventFilter(obj, event)
+
+    def show_tooltip_result(self, text, pos):
+        """Slot chiamato quando il worker ha un risultato pronto."""
+
+        QToolTip.showText(pos, text, self, QRect(), 60000)
+
+    def worker_finished(self):
+        """Slot chiamato quando un worker (qualsiasi) ha finito."""
+        # Se il worker che ha finito è quello attualmente tracciato, resettalo.
+        # (Opzionale: necessario solo se si volesse fare cleanup specifico)
+        pass
 
 
     def list_search(self):
@@ -198,7 +246,8 @@ class MusicIndexDlg(QDialog):
         if index == 0:
             return
         v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
-        self.wparent.open_file(v)
+        self.play_signal.emit(v)
+        #self.wparent.open_file(v)
 
     def contextMenu(self, p, wd, it):
         ctx = QMenu(self)
@@ -370,6 +419,23 @@ class MusicIndexDlg(QDialog):
         infoDlg.run(self.wparent, mes)
         self.shaz = False
 
+    def filter(self, genere):
+        self.music.artists = copy.deepcopy(self.artists_sav)
+        if genere:
+            g_a = self.get_generi_artist()
+            if genere in g_a.keys():
+                self.music.artists.filter(g_a[genere])
+        self.set_artists()
+
+    def get_generi_artist(self):
+        from collections import defaultdict
+        gen_art = defaultdict(set)
+        for t in self.music.tracks.name.values():
+            if t.genre:
+                gen_art[t.genre].add(t.artist)
+            a = 0
+        return gen_art
+
     def artist_changed(self):
         items = self.artists.selectedItems()
         if len(items) > 0:
@@ -418,6 +484,7 @@ class MusicIndexDlg(QDialog):
     def index(self, folder=''):
         if folder != '':
             self.music.index(self.print, folder)
+            self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
 
     def print(self, t):
@@ -429,7 +496,8 @@ class MusicIndexDlg(QDialog):
         trk = self.tracks.selectedItems()[0].text()
         t = trk + '@' + alb
         tt = self.music.tracks.name[t]
-        self.wparent.open_file([tt])
+        self.play_signal.emit([tt])
+        #self.wparent.open_file([tt])
 
     def play_album(self):
         sel_alb = self.albums.selectedItems()
@@ -439,4 +507,5 @@ class MusicIndexDlg(QDialog):
         trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
 
         v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
-        self.wparent.open_file(v)
+        self.play_signal.emit(v)
+        #self.wparent.open_file(v)

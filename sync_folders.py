@@ -512,7 +512,6 @@ class SyncApp(QDialog):
                 #self._check_and_style_item(child_item, full_path_B)
 
     # --- Copia (Cartelle Rosse) ---
-
     def prompt_copy_folder(self, item):
         """Chiede conferma e avvia la copia con Progress Bar."""
         source_path = item.data(0, Qt.ItemDataRole.UserRole + 1)
@@ -555,8 +554,8 @@ class SyncApp(QDialog):
 
             # 4. Avvia il thread
             self.copy_worker.start()
-    # --- Verifica MP3 (MD5) ---
 
+    # --- Verifica MP3 (MD5) ---
     def check_mp3_md5(self, parent_item, path_A, path_B):
         """Esegue il controllo MD5 tra i file MP3 presenti in A e B."""
         mp3_files_A = {f: os.path.join(path_A, f) for f in os.listdir(path_A)
@@ -621,6 +620,7 @@ class SyncApp(QDialog):
 
         item = self.current_item_to_copy  # Recupera l'elemento copiato
         target_path = item.data(0, Qt.ItemDataRole.UserRole + 2)
+        src_path = item.data(0, Qt.ItemDataRole.UserRole + 1)
 
         if success:
             item.takeChildren()
@@ -631,10 +631,12 @@ class SyncApp(QDialog):
             # 3. Forza la riscrittura dello stile (L'icona diventerà Verde o Gialla)
             # Chiamiamo _check_and_style_item senza check_status, forzando l'analisi
             self._check_and_style_item(item, target_path)
+            self.load_sub_structure(item, src_path, target_path)
 
             QMessageBox.information(self, "Copia Completata", f"Cartella **{item.text(0)}** copiata con successo.")
         else:
             QMessageBox.critical(self, "Errore di Copia", f"Errore durante la copia: {error_message}")
+
 
         # Pulisci i riferimenti al thread
         self.copy_worker = None

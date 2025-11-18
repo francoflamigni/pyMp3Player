@@ -1,10 +1,10 @@
 import random
 from typing import Set, Tuple
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator, QIcon
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QAbstractItemView, QTableWidgetItem, QPushButton, \
-    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout
+    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout, QComboBox
 
 from pyMyLib.utils import get_resource_file
 
@@ -23,42 +23,54 @@ class GeneratorePesato:
         durata_totale = 0
         tentativi_falliti = 0
         max_tentativi = 100  # Evita loop infiniti
+        max_tentativi_artista = 5
         artisti_pesati = [p['nome'] for p in preferences]
-        pesi = [p['peso']for p in preferences]
-        while durata_totale < durata_target and tentativi_falliti < max_tentativi and artisti_pesati:
+        pesi = [float(p['peso']) for p in preferences]
+        tol_durata = 240
+        if not artisti_pesati:
+            return  self.tracce_usate
+        while tentativi_falliti < max_tentativi and durata_totale < durata_target:
             # 1. Seleziona artista in base al peso
             artista = random.choices(artisti_pesati, weights=pesi, k=1)[0]
 
-            # 2. Seleziona album casuale
-            albums = self.index.find_albums(artista)
-            if not albums:
-                tentativi_falliti += 1
-                continue
+            tentativi_artista = max_tentativi_artista
+            while tentativi_artista:
+                tentativi_artista -= 1
 
-            album = random.choice(albums)
+                # 2. Seleziona album casuale
+                albums = self.index.find_albums(artista)
+                if not albums:
+                    tentativi_falliti += 1
+                    continue
 
-            # 3. Seleziona traccia casuale non ancora usata
-            tracks = self.index.find_tracks(album.title, artista)
+                album = random.choice(albums)
 
-            if not tracks:
-                tentativi_falliti += 1
-                continue
+                # 3. Seleziona traccia casuale non ancora usata
+                tracks = self.index.find_tracks(album.title, artista)
 
-            track = random.choice(tracks)
-            durata_traccia = self.index.tracks.name[track + '@' + album.title].tm_sec
+                if not tracks:
+                    tentativi_falliti += 1
+                    continue
 
-            # Verifica se aggiungere la traccia supera la durata target
-            if durata_totale + durata_traccia > durata_target:
-                # Se abbiamo già delle tracce, ci fermiamo
-                break
-            t = (artista, album.title, track)
-            if t in self.tracce_usate:
-                tentativi_falliti += 1
-                continue
+                track = random.choice(tracks)
+                durata_traccia = self.index.tracks.name[track + '@' + album.title].tm_sec
 
-            # Aggiungi traccia alla playlist
-            self.tracce_usate.add(t)
-            durata_totale += durata_traccia
+                # Verifica se aggiungere la traccia supera la durata target
+                d1 = durata_totale + durata_traccia
+                if d1 < durata_target:
+                    t = (artista, album.title, track)
+                    if t in self.tracce_usate:
+                        tentativi_falliti += 1
+                        continue
+                    self.tracce_usate.add(t)
+                    durata_totale = d1
+                    tentativi_artista = 0
+                elif d1 > durata_target + tol_durata:
+                    tentativi_falliti += 1
+                    continue
+                else:
+                    tentativi_artista = 0
+
         return list(self.tracce_usate)
 
     def seleziona(self):
@@ -253,18 +265,26 @@ class PlayListDlg(QDialog):
         self.setWindowTitle("Crea Playlist")
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'create_playlist.png')))
         self.setMinimumSize(300, 500)
+
+        self.combo_options = [" ", "\U00002B50", "\U00002B50\U00002B50", "\U00002B50\U00002B50\U00002B50",
+                              "\U00002B50\U00002B50\U00002B50\U00002B50",
+                              "\U00002B50\U00002B50\U00002B50\U00002B50\U00002B50"]
+        self.current_combo = None  # Tiene traccia del combo box attivo
+        self._current_row = -1
+        #self._current_col = -1
         self.setup_ui()
 
     def setup_ui(self):
         vlayout = QVBoxLayout(self)
         self.table = QTableWidget(self)
-        self.fields = ["Artista", "Peso"]
+        self.fields = ["Artista", "Preferenza"]
         self.table.setColumnCount(len(self.fields))
         self.table.setHorizontalHeaderLabels(self.fields)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(1, 60)
+        self.table.setColumnWidth(1, 120)
+        self.table.cellClicked.connect(self.handle_cell_clicked)
 
         self.table.setShowGrid(True)
         for artist in self.index.artists.name.keys():
@@ -272,6 +292,7 @@ class PlayListDlg(QDialog):
             self.table.insertRow(numRows)
             qi = QTableWidgetItem(artist)
             self.table.setItem(numRows, 0, qi)
+        self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
 
         vlayout.addWidget(self.table)
         self.dw = DurationWidget()
@@ -283,13 +304,78 @@ class PlayListDlg(QDialog):
 
         vlayout.addWidget(bt_crea)
 
+    def handle_cell_clicked(self, row, column):
+
+        # Rimuovi l'editor precedente prima di crearne uno nuovo
+        self.remove_current_editor()
+
+        # Vogliamo l'editor solo sulla COLONNA 1 (la seconda)
+        if column != 1:
+            return
+
+        # 1. Ottieni il testo corrente della cella
+        current_item = self.table.item(row, column)
+        current_text = current_item.text() if current_item else ""
+
+        # 2. Crea e configura il QComboBox
+        combo = QComboBox(self)
+        combo.addItems(self.combo_options)
+
+        # 3. Imposta l'elemento corrente (se presente nella lista)
+        index = combo.findText(current_text)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+        # 4. Connetti il segnale per chiudere il combo e salvare il valore
+        # Usiamo activated/currentIndexChanged per l'evento di selezione
+        combo.currentIndexChanged.connect(
+            lambda index: self.save_and_remove_editor(row, column, combo)
+        )
+        self._current_row = row
+
+        # 5. Inserisci il combo box nella cella e traccia il riferimento
+        self.table.setCellWidget(row, column, combo)
+        self.current_combo = combo
+        combo.showPopup()
+
+    def save_and_remove_editor(self, row, column, combo):
+        """Salva il valore selezionato e rimuove il combo box."""
+
+        new_text = combo.currentText()
+
+        # 1. Rimuovi il QComboBox dalla cella
+        self.table.removeCellWidget(row, column)
+        self._current_row = -1
+        self.current_combo = None
+
+        # 2. Aggiorna il valore della cella
+        # Devi creare un nuovo QTableWidgetItem se la cella è vuota,
+        # altrimenti aggiorna quello esistente
+
+        new_item = self.table.item(row, column)
+        if new_item is None:
+            new_item = QTableWidgetItem(new_text)
+            self.table.setItem(row, column, new_item)
+        else:
+            new_item.setText(new_text)
+
+    def remove_current_editor(self):
+        """Rimuove il combo box attivo (necessario se l'utente clicca altrove)."""
+        if self.current_combo is not None:
+            # Il QComboBox viene rimosso dal layout della cella
+            self.table.removeCellWidget(self._current_row, 1)
+            self.current_combo.deleteLater()
+            self.current_combo = None
+            self._current_row = -1
+
     def crea(self):
         numRows = self.table.rowCount()
         preferences = []
         for row in range(numRows):
             try:
                 artist = self.table.item(row, 0).text()
-                peso = self.table.item(row, 1).text()
+                ps = self.table.item(row, 1).text()
+                peso = len(ps)
                 if peso:
                     preferences = preferences + [{'nome': artist, 'peso': int(peso)}]
             except:

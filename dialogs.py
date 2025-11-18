@@ -1,7 +1,7 @@
 import os
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAction
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle, QCheckBox,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu)
@@ -95,6 +95,7 @@ class tableMenu(QTableWidget):
 
 
 class RadioDlg(QDialog):
+    radio_signal = pyqtSignal(str, str)
     def __init__(self, parent):
         super(RadioDlg, self).__init__(parent)
         self.ini = parent.ini
@@ -106,12 +107,25 @@ class RadioDlg(QDialog):
 
         h = QHBoxLayout()
         self.ed = QLineEdit(self)
+        self.ed.returnPressed.connect(self.search)
+        h.addWidget(self.ed)
+
+        icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
+        azione_cerca = QAction(icona_cerca, "Cerca", self)
+        azione_cerca.triggered.connect(self.search)
+        self.ed.addAction(
+            azione_cerca,
+            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
+        )
+
+        '''
         b0 = QPushButton(self)
         b0.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
         b0.clicked.connect(self.search)
         self.ed.returnPressed.connect(self.search)
         h.addWidget(self.ed)
         h.addWidget(b0)
+        '''
 
         sp = QSplitter(self)
         sp.setOrientation(Qt.Orientation.Vertical)
@@ -231,7 +245,6 @@ class RadioDlg(QDialog):
             return
         nome = r.name
         k = self.favorites.findItems(nome, Qt.MatchFlag.MatchExactly)
-        rd = self.ini.get('radio')
 
         if len(k) > 0:
             if yesNoMessage('Sostituzione', 'Esiste già una emittente di nome ' + nome + ' sostituirla?'):
@@ -239,9 +252,10 @@ class RadioDlg(QDialog):
             else:
                 return
 
+        rd = self.ini.get('radio')
         if rd is None:
             rd = {}
-        rd[nome] = r.url + ',' + r.favicon
+        rd[nome] = r.url + '@' + r.favicon
         self.ini.set_sez('radio', rd)
         self.ini.save()
         self.favorites.addItem(nome)
@@ -259,10 +273,11 @@ class RadioDlg(QDialog):
 
     def onCellClicked(self, nr, nc):
         if nc == 3:
-            qi = self.table.item(0, 0)
+            qi = self.table.item(nr, 0)
             dat = qi.data(Qt.ItemDataRole.UserRole)
             url = dat.url
-            self.wparent.open_radio(url, dat.favicon)
+            self.radio_signal.emit(url, dat.favicon)
+            #self.wparent.open_radio(url, dat.favicon)
 
     def favorite_changed(self):
         items = self.favorites.selectedItems()
@@ -275,12 +290,13 @@ class RadioDlg(QDialog):
     def play(self):
         rad = self.favorites.selectedItems()[0].text()
         rd = self.ini.get('radio')
-        dat = rd[rad].split(',')
+        dat = rd[rad].split('@')
         url = dat[0]
         fav = ''
         if len(dat) > 1:
             fav = dat[1]
-        self.wparent.open_radio(url, fav)
+        self.radio_signal.emit(url, fav)
+        #self.wparent.open_radio(url, fav)
 
 class RadioStation:
     def __init__(self, name='', url='', ico=None, paese='', favicon=''):
@@ -371,13 +387,14 @@ class lyricsDlg(QDialog):
         self.txt_box = myPlainText(self)
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
+        self.app_lang = 'fr'
         self.tr_box = None
 
         self.txt_box.setText(self.txt)
         self.h.addWidget(self.txt_box)
         v.addLayout(self.h)
 
-        if lang != 'it':
+        if lang != self.app_lang:
             self.bt = QPushButton(self)
             self.bt.setText('Traduci')
             self.bt.clicked.connect(self.traduci)
@@ -389,7 +406,7 @@ class lyricsDlg(QDialog):
         self.tr_box = myPlainText(self)
         self.txt_box.setSlave(self.tr_box)
         self.h.addWidget(self.tr_box)
-        txt1 = self.tr.translate(self.txt, 'it')
+        txt1 = self.tr.translate(self.txt, self.app_lang)
         self.bt.hide()
 
         self.txt_box.selectionChanged.connect(self.sync)
