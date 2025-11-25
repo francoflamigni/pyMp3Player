@@ -1,5 +1,3 @@
-import os
-
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAction
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle, QCheckBox,
@@ -7,8 +5,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
                              QPlainTextEdit, QAbstractItemView, QMenu)
 
 import scrobbler
-from pyradios import RadioBrowser
-from googletrans import Translator
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
 from pyMyLib.utils import iniConf, get_resource_file
@@ -151,6 +147,7 @@ class RadioDlg(QDialog):
                 self.favorites.addItem(d)
 
     def search(self):
+        from pyradios import RadioBrowser
         src = self.ed.text()
         if len(src) > 0:
             waitCursor(True)
@@ -373,6 +370,7 @@ class myPlainText(QPlainTextEdit):
 
 class lyricsDlg(QDialog):
     def __init__(self, parent, txt, track=''):
+        from googletrans import Translator
         super(lyricsDlg, self).__init__(parent)
         self.wparent = parent
         self.txt = txt.lstrip()
@@ -456,14 +454,17 @@ class mySearch(QDialog):
 
         self.ed = QLineEdit(self)
         self.ed.setText(txt)
-        b1 = QPushButton(self)
-        b1.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
-        b1.setMaximumWidth(50)
-        b1.clicked.connect(self.search)
+        icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
+        azione_cerca = QAction(icona_cerca, "Cerca", self)
+        azione_cerca.triggered.connect(self.search)
+        self.ed.addAction(
+            azione_cerca,
+            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
+        )
+
         self.ed.returnPressed.connect(self.search)
         h = QHBoxLayout()
         h.addWidget(self.ed)
-        h.addWidget(b1)
 
         self.list = QListWidget(self)
         self.list.doubleClicked.connect(self.selection)
