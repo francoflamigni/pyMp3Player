@@ -1,11 +1,12 @@
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
-from difflib import SequenceMatcher
+#from difflib import SequenceMatcher
 import time
 from datetime import datetime
 
 def similar(a, b, threshold=0.85):
+    from difflib import SequenceMatcher
     return SequenceMatcher(None, a.lower(), b.lower()).ratio() > threshold
 
 def duration(s):
@@ -419,7 +420,10 @@ class CDinfo:
                 df["album"] = f"{release['title']}"
                 df["artisti"] =  f"{', '.join([a['name'] for a in release['artists']])}"
 
-                anno = datetime.strptime(release['date'], "%Y-%m-%d").year
+                try:
+                    anno = datetime.strptime(release['date'], "%Y-%m-%d").year
+                except:
+                    anno = release['date']
                 df["anno"] = f"{anno}"
                 df["genere"] = f"{release['genre']}"
 
@@ -442,17 +446,21 @@ class CDinfo:
             return {}
 
         trks = []
-        trk_start = float(0.)
-        for track in disc_info['track_details']:
-            start = trk_start
-            lenght = float(track['length']) / 75.
+        total_length = float(disc_info['length'])
+        for i, track in enumerate(disc_info['track_details']):
+            start = float(track['offset']) / 75.
+            # Per l'ultima traccia, calcola la durata dal totale
+            if i == len(disc_info['track_details']) - 1:
+                lenght = total_length - start
+            else:
+                lenght = float(track['length']) / 75.
+            #lenght = float(track['length']) / 75.
             trk = {
                 "traccia": f"{track['number']}",
                 "durata": lenght,
                 "start": start
             }
             trks.append(trk)
-            start += lenght
 
         df = {
             "id": f"{disc_info['id']}",

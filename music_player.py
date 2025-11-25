@@ -6,7 +6,7 @@ vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc')) #os.path.join(os.
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
                              QFrame, QDial, QSlider, QMessageBox)
@@ -25,9 +25,11 @@ def get_tm(secs):
 class MusicPlayerDlg(QDialog):
     Mode_None = 0  # nessuna selezione
     Mode_Music = 1  # mp3
-    Mode_Radio = 2  # radio
-    Mode_Play = 3
-    Mode_Pause = 4
+    Mode_Radio = 2  #
+    Mode_Cd = 3
+    Mode_Play = 4
+    Mode_Pause = 5
+    next_song_signal = pyqtSignal(int)
     def __init__(self, parent):
         super(MusicPlayerDlg, self).__init__(parent)
         self.wparent = parent
@@ -36,6 +38,7 @@ class MusicPlayerDlg(QDialog):
         self.is_paused = False
         self.tracks = []
         self.index = -1
+        self.listplayer = None
 
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
@@ -163,7 +166,7 @@ class MusicPlayerDlg(QDialog):
         stopbutton = QPushButton(self)
         stopbutton.setMaximumWidth(30)
         stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
-        stopbutton.clicked.connect(self.stop)
+        stopbutton.clicked.connect(self.stopB)
 
         self.skipBackwardbutton = QPushButton()
         self.skipBackwardbutton.setMaximumWidth(30)
@@ -216,19 +219,29 @@ class MusicPlayerDlg(QDialog):
     def play_pause(self):
         # Toggle play/pause status
         if self.mediaplayer.is_playing():
-            self.mediaplayer.pause()
+            if self.mode == MusicPlayerDlg.Mode_Cd:
+                self.listplayer.pause()
+            else:
+                self.mediaplayer.pause()
             self.set_play_icon(MusicPlayerDlg.Mode_Play)
             self.is_paused = True
             self.timer.stop()
         else:
-            if self.mediaplayer.play() == -1:
-                self.open_file()
-                return
+            if self.mode == MusicPlayerDlg.Mode_Cd:
+                self.listplayer.play()
+            else:
+                if self.mediaplayer.play() == -1:
+                    self.open_file()
+                    return
 
-            self.mediaplayer.play()
+                self.mediaplayer.play()
             self.set_play_icon(MusicPlayerDlg.Mode_Pause)
             self.timer.start()
             self.is_paused = False
+
+    def stopB(self):
+        self.next_song_signal.emit(0)
+        self.stop()
 
     def stop(self):
         # Stop player
@@ -265,6 +278,27 @@ class MusicPlayerDlg(QDialog):
     def set_volume(self, volume):
         # Set the volume
         self.mediaplayer.audio_set_volume(volume)
+
+    def open_cd(self, media_input):
+        if self.mode != MusicPlayerDlg.Mode_None:
+            self.stop()
+
+        medialist = self.instance.media_list_new()
+        self.listplayer = self.instance.media_list_player_new()
+        self.listplayer.set_media_player(self.mediaplayer)
+        device = f"cdda:///{media_input}:/"
+
+        for i in (range(1, 10)):  # the second value for range() can be set without problem also higher
+            track = self.instance.media_new(device, (":cdda-track=" + str(i)))
+            medialist.add_media(track)
+        self.listplayer.set_media_list(medialist)
+        self.mode = MusicPlayerDlg.Mode_Cd
+
+        self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
+        #self.play_pause()
+        self.listplayer.play()
+        #self.cover.clear()
+        #self.update_ui()
 
     def open_radio(self, url='', fav=''):
         if self.mode != MusicPlayerDlg.Mode_None:
@@ -346,6 +380,7 @@ class MusicPlayerDlg(QDialog):
         self.play_pause()
         tm0 = time.monotonic()
         waitCursor(True)
+        state = self.mediaplayer.get_state()
         while not self.mediaplayer.is_playing():
             dt = time.monotonic() - tm0
             if dt > 10:
@@ -402,9 +437,10 @@ class MusicPlayerDlg(QDialog):
                     self.play_song()
                 else:
                     self.stop()
+                    self.next_song_signal.emit(1)
         if self.mode == MusicPlayerDlg.Mode_Radio:
             self.radio_metadata()
-        elif self.mode == MusicPlayerDlg.Mode_Music:
+        elif self.mode == MusicPlayerDlg.Mode_Music or self.mode == MusicPlayerDlg.Mode_Cd:
             tm = (self.tm * media_pos) / 1000
             self.rt_time.setText(get_tm(tm))
 

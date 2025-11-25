@@ -1,8 +1,8 @@
-import soundcard as sc
+#import soundcard as sc
 import soundfile as sf
 from PyQt6.QtCore import pyqtSignal, QObject
 from pyMyLib.qtUtils import waitCursor
-from shazamio import Shazam
+#from shazamio import Shazam
 from threading import Thread
 import asyncio
 import os
@@ -36,6 +36,7 @@ class myShazam(QObject):
         searcher.start()
 
     async def identify_audio(self):
+        from shazamio import Shazam
         shazam = Shazam()
         try:
             out = await shazam.recognize(data=self.nome, proxy=None)
@@ -45,6 +46,9 @@ class myShazam(QObject):
         waitCursor()
 
     def speaker(self):
+        import soundcard as sc
+        import soundfile as sf
+
         try:
             with sc.get_microphone(
                 id=str(sc.default_speaker().name), include_loopback=True

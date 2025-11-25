@@ -1,13 +1,14 @@
-from PIL import Image, ImageQt
 import io
 import sys
-import wikipedia
+#import wikipedia
 import base64
 import requests
-from PyQt6.QtCore import QRunnable, QObject, QPoint, pyqtSignal
-
+from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal
+from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu
+from enum import Enum
 
 def qpixmap_to_bytes(pixmap):
+    from PIL import ImageQt
     """Converte un QPixmap in dati binari."""
     # Converte QPixmap in PIL Image
     qimage = pixmap.toImage()
@@ -19,6 +20,7 @@ def qpixmap_to_bytes(pixmap):
     return buffer.getvalue()
 
 def resize_image_data(image_data, target_size=(400, 400), quality=85):
+    from PIL import Image
     """
     Ridimensiona i dati dell'immagine mantenendo le proporzioni.
 
@@ -118,6 +120,7 @@ class WikipediaWorker(QRunnable):
         self.USER_AGENT = "IlTuoProgrammaDiTagging/1.0 (la_tua_email@example.com)"  # Usa il tuo vero User-Agent
 
     def run(self):
+        import wikipedia
         wikipedia.set_lang(self.lang)
 
         try:
@@ -193,4 +196,81 @@ class WikipediaWorker(QRunnable):
             return None  # Fallimento nel download dell'immagine
         except Exception:
             return None  # Altri errori
+
+def ms_to_string(ms):
+    tsecs = ms / 1000
+    minutes = tsecs // 60
+    secs = tsecs % 60
+    return f"{minutes:02}:{secs:02}"
+
+class Select(Enum):
+    CK_ALL = 1
+    CK_SEL = 2
+
+class ACTableWidget(QTableWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Abilita la policy che permette di mostrare il menu contestuale
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+        # Connette il segnale emesso dalla policy a un metodo custom
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+        # (Opzionale) Imposta la selezione di righe intere se lavori con azioni massicce
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+
+        self.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #3B82F6; /* Un blu acceso, ad esempio */
+                color: white; 
+                /* Rimuove il bordo standard di selezione (opzionale) */
+                border: 0px; 
+            }
+
+            /* Gestisce il focus quando la tabella non è attiva (opzionale) */
+            QTableWidget:focus {
+                outline: none;
+            }
+
+        """)
+
+    def show_context_menu(self, position: QPoint):
+        # 1. Crea l'oggetto menu
+        context_menu = QMenu(self)
+
+        # 2. Definisci e aggiungi le azioni
+
+        # Esempio 1: Check tutti gli elementi selezionati
+        action_check_all = context_menu.addAction("✅ Check Tutti")
+        action_check_all.triggered.connect(lambda: self.batch_check(type=Select.CK_ALL, state=Qt.CheckState.Checked))
+        action_uncheck_all = context_menu.addAction("❌ Uncheck Tutti")
+        action_uncheck_all.triggered.connect(
+            lambda: self.batch_check(type=Select.CK_ALL, state=Qt.CheckState.Unchecked))
+
+        action_check_sel = context_menu.addAction("✅ Check Selezionati")
+        action_check_sel.triggered.connect(lambda: self.batch_check(type=Select.CK_SEL, state=Qt.CheckState.Checked))
+
+        # Esempio 2: Deseleziona tutti gli elementi selezionati
+        action_uncheck_sel = context_menu.addAction("❌ Uncheck Selezionati")
+        action_uncheck_sel.triggered.connect(
+            lambda: self.batch_check(type=Select.CK_SEL, state=Qt.CheckState.Unchecked))
+
+        # Aggiungi un separatore per raggruppare le azioni
+        context_menu.addSeparator()
+
+        context_menu.exec(self.mapToGlobal(position))
+
+    def batch_check(self, type=Select.CK_ALL, state=Qt.CheckState.Checked):
+        if type == Select.CK_ALL:
+            selected_rows = [i for i in range(self.rowCount())]
+        else:
+            selected_rows = [index.row() for index in self.selectedIndexes()]
+        self.setUpdatesEnabled(False)
+        for row in selected_rows:
+            item = self.item(row, 0)
+            if item is not None and (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
+                item.setCheckState(state)
+        self.setUpdatesEnabled(True)
+
 

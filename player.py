@@ -12,7 +12,7 @@ from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
-from bluetooth import BluetoothManager
+#from bluetooth import BluetoothManager
 from mp3_tag import GENRE
 
 '''
@@ -54,6 +54,7 @@ class Player(FramelessDialog): #QMainWindow):
             self.splash = QSplashScreen(QPixmap(f))
             self.splash.show()
 
+        self.background_mode = False
         self.create_ui()
 
         if self.splash is not None:
@@ -187,6 +188,10 @@ class Player(FramelessDialog): #QMainWindow):
             AddMenuItem("Crea PlayList", fun=self.create_playlist,
                         ico=get_resource_file(__file__, 'icone', 'create_playlist.png')
                         ),
+            AddMenuItem("Play CD", fun=self.open_cd),
+
+            AddMenuItem("Background", fun=self.background, enab=not self.background_mode),
+
             AddMenuItem("Sincronizza", fun=self.sync_folder,
                         ico=get_resource_file(__file__, 'icone', 'folders_sync.png')),
             AddMenuItem("Informazioni", fun=self.info)
@@ -208,11 +213,45 @@ class Player(FramelessDialog): #QMainWindow):
             self.tb.setCurrentIndex(2)
 
     def open_file(self, tracks=None):
+        self.background(True)
         self.ply.open_file(tracks)
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 
+    def open_cd(self):
+        self.ply.open_cd("D")
+        self.tab.setCurrentIndex(2)
+        self.tb.setCurrentIndex(2)
+
+    def background(self, reset=False):
+        if self.background_mode or reset:
+            self.background_mode = False
+            self.titleBar.setTitle("Euterpe")
+            try:
+                self.ply.next_song_signal.disconnect(self._background)
+            except:
+                pass
+        else:
+            self.background_mode = True
+            self.titleBar.setTitle("Euterpe\U0001F535")
+            self.ply.next_song_signal.connect(self._background)
+            self._background(1)
+
+    def _background(self, index):
+        if index == 0:
+            self.background(True)
+
+        import random
+        from scrobbler import leggi_stringa_offline
+        if self.background_mode:
+            mi = self.dlg.music.tracks.name
+            key = random.choice(list(mi.keys()))
+            mstr = mi[key]
+            leggi_stringa_offline([mstr.artist, mstr.album, mstr.title])
+            self.ply.open_file([mi[key]])
+
     def bluetooth(self):
+        from bluetooth import BluetoothManager
         bt = BluetoothManager()
         bt.exec()
 
@@ -227,6 +266,7 @@ class Player(FramelessDialog): #QMainWindow):
     def cd_ripper(self):
         from cd_ripper import CDRipperMainWindow
         cr = CDRipperMainWindow()
+        cr.play_signal.connect(self.ply.open_cd)
         cr.exec()
 
     def sync_folder(self):

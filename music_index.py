@@ -8,16 +8,17 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
                              QAbstractItemView, QMenu, QToolTip)
 
 from mp3_tag import Music
-from music_brainz import brainz
+#from music_brainz import brainz
 
 from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
 from pyMyLib.utils import iniConf, get_resource_file
 
 from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
-from utility import WikipediaWorker
-from myShazam import myShazam
+#from utility import WikipediaWorker
+#from myShazam import myShazam
 
 def info_album(artist, album, parent=None):
+    from music_brainz import brainz
     brainz(artist, album)
 
 def edit_album(artist, album, dir, parent=None):
@@ -188,6 +189,7 @@ class MusicIndexDlg(QDialog):
         self.artists.installEventFilter(self)
 
     def eventFilter(self, obj, event):
+        from utility import WikipediaWorker
         if event.type() == QEvent.Type.ToolTip and obj == self.artists:
             qp = QCursor.pos()  # Posizione globale del cursore
             p = self.artists.mapFromGlobal(qp)
@@ -385,6 +387,7 @@ class MusicIndexDlg(QDialog):
             self.tracks.scrollToItem(item[0])
 
     def find_song(self, time=5):
+        from myShazam import myShazam
         if self.shaz:
             return
         self.shaz = True

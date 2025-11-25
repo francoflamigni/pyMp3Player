@@ -10,12 +10,16 @@ eyed3
 pyradios
 soundcard
 soundfile
+sounddevice
 shazamio
 googletrans==3.1.0a0
 lyricsgenius
 musicbrainzngs
 C:/Users/franc/MySoft/pyMyLib/
 python-dateutil
+pywin32
 mutagen
 discid
 pillow
+gtts
+langdetect

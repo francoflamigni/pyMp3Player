@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 import logging
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import re
 import struct
-from lyricsgenius import Genius
+#from lyricsgenius import Genius
 logger = logging.getLogger(__package__)
 
 formatter = logging.Formatter(
@@ -220,6 +221,7 @@ def song_text(artist, song):
     secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
     token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
 
+    from lyricsgenius import Genius
     api = Genius(token, verbose=False, timeout=10,
                         remove_section_headers=False, skip_non_songs=True, response_format='dom')
     waitCursor(True)
@@ -244,3 +246,85 @@ def song_text(artist, song):
         a = 0
     waitCursor()
     return txt
+
+
+
+
+def leggi_stringa_offline2(testo: list):
+    import pyttsx3
+    from langdetect import detect  # Manteniamo langdetect
+    try:
+        lingua_rilevata = detect(testo[2])
+        engine = pyttsx3.init(driverName='sapi5')
+
+        # --- Selezione Intelligente della Voce ---
+        voci = engine.getProperty('voices')
+        voce_selezionata = None
+
+        # Cerca una voce che corrisponda alla lingua rilevata
+        for voce in voci:
+            if voce.languages and lingua_rilevata.lower() in [l.split('-')[0].lower() for l in voce.languages]:
+                voce_selezionata = voce
+                break
+
+        engine.setProperty('rate', 180)
+
+        if voce_selezionata:
+            print(f"Voce selezionata ({lingua_rilevata.upper()}): {voce_selezionata.name}")
+            engine.setProperty('voice', voce_selezionata.id)
+        else:
+            print(f"Nessuna voce locale adatta trovata per la lingua {lingua_rilevata.upper()}.")
+
+        # Sintesi e Riproduzione
+        t = '.'.join(testo)
+        engine.say(t)
+        engine.runAndWait()
+        engine.stop()
+
+    except Exception as e:
+        print(f"Errore: {e}")
+
+
+def leggi_stringa_offline(testo: list):
+    from gtts import gTTS
+    from langdetect import detect
+    import soundfile as sf
+    import sounddevice as sd
+    import os
+    import time
+
+    try:
+        lingua_rilevata = detect(testo[2])
+
+        # Mappa codici lingua per gTTS
+        mappa_lingue = {
+            'en': 'en', 'it': 'it', 'es': 'es', 'fr': 'fr',
+            'de': 'de', 'pt': 'pt', 'ru': 'ru', 'ja': 'ja',
+            'zh-cn': 'zh-CN', 'ar': 'ar', 'hi': 'hi', 'ko': 'ko'
+        }
+
+        lingua_gtts = mappa_lingue.get(lingua_rilevata.lower(), 'en')
+        #print(f"Lingua rilevata: {lingua_rilevata.upper()} -> gTTS: {lingua_gtts}")
+
+        # Pronuncia ogni frase con pausa di 10ms
+        for i, frase in enumerate(testo):
+            filename = f"temp_audio_{i}.mp3"
+
+            # Genera l'audio
+            tts = gTTS(text=frase, lang=lingua_gtts, slow=False)
+            tts.save(filename)
+
+            # Leggi e riproduci l'audio
+            data, samplerate = sf.read(filename)
+            sd.play(data, samplerate)
+            sd.wait()  # Aspetta che finisca la riproduzione
+
+            # Rimuovi il file temporaneo
+            os.remove(filename)
+
+            # Pausa di 10ms tra le frasi
+            #if i < len(testo) - 1:
+            #    time.sleep(0.01)
+
+    except Exception as e:
+        print(f"Errore: {e}")

@@ -1,6 +1,5 @@
 import subprocess
 import re
-import soundfile as sf
 
 from pathlib import Path
 
@@ -11,11 +10,11 @@ import shutil
 from pyMyLib.utils import get_resource_file
 
 from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
-                             QWidget, QPushButton, QTableWidget, QTableWidgetItem,
+                             QWidget, QPushButton, QTableWidgetItem,
                              QFileDialog, QLabel, QLineEdit, QProgressBar, QMessageBox,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
-                             QSplitter, QScrollArea, QSizePolicy, QAbstractItemView, QMenu)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray, QPoint
+                             QSplitter, QScrollArea, QSizePolicy)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
 from PyQt6.QtGui import QPixmap, QIcon
 from utility import get_windows_flag
 
@@ -26,10 +25,6 @@ from enum import Enum
 class Mode(Enum):
     TAG_EDIT = 1
     FORMAT_CONVERT = 2
-
-class Select(Enum):
-    CK_ALL = 1
-    CK_SEL = 2
 
 class AudioFile:
     """Classe per rappresentare un file audio con i suoi metadati."""
@@ -52,6 +47,8 @@ class AudioFile:
         self._extract_info()
 
     def _extract_info(self):
+        import soundfile as sf
+
         """Estrae informazioni dal file."""
         try:
             # Controlla se è già MP3
@@ -286,73 +283,6 @@ class ConversionWorker(QThread):
             print(f"Errore aggiunta tag: {e}")
 
 
-class ACTableWidget(QTableWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        # Abilita la policy che permette di mostrare il menu contestuale
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-
-        # Connette il segnale emesso dalla policy a un metodo custom
-        self.customContextMenuRequested.connect(self.show_context_menu)
-
-        # (Opzionale) Imposta la selezione di righe intere se lavori con azioni massicce
-        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-
-        self.setStyleSheet("""
-            QTableWidget::item:selected {
-                background-color: #3B82F6; /* Un blu acceso, ad esempio */
-                color: white; 
-                /* Rimuove il bordo standard di selezione (opzionale) */
-                border: 0px; 
-            }
-            
-            /* Gestisce il focus quando la tabella non è attiva (opzionale) */
-            QTableWidget:focus {
-                outline: none;
-            }
-
-        """)
-
-
-    def show_context_menu(self, position: QPoint):
-        # 1. Crea l'oggetto menu
-        context_menu = QMenu(self)
-
-        # 2. Definisci e aggiungi le azioni
-
-        # Esempio 1: Check tutti gli elementi selezionati
-        action_check_all = context_menu.addAction("✅ Check Tutti")
-        action_check_all.triggered.connect(lambda: self.batch_check(type=Select.CK_ALL, state=Qt.CheckState.Checked))
-        action_uncheck_all = context_menu.addAction("❌ Uncheck Tutti")
-        action_uncheck_all.triggered.connect(lambda: self.batch_check(type=Select.CK_ALL, state=Qt.CheckState.Unchecked))
-
-
-        action_check_sel = context_menu.addAction("✅ Check Selezionati")
-        action_check_sel.triggered.connect(lambda: self.batch_check(type=Select.CK_SEL, state=Qt.CheckState.Checked))
-
-        # Esempio 2: Deseleziona tutti gli elementi selezionati
-        action_uncheck_sel = context_menu.addAction("❌ Uncheck Selezionati")
-        action_uncheck_sel.triggered.connect(lambda: self.batch_check(type=Select.CK_SEL, state=Qt.CheckState.Unchecked))
-
-        # Aggiungi un separatore per raggruppare le azioni
-        context_menu.addSeparator()
-
-        context_menu.exec(self.mapToGlobal(position))
-
-    def batch_check(self, type=Select.CK_ALL, state=Qt.CheckState.Checked):
-        if type == Select.CK_ALL:
-            selected_rows = [i for i in range(self.rowCount())]
-        else:
-            selected_rows = [index.row() for index in self.selectedIndexes()]
-        self.setUpdatesEnabled(False)
-        for row in selected_rows:
-            item = self.item(row, 0)
-            if item is not None and (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
-                item.setCheckState(state)
-        self.setUpdatesEnabled(True)
-
-
 class AudioConverter(QDialog):
     def __init__(self, folder=''):
         super().__init__()
@@ -386,6 +316,7 @@ class AudioConverter(QDialog):
         left_layout.addWidget(cover_group)
 
         # Tabella file
+        from utility import ACTableWidget
         self.table = ACTableWidget()
 
         # Layout principale con splitter
