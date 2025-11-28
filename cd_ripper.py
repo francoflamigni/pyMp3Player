@@ -334,9 +334,14 @@ class CDRipperMainWindow(QDialog):
         self.play_signal.emit(sel)
 
     def detect_cd_drives(self):
+        from utility import detect_cd_drives
         sel = self.cd_drive_combo.currentText()
+        self.cd_drive_combo.currentIndexChanged.disconnect(self.detect_tracks)
         """Rileva i drive CD disponibili"""
         self.cd_drive_combo.clear()
+        for letter in detect_cd_drives():
+            self.cd_drive_combo.addItem(letter)
+        '''
         # Su Windows, cerca drive da D a Z
         for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
             drive_path = f"{letter}:\\"
@@ -350,7 +355,9 @@ class CDRipperMainWindow(QDialog):
                 except:
                     # Fallback: aggiungi tutti i drive trovati
                     self.cd_drive_combo.addItem(letter)
+        '''
         self.cd_drive_combo.setCurrentText(sel)
+        self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
         self.detect_tracks()
         self.start_btn.setEnabled(True)
 

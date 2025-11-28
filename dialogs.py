@@ -493,13 +493,15 @@ class mySearch(QDialog):
         if len(a2) > 0:
             for a in a2:
                 art = self.music.find_artist_by_album(a.id)
-                mes.append(str(kk) + ' album: ' + art + ';' + a.title + '\n')
-                kk += 1
+                if art:
+                    mes.append(str(kk) + ' album: ' + art + ';' + a.title + '\n')
+                    kk += 1
         a3 = [k for k in self.music.tracks.name.values() if k is not None and txt in k.title.lower()]
         if len(a3) > 0:
             for a in a3:
-                mes.append(str(kk) + ' traccia: ' + a.artist + ';' + a.album + ';' + a.title + '\n')
-                kk += 1
+                if a.artist in self.music.artists.name.keys():
+                    mes.append(str(kk) + ' traccia: ' + a.artist + ';' + a.album + ';' + a.title + '\n')
+                    kk += 1
 
         self.list.clear()
         self.list.addItems(mes)

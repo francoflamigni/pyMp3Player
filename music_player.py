@@ -252,17 +252,18 @@ class MusicPlayerDlg(QDialog):
 
     def skip(self, inc):
         self.mediaplayer.stop()
-        self.inc_track_index(inc)
-        self.play_song()
+        if self.mode == MusicPlayerDlg.Mode_Music:
+            self.inc_track_index(inc)
+            self.play_song()
+        else:
+            self.inc_track_index(inc)
+            if inc > 0:
+                self.listplayer.next()
+            else:
+                self.listplayer.previous()
+            self.update_ui()
 
     def volume_ui(self, cmb):
-        '''
-        n = vlc.libvlc_audio_equalizer_get_preset_count()
-        a = vlc.libvlc_audio_equalizer_get_preset_name(0)
-        self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
-                      for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
-        self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
-        '''
 
         self.volumeDial = QDial(self)
         self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
@@ -283,22 +284,44 @@ class MusicPlayerDlg(QDialog):
         if self.mode != MusicPlayerDlg.Mode_None:
             self.stop()
 
-        medialist = self.instance.media_list_new()
-        self.listplayer = self.instance.media_list_player_new()
-        self.listplayer.set_media_player(self.mediaplayer)
-        device = f"cdda:///{media_input}:/"
+        from music_brainz import CDinfo
+        cdi = CDinfo(media_input)
+        self.tracks = cdi.cd_to_internal()
+        self.index = 0
 
-        for i in (range(1, 10)):  # the second value for range() can be set without problem also higher
+        medialist = self.instance.media_list_new()
+        device = f"cdda:///{media_input}:/"
+        for i in (range(1, len(self.tracks) + 1)):  # the second value for range() can be set without problem also higher
             track = self.instance.media_new(device, (":cdda-track=" + str(i)))
             medialist.add_media(track)
+
+        self.listplayer = self.instance.media_list_player_new()
+        self.listplayer.set_media_player(self.mediaplayer)
         self.listplayer.set_media_list(medialist)
         self.mode = MusicPlayerDlg.Mode_Cd
 
+        event_manager = self.mediaplayer.event_manager()
+        event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self.on_track_end)
+
         self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
-        #self.play_pause()
         self.listplayer.play()
-        #self.cover.clear()
-        #self.update_ui()
+        self.set_play_icon(MusicPlayerDlg.Mode_Pause)
+        self.timer.setInterval(500)
+        self.timer.start()
+        self.cover.clear()
+        self.update_ui()
+
+    def on_track_end(self, event):
+        if self.mode != MusicPlayerDlg.Mode_Cd:
+            return
+        idx = self.index + 1
+        if idx < len(self.tracks):
+            self.index = idx
+        else:
+            # il cd è finito
+            self.listplayer = None
+            self.mode = MusicPlayerDlg.Mode_None
+        self.update_ui()
 
     def open_radio(self, url='', fav=''):
         if self.mode != MusicPlayerDlg.Mode_None:
@@ -425,13 +448,13 @@ class MusicPlayerDlg(QDialog):
         self.positionslider.setValue(media_pos)
 
         # No need to call this function if nothing is played
-        if not self.mediaplayer.is_playing():
+        if not self.mediaplayer.is_playing() and self.mode == MusicPlayerDlg.Mode_Music:
             self.timer.stop()
 
             # After the video finished, the play button stills shows "Pause",
             # which is not the desired behavior of a media player.
             # This fixes that "bug".
-            if not self.is_paused and self.mode != MusicPlayerDlg.Mode_None:
+            if not self.is_paused and self.mode == MusicPlayerDlg.Mode_Music:  #da rivedere
                 if self.index < len(self.tracks) - 1:
                     self.index += 1
                     self.play_song()
@@ -440,9 +463,17 @@ class MusicPlayerDlg(QDialog):
                     self.next_song_signal.emit(1)
         if self.mode == MusicPlayerDlg.Mode_Radio:
             self.radio_metadata()
-        elif self.mode == MusicPlayerDlg.Mode_Music or self.mode == MusicPlayerDlg.Mode_Cd:
+        elif self.mode == MusicPlayerDlg.Mode_Music:
             tm = (self.tm * media_pos) / 1000
             self.rt_time.setText(get_tm(tm))
+        elif self.mode == MusicPlayerDlg.Mode_Cd:
+            self.tm = self.tracks[self.index].tm_sec
+            self.t_time.setText(get_tm(self.tm))
+            tm = (self.tm * media_pos) / 1000
+            self.rt_time.setText(get_tm(tm))
+            prg = f"( {self.index + 1} / {len(self.tracks)} )"
+            tt = f"{self.tracks[self.index].artist} - {self.tracks[self.index].album} - {self.tracks[self.index].title} {prg}"
+            self.add_note(tt)
 
     def radio_metadata(self):
         title = scrobbler.get_title(self.url)

@@ -1,5 +1,6 @@
 import io
 import sys
+import os
 #import wikipedia
 import base64
 import requests
@@ -274,3 +275,21 @@ class ACTableWidget(QTableWidget):
         self.setUpdatesEnabled(True)
 
 
+def detect_cd_drives():
+    drives = []
+    for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+        drive_path = f"{letter}:\\"
+        if os.path.exists(drive_path):
+            try:
+                # Verifica se è un drive CD
+                import win32file
+                drive_type = win32file.GetDriveType(drive_path)
+                if drive_type == win32file.DRIVE_CDROM:
+                    import glob
+                    file_trovati = glob.glob(f'{drive_path}*.cda')
+                    if file_trovati:
+                        drives.append(letter)
+            except:
+                # Fallback: aggiungi tutti i drive trovati
+                drives.append(letter)
+    return drives

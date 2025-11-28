@@ -369,8 +369,15 @@ class CDinfo:
 
                     # Tracce (se disponibili)
                     if 'medium-list' in release:
-                        info['tracks'] = []
+                        info['mediums'] = []
                         for medium in release['medium-list']:
+                            id = medium['disc-list'][0]['id'] if medium['disc-list'] else 0
+                            m_info = {
+                                'id': id,
+                                'title': medium.get('title', release['title']),
+                                'tracks': []
+                            }
+
                             if 'track-list' in medium:
                                 for track in medium['track-list']:
                                     recording = track.get('recording', 'N/A')
@@ -388,7 +395,8 @@ class CDinfo:
                                                 track_artists.append(artist_credit['artist']['name'])
                                         track_info['artists'] = track_artists
 
-                                    info['tracks'].append(track_info)
+                                    m_info['tracks'].append(track_info)
+                                info['mediums'].append(m_info)
 
                     release_info.append(info)
 
@@ -428,15 +436,31 @@ class CDinfo:
                 df["genere"] = f"{release['genre']}"
 
                 trk = df['tracce']
-                if 'tracks' in release and release['tracks']:
-                    for track in release['tracks']:
-                        p =  track.get('position', '')
-                        if p:
-                            p = int(p) -1
-                            tr = trk[p]
-                            title = track.get('title', 'N/A')
-                            tr['titolo'] = title
+                for medium in release['mediums']:
+                    if medium['id'] != df['id']:
+                        continue
+                    df["album"] = f"{medium['title']}"
+                    if 'tracks' in medium and medium['tracks']:
+                        for track in medium['tracks']:
+                            p =  track.get('position', '')
+                            if p:
+                                p = int(p) -1
+                                tr = trk[p]
+                                title = track.get('title', 'N/A')
+                                tr['titolo'] = title
+                        break
         return df
+
+    def cd_to_internal(self):
+        df = self.detects_tracs()
+        from mp3_tag import track
+        trks = []
+        if df:
+            for i, t in enumerate(df['tracce']):
+                tk = track(title=t.get('titolo', ''), album=df.get('album', ''), artist=df.get('artisti', ''), id=0, file='', num=t['traccia'], tm_sec=t['durata'], genre='')
+                trks.append(tk)
+        return trks
+
 
     def detects_tracs(self):
 

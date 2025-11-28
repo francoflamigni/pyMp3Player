@@ -3,7 +3,7 @@ import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox)
-from PyQt6.QtGui import QIcon, QPixmap, QCursor
+from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -12,7 +12,7 @@ from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import RadioDlg, AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
-#from bluetooth import BluetoothManager
+from utility import detect_cd_drives
 from mp3_tag import GENRE
 
 '''
@@ -178,6 +178,15 @@ class Player(FramelessDialog): #QMainWindow):
     def options(self):
         p = QCursor.pos()
         contextMenu = QMenu(self)
+        drives = detect_cd_drives()
+        cd = None
+        if drives:
+            cd = QMenu("Riproduci CD", self)
+            cd.setIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_play.png')))
+            for d in drives:
+                d1 = QAction(d, self)
+                d1.triggered.connect(lambda checked, drive_letter=d: self.open_cd(drive_letter))
+                cd.addAction(d1)
         actions = [
             AddMenuItem("Dispositivi Bluetooth", fun=self.bluetooth,
                             ico=get_resource_file(__file__, 'icone', 'Bluetooth.png')),
@@ -188,7 +197,8 @@ class Player(FramelessDialog): #QMainWindow):
             AddMenuItem("Crea PlayList", fun=self.create_playlist,
                         ico=get_resource_file(__file__, 'icone', 'create_playlist.png')
                         ),
-            AddMenuItem("Play CD", fun=self.open_cd),
+            AddMenuItem("Riproduci CD", fun=cd, enab=drives,
+                        ico=get_resource_file(__file__, 'icone', 'cd_play.png')),
 
             AddMenuItem("Background", fun=self.background, enab=not self.background_mode),
 
@@ -218,8 +228,8 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 
-    def open_cd(self):
-        self.ply.open_cd("D")
+    def open_cd(self, drive):
+        self.ply.open_cd(drive)
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 

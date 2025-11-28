@@ -24,7 +24,7 @@ def info_album(artist, album, parent=None):
 def edit_album(artist, album, dir, parent=None):
     from music_brainz import MusicInfo
     mi = MusicInfo(artist, album)
-    genneri = mi.get_genres_from_album()
+    #genneri = mi.get_genres_from_album()
     from format_convert import AudioConverter
     ac = AudioConverter(dir)
     ac.exec()

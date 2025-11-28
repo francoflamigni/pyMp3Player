@@ -607,6 +607,9 @@ class AudioConverter(QDialog):
             self.table.setItem(row, off + 3, QTableWidgetItem(audio_file.album))
             self.table.setItem(row, off + 4, QTableWidgetItem(audio_file.year))
             self.table.setItem(row, off + 5, QTableWidgetItem(audio_file.genre))
+            if row == 0 and audio_file.genre:
+                self.global_genre.setCurrentText(audio_file.genre)
+                abc = 0
 
             track = audio_file.track or audio_file.generated_track
             self.table.setItem(row, off + 6, QTableWidgetItem(track))
