@@ -6,10 +6,10 @@ import time
 from pathlib import Path
 from typing import List, Dict
 
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar, QTableWidgetItem,
-    QGroupBox, QFileDialog, QDialog, QMessageBox, QHeaderView, QSizePolicy
+    QGroupBox, QFileDialog, QDialog, QMessageBox, QHeaderView, QSizePolicy, QGridLayout, QSplitter, QWidget, QScrollArea
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from music_brainz import CDinfo
@@ -41,9 +41,10 @@ class FFmpegWorker(QThread):
         self.timer.start(1000)
 
     def watch(self):
+        TIMEOUT = 20
         if self.last_time and self.current_process:
             elapsed = time.monotonic() - self.last_time
-            if elapsed > 8:
+            if elapsed > TIMEOUT:
                 self.current_process.terminate()
 
     def stop(self):
@@ -103,6 +104,7 @@ class FFmpegWorker(QThread):
                 offset = track["start"]
                 cmd = [
                     'ffmpeg', '-y',
+                    '-v', 'debug',
                     '-ss', f'{offset}',
                     '-f', 'libcdio',
                     '-i', f'{self.cd_drive}:',
@@ -126,10 +128,12 @@ class FFmpegWorker(QThread):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, #PIPE,
                     universal_newlines=True,
+                    encoding='utf-8',
                     bufsize=1,
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
                 )
                 self.current_process = process
+
 
                 for line in iter(process.stdout.readline, ''):
                     self.last_time = time.monotonic()
@@ -140,6 +144,7 @@ class FFmpegWorker(QThread):
                     if t:
                         pc = int(100 * t / durata)
                         self.progress_track.emit(pc)
+                        print(f"{t} sec")
 
                 process.wait()  # Aspetta al massimo durata + 30 secondi
 
@@ -184,10 +189,10 @@ class CDRipperMainWindow(QDialog):
 
         self.setWindowTitle("CD Ripper con FFmpeg")
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_ripper.png')))
-        self.setGeometry(100, 100, 1000, 700)
+        self.setGeometry(100, 100, 1500, 800)
 
         self.init_ui()
-        self.detect_cd_drives()
+        self.init_cd_drives()
         self.tracks_detected.connect(self.update_tracks_table)
 
     def init_ui(self):
@@ -199,8 +204,8 @@ class CDRipperMainWindow(QDialog):
         self.setup_config_tab(main_layout)
 
         # Pannello di controllo
-        control_panel = self.create_control_panel()
-        main_layout.addWidget(control_panel)
+        #control_panel = self.create_control_panel()
+        #main_layout.addWidget(control_panel)
 
         # Barra di progresso e status
         self.progress_bar = QProgressBar()
@@ -225,7 +230,7 @@ class CDRipperMainWindow(QDialog):
 
         self.cd_drive_combo = QComboBox()
         self.refresh_drives_btn = QPushButton("Aggiorna")
-        self.refresh_drives_btn.clicked.connect(self.detect_cd_drives)
+        self.refresh_drives_btn.clicked.connect(self.init_cd_drives)
         self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
 
         cd_layout.addWidget(QLabel("Drive:"))
@@ -255,9 +260,21 @@ class CDRipperMainWindow(QDialog):
         self.quality_combo.addItems(["128k", "192k", "256k", "320k"])
         self.quality_combo.setCurrentText("192k")
 
+        self.start_btn = QPushButton("Avvia Ripping")
+        self.start_btn.clicked.connect(self.start_ripping)
+
+        self.stop_btn = QPushButton("Ferma")
+        self.stop_btn.clicked.connect(self.stop_ripping)
+        self.stop_btn.setEnabled(False)
+        self.eject_btn = QPushButton("Espelli")
+        self.eject_btn.clicked.connect(self.eject)
+
         quality_layout.addWidget(QLabel("Qualità MP3:"))
         quality_layout.addWidget(self.quality_combo)
         quality_layout.addStretch()
+        quality_layout.addWidget(self.start_btn)
+        quality_layout.addWidget(self.stop_btn)
+        quality_layout.addWidget(self.eject_btn)
 
         output_layout.addLayout(dir_layout)
         output_layout.addLayout(quality_layout)
@@ -266,37 +283,70 @@ class CDRipperMainWindow(QDialog):
 
         # Gruppo Metadata
         metadata_group = QGroupBox("Informazioni Album")
-        metadata_layout = QVBoxLayout(metadata_group)
+        #metadata_layout = QVBoxLayout(metadata_group)
+        metadata_layout = QGridLayout()
 
         # Ricerca automatica
-        search_layout = QHBoxLayout()
+        #wi = QWidget()
+        search_layout = QVBoxLayout(metadata_group)
+
         self.artist_edit = QLineEdit()
         self.album_edit = QLineEdit()
         self.anno_edit = QLineEdit()
         self.genere_edit = QLineEdit()
+
         self.search_by_artist_button = QPushButton(self)
         self.search_by_artist_button.setText("Cerca")
         self.search_by_artist_button.clicked.connect(self.detect_tracks_byartist)
 
 
-        search_layout.addWidget(QLabel("Artista:"))
-        search_layout.addWidget(self.artist_edit)
-        search_layout.addWidget(QLabel("Album:"))
-        search_layout.addWidget(self.album_edit)
-        search_layout.addWidget(QLabel("Anno:"))
-        search_layout.addWidget(self.anno_edit)
-        search_layout.addWidget(QLabel("Genere:"))
-        search_layout.addWidget(self.genere_edit)
+        self.cover = QLabel()
+        self.cover.setStyleSheet("""
+            QLabel {
+                /* Definisce il bordo: Spessore | Stile | Colore */
+                border: 2px solid blue; 
+
+                /* Arrotonda gli angoli (opzionale) */
+                border-radius: 5px; 
+
+                /* Aggiunge del padding interno per separare il testo dal bordo (opzionale) */
+                padding: 5px;
+            }
+        """)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumWidth(250)
+        scroll_area.setMaximumWidth(250)
+        scroll_area.setWidget(self.cover)
+        scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        metadata_layout.addWidget(QLabel("Artista:"), 0, 0)
+        metadata_layout.addWidget(self.artist_edit, 0, 1)
+        metadata_layout.addWidget(QLabel("Album:"), 1, 0)
+        metadata_layout.addWidget(self.album_edit, 1, 1)
+        metadata_layout.addWidget(QLabel("Anno:"), 2, 0)
+        metadata_layout.addWidget(self.anno_edit, 2, 1)
+        metadata_layout.addWidget(QLabel("Genere:"), 3, 0)
+        metadata_layout.addWidget(self.genere_edit, 3, 1)
+
+        search_layout.addLayout(metadata_layout)
         search_layout.addWidget(self.search_by_artist_button)
+        search_layout.addWidget(self.cover)
 
-        metadata_layout.addLayout(search_layout)
 
-        layout.addWidget(metadata_group)
+        #wi.setLayout(search_layout)
+
+        #metadata_layout.addLayout(search_layout)
+        #metadata_layout.addLayout(metadata_layout)
+        sp = QSplitter(Qt.Orientation.Horizontal)
+        sp.addWidget(metadata_group)
+
+        #layout.addWidget(metadata_group)
 
         # Tabella tracce
         from utility import ACTableWidget
         self.tracks_table = ACTableWidget()
-        h_labels = ["Seleziona", "N°", "Titolo", "Artista", "Anno", "Genre", "Durata"]
+        h_labels = ["Seleziona", "N°", "Titolo", "Artista", "Anno", "Genere", "Durata"]
         self.tracks_table.setColumnCount(len(h_labels))
         self.tracks_table.setHorizontalHeaderLabels(h_labels)
 
@@ -308,54 +358,23 @@ class CDRipperMainWindow(QDialog):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        sp.addWidget( self.tracks_table)
+        sp.setSizes([200, 1100])
 
-        layout.addWidget(self.tracks_table)
-
-    def create_control_panel(self):
-        """Crea il pannello di controllo"""
-        panel = QGroupBox("Controlli")
-        layout = QHBoxLayout(panel)
-
-        self.start_btn = QPushButton("Avvia Ripping")
-        self.start_btn.clicked.connect(self.start_ripping)
-
-        self.stop_btn = QPushButton("Ferma")
-        self.stop_btn.clicked.connect(self.stop_ripping)
-        self.stop_btn.setEnabled(False)
-
-        layout.addWidget(self.start_btn)
-        layout.addWidget(self.stop_btn)
-        layout.addStretch()
-
-        return panel
+        layout.addWidget(sp, stretch=1) #self.tracks_table)
 
     def play(self):
         sel = self.cd_drive_combo.currentText()
         self.play_signal.emit(sel)
 
-    def detect_cd_drives(self):
+    def init_cd_drives(self):
         from utility import detect_cd_drives
         sel = self.cd_drive_combo.currentText()
         self.cd_drive_combo.currentIndexChanged.disconnect(self.detect_tracks)
-        """Rileva i drive CD disponibili"""
         self.cd_drive_combo.clear()
+        """Rileva i drive CD disponibili"""
         for letter in detect_cd_drives():
             self.cd_drive_combo.addItem(letter)
-        '''
-        # Su Windows, cerca drive da D a Z
-        for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
-            drive_path = f"{letter}:\\"
-            if os.path.exists(drive_path):
-                try:
-                    # Verifica se è un drive CD
-                    import win32file
-                    drive_type = win32file.GetDriveType(drive_path)
-                    if drive_type == win32file.DRIVE_CDROM:
-                        self.cd_drive_combo.addItem(letter)
-                except:
-                    # Fallback: aggiungi tutti i drive trovati
-                    self.cd_drive_combo.addItem(letter)
-        '''
         self.cd_drive_combo.setCurrentText(sel)
         self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
         self.detect_tracks()
@@ -373,7 +392,8 @@ class CDRipperMainWindow(QDialog):
     def detect_tracks(self):
         drive = self.cd_drive_combo.currentText()
         cdi = CDinfo(drive)
-        df = cdi.detects_tracs()
+        df = cdi.detects_tracks()
+        self.cover_download(df.get('idr', ''))
         self.update_tracks_table(df)
         self.start_btn.setEnabled(True)
 
@@ -382,7 +402,7 @@ class CDRipperMainWindow(QDialog):
         album = self.album_edit.text()
         if artist and album:
             cdi = CDinfo(self.cd_drive_combo.currentText())
-            df = cdi.detects_tracs()
+            df = cdi.detects_tracks()
             res = cdi.search_musicbrainz_by_metadata(artist, album)
             if not res:
                 return
@@ -540,6 +560,7 @@ class CDRipperMainWindow(QDialog):
         # Aggiorna UI
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.eject_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
         # Avvia thread
@@ -551,6 +572,13 @@ class CDRipperMainWindow(QDialog):
         if self.ffmpeg_worker:
             self.ffmpeg_worker.stop()
             self.status_label.setText("Arresto in corso...")
+
+    def eject(self):
+        from utility import eject_cd
+        drive_to_eject = self.cd_drive_combo.currentText()
+        if drive_to_eject:
+            eject_cd(drive_to_eject)
+
 
     def on_track_finished(self, track_num: int, filename: str):
         """Chiamato quando una traccia è completata"""
@@ -572,6 +600,7 @@ class CDRipperMainWindow(QDialog):
         """Chiamato quando il ripping è completato"""
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.eject_btn.setEnabled(True)
 
         is_interrupted = self.progress_bar.value() < 100
         if not is_interrupted:
@@ -586,4 +615,77 @@ class CDRipperMainWindow(QDialog):
         self.status_label.setText(status_text)
         self.status_progress.setText("")
 
-        #QMessageBox.information(self, "Completato", "Ripping del CD completato con successo!")
+    def cover_download(self, id):
+        from music_brainz import CoverArtWorker
+        """Avvia la routine di download in un thread separato."""
+
+        # ⚠️ Esempio di dati che dovresti ottenere altrove (es. da musicbrainzngs)
+        test_release_id = id
+        temp_save_path = r"c:\tmp\cover1.jpg"
+
+        self.status_label.setText("Download in corso...")
+
+        # 1. Crea il Thread
+        self.thread = QThread()
+
+        # 2. Crea il Worker e sposta nel Thread
+        self.worker = CoverArtWorker(test_release_id, temp_save_path)
+        self.worker.moveToThread(self.thread)
+
+        # 3. Collega i segnali
+        self.thread.started.connect(self.worker.run)
+        self.worker.signals.finished.connect(self.on_download_success)
+        self.worker.signals.error.connect(self.on_download_error)
+
+        # Collega la pulizia all'uscita del worker
+        self.worker.signals.finished.connect(self.thread.quit)
+        self.worker.signals.error.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.signals.finished.connect(self.worker.deleteLater)
+        self.worker.signals.error.connect(self.worker.deleteLater)
+
+        # 4. Avvia il thread
+        self.thread.start()
+
+    def on_download_success(self, file_path):
+        """Gestisce il segnale di successo (nel thread principale)."""
+        self.status_label.setText(f"SUCCESS: Copertina salvata in {file_path}")
+        self.display_cover(file_path)
+        #self.download_button.setEnabled(True)
+
+        # A questo punto puoi chiamare il tuo processo FFmpeg con 'file_path'
+
+    def on_download_error(self, message):
+        """Gestisce il segnale di errore (nel thread principale)."""
+        #self.status_label.setText(f"ERRORE: {message}")
+        #self.download_button.setEnabled(True)
+
+        # Pulizia: rimuovi eventuali file parziali o temporanei
+        try:
+            os.remove(self.worker.save_path)
+            self.cover.setPixmap(QPixmap())
+        except:
+            pass
+
+    def display_cover(self, cover_file):
+        """Mostra la copertina nell'area dedicata."""
+        if cover_file:
+            try:
+                pixmap = QPixmap()
+                pixmap.load(cover_file)
+
+                # Scala l'immagine mantenendo le proporzioni
+                self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+                self.cover.setText("")
+                #self.remove_cover_button.setEnabled(True)
+
+            except Exception as e:
+                print(f"Errore visualizzazione copertina: {e}")
+                self.covel.setText("Errore caricamento copertina")
+                self.cover.setPixmap(QPixmap())
+                #self.remove_cover_button.setEnabled(False)
+        else:
+            self.cover.setText("Nessuna copertina")
+            self.cover.setPixmap(QPixmap())
+            #self.remove_cover_button.setEnabled(False)
+

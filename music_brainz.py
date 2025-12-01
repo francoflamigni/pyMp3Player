@@ -348,6 +348,7 @@ class CDinfo:
 
                 release_info = []
                 for release in releases:
+                    #download_cover_art(release['id'], r"c:\tmp\cover.jpg")
                     info = {
                         'id': release['id'],
                         'title': release.get('title', 'N/A'),
@@ -418,6 +419,7 @@ class CDinfo:
             print(f"Errore ricerca: {e}")
             return None
 
+    ''' Ricerca metadati sul cd artitsta, titolo e titoli tracce '''
     def detects_info(self, df):
         mb_info = self.search_musicbrainz_by_discid(df['id'])
 
@@ -427,6 +429,7 @@ class CDinfo:
             for i, release in enumerate(mb_info['releases'], 1):
                 df["album"] = f"{release['title']}"
                 df["artisti"] =  f"{', '.join([a['name'] for a in release['artists']])}"
+                df['idr'] = f"{release['id']}"
 
                 try:
                     anno = datetime.strptime(release['date'], "%Y-%m-%d").year
@@ -452,7 +455,7 @@ class CDinfo:
         return df
 
     def cd_to_internal(self):
-        df = self.detects_tracs()
+        df = self.detects_tracks()
         from mp3_tag import track
         trks = []
         if df:
@@ -461,24 +464,30 @@ class CDinfo:
                 trks.append(tk)
         return trks
 
-
-    def detects_tracs(self):
+    ''' individua il numero di tracce, la loro durata e l'offset iniziale se disponibili anche i titoli'''
+    def detects_tracks(self):
 
         MusicInfo.setup_musicbrainz()
         disc_info = self.read_disc_id(f"{self.drive}:")
         if not disc_info:
             return {}
 
+        tot_sec = disc_info['sectors']
         trks = []
         total_length = float(disc_info['length'])
+        pre_gap = 0
         for i, track in enumerate(disc_info['track_details']):
-            start = float(track['offset']) / 75.
-            # Per l'ultima traccia, calcola la durata dal totale
+            if i == 0:
+                pre_gap = float(track['offset'])
+            start = (float(track['offset']) - pre_gap) / 75.
+            lenght = float(track['length']) / 75.
             if i == len(disc_info['track_details']) - 1:
-                lenght = total_length - start
-            else:
-                lenght = float(track['length']) / 75.
-            #lenght = float(track['length']) / 75.
+                sec_utili = tot_sec - pre_gap
+                dur_tot = int(sec_utili / 75.)
+                lenght = int(lenght)
+                start = dur_tot - lenght
+                a = 0
+
             trk = {
                 "traccia": f"{track['number']}",
                 "durata": lenght,
@@ -492,6 +501,7 @@ class CDinfo:
             "durata totale":  f"{disc_info['length']}",
             "tracce": trks
         }
+        # ricerca titoli ed artista
         return self.detects_info(df)
 
 
@@ -541,6 +551,7 @@ class CDinfo:
                     )
 
                     rel = detailed_release['release']
+                    #download_cover_art(rel['id'], r"c:\tmp.cover.jpg")
                     info = {
                         'id': rel['id'],
                         'title': rel.get('title', 'N/A'),
@@ -602,10 +613,85 @@ class CDinfo:
             print(f"Errore ricerca: {e}")
             return None
 
+from PyQt6.QtCore import QObject, pyqtSignal
+class CoverArtSignals(QObject):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+class CoverArtWorker(QObject):
+    def __init__(self, release_id, save_path, parent=None):
+        super().__init__(parent)
+        self.signals = CoverArtSignals()
+        self.release_id = release_id
+        self.save_path = save_path
+
+    def run(self):
+        import requests
+        """Metodo che esegue il lavoro bloccante (download)."""
+
+        # 1. Costruisce l'URL CAA
+        caa_url = f"https://coverartarchive.org/release/{self.release_id}/front"
+
+        try:
+            # 2. Effettua la richiesta HTTP
+            # Usiamo un timeout per prevenire blocchi indefiniti
+            response = requests.get(caa_url, stream=True, timeout=10)
+
+            # Se la richiesta fallisce (es. 404 Not Found se manca la copertina)
+            if response.status_code != 200:
+                self.signals.error.emit(
+                    f"Copertina non trovata (Status Code: {response.status_code})."
+                )
+                return
+
+            # 3. Salva il contenuto binario nel file
+            with open(self.save_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            # 4. Successo: emetti il percorso del file salvato
+            self.signals.finished.emit(self.save_path)
+
+        except requests.exceptions.RequestException as e:
+            # 5. Errore: emetti il messaggio d'errore
+            self.signals.error.emit(
+                f"Errore di rete durante il download: {e}"
+            )
+        except Exception as e:
+            self.signals.error.emit(
+                f"Errore imprevisto: {e}"
+            )
+
+'''
+def download_cover_art(release_id, save_path):
+
+    """Scarica la copertina frontale di un rilascio MusicBrainz."""
+
+    # URL per la copertina frontale a dimensione piena (front)
+    caa_url = f"https://coverartarchive.org/release/{release_id}/front"
+
+    try:
+        # 1. Effettua la richiesta HTTP (CAA reindirizzerà all'immagine effettiva)
+        response = requests.get(caa_url, stream=True, timeout=10)
+        response.raise_for_status()  # Solleva un errore per codici 4xx/5xx
+
+        # 2. Salva il contenuto binario nel file
+        with open(save_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        print(f"Copertina scaricata con successo in: {save_path}")
+        return True
+
+    except requests.exceptions.RequestException as e:
+        print(f"Errore nello scaricare la copertina: {e}")
+        # Gestisci il caso in cui non ci sia copertina (restituisce 404)
+        return False
+'''
 
 
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon
 
 

@@ -293,3 +293,53 @@ def detect_cd_drives():
                 # Fallback: aggiungi tutti i drive trovati
                 drives.append(letter)
     return drives
+
+
+def eject_cd(drive_letter):
+    import ctypes
+    import time
+    """
+    Espelle il CD/DVD usando l'API di Windows (winmm.dll).
+    :param drive_letter: La lettera del drive da espellere (es. 'D', 'E').
+    """
+
+    # 1. Carica la funzione API di Windows
+    # La funzione mciSendString invia comandi stringa al Media Control Interface
+    mciSendString = ctypes.windll.winmm.mciSendStringA
+
+    # 2. Definisce il nome alias dell'unità per l'API MCI
+    device_alias = f"cd_{drive_letter}"
+
+    # 3. Costruisce e invia i comandi
+
+    # A) Apri/assegna l'unità CD all'alias
+    # Comando: "open [drive_letter]: type cdaudio alias [alias]"
+    open_command = f"open {drive_letter}: type cdaudio alias {device_alias}"
+
+    # B) Espelli l'unità
+    # Comando: "set [alias] door open"
+    eject_command = f"set {device_alias} door open"
+
+    # C) Chiudi/rilascia l'unità dall'alias
+    # Comando: "close [alias]"
+    close_command = f"close {device_alias}"
+
+    # Esecuzione dei comandi
+    try:
+        # Apri
+        mciSendString(open_command.encode('ascii'), None, 0, None)
+        time.sleep(0.5)  # Breve pausa
+
+        # Espelli
+        error_code = mciSendString(eject_command.encode('ascii'), None, 0, None)
+
+        # Verifica se l'espulsione è fallita (es. se non c'è disco)
+        if error_code != 0:
+            print(f"Attenzione: Impossibile espellere l'unità {drive_letter}: (Codice errore: {error_code}).")
+            # Potresti aggiungere qui una gestione più dettagliata dell'errore
+
+        # Chiudi/Rilascia
+        mciSendString(close_command.encode('ascii'), None, 0, None)
+
+    except Exception as e:
+        print(f"Errore durante l'accesso al drive {drive_letter}: {e}")

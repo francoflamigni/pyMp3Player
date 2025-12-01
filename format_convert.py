@@ -57,8 +57,11 @@ class AudioFile:
             if self.is_mp3:
                 # Per MP3, usa mutagen per info di base
                 mp3_file = MP3(str(self.file_path))
-                self.duration = f"{mp3_file.info.length:.1f}s"
-                self.format_info = f"MP3 - {mp3_file.info.bitrate}kbps"
+                self.duration = f"{mp3_file.info.length:.1f}"
+                bitrate = float(mp3_file.info.bitrate)
+                if bitrate > 1000:
+                    bitrate = bitrate // 1000
+                self.format_info = f"MP3 - {bitrate:.0f} kbps"
             else:
                 # Per altri formati, usa soundfile
                 info = sf.info(str(self.file_path))
@@ -609,13 +612,18 @@ class AudioConverter(QDialog):
             self.table.setItem(row, off + 5, QTableWidgetItem(audio_file.genre))
             if row == 0 and audio_file.genre:
                 self.global_genre.setCurrentText(audio_file.genre)
-                abc = 0
 
             track = audio_file.track or audio_file.generated_track
             self.table.setItem(row, off + 6, QTableWidgetItem(track))
 
             # Durata e formato (non editabili)
-            duration_item = QTableWidgetItem(audio_file.duration)
+            duration = audio_file.duration
+            try:
+                duration = float(duration)
+                duration = f"{int(duration // 60)}:{int(duration % 60):02d}"
+            except:
+                pass
+            duration_item = QTableWidgetItem(duration)
             duration_item.setFlags(duration_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, off + 7, duration_item)
 
@@ -626,7 +634,6 @@ class AudioConverter(QDialog):
             # Tipo (MP3 o da convertire)
             tipo_item = QTableWidgetItem("MP3 (solo tag)" if audio_file.is_mp3 else "Da convertire")
             tipo_item.setFlags(tipo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-           # self.table.setItem(row, 10, tipo_item)
 
         if self.audio_files:
             self.display_cover(self.audio_files[0].album_art)
