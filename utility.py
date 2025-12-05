@@ -4,7 +4,7 @@ import os
 #import wikipedia
 import base64
 import requests
-from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu
 from enum import Enum
 
@@ -343,3 +343,91 @@ def eject_cd(drive_letter):
 
     except Exception as e:
         print(f"Errore durante l'accesso al drive {drive_letter}: {e}")
+
+
+class CDMonitor(QObject):
+    """
+    Monitora lo stato del lettore CD su Windows e emette segnali quando viene aperto o chiuso.
+    """
+    cd_aperto = pyqtSignal()
+    cd_chiuso = pyqtSignal()
+
+    def __init__(self, intervallo_ms=1000, lettera_drive='D'):
+        super().__init__()
+        self.lettera_drive = lettera_drive
+        self.drive_path = f"{lettera_drive}:\\"
+        self.stato_precedente = None
+        self.drives = detect_cd_drives()
+
+        # Configura il timer
+        self.timer = QTimer()
+        self.timer.setInterval(intervallo_ms)
+        self.timer.timeout.connect(self._verifica_stato)
+
+    def _verifica_stato(self):
+        """Verifica lo stato corrente del lettore CD."""
+        drives = detect_cd_drives()
+        if len(drives) > len(self.drives):
+            self.drives = drives
+            self.cd_chiuso.emit()
+            return
+        elif len(drives) < len(self.drives):
+            self.cd_aperto.emit()
+            self.drives = drives
+            return
+
+
+        stato_corrente = self._leggi_stato_cd()
+
+        # Emetti segnale solo se lo stato è cambiato
+        if self.stato_precedente is not None and stato_corrente != self.stato_precedente:
+            if stato_corrente:
+                self.cd_aperto.emit()
+            else:
+                self.cd_chiuso.emit()
+
+        self.stato_precedente = stato_corrente
+
+    def _leggi_stato_cd(self):
+        """
+        Legge lo stato del lettore CD usando le API Windows.
+        Ritorna True se aperto, False se chiuso.
+        """
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+
+            # Verifica che sia un drive CD-ROM
+            drive_type = kernel32.GetDriveTypeW(self.drive_path)
+            if drive_type != 5:  # 5 = DRIVE_CDROM
+                return False
+
+            # Tenta di leggere le informazioni del volume
+            # Se fallisce, il vassoio è probabilmente aperto
+            result = kernel32.GetVolumeInformationW(
+                self.drive_path,
+                None, 0,  # Volume name buffer
+                None,  # Volume serial number
+                None,  # Maximum component length
+                None,  # File system flags
+                None, 0  # File system name buffer
+            )
+
+            # result == 0 significa errore (vassoio aperto o nessun disco)
+            # result != 0 significa successo (vassoio chiuso con disco)
+            return result == 0
+
+        except Exception as e:
+            # In caso di errore, mantiene lo stato precedente
+            return self.stato_precedente if self.stato_precedente is not None else False
+
+    def start(self):
+        """Avvia il monitoraggio del lettore CD."""
+        # Inizializza lo stato corrente
+        self.stato_precedente = self._leggi_stato_cd()
+        self.timer.start()
+
+    def stop(self):
+        """Ferma il monitoraggio del lettore CD."""
+        self.timer.stop()
+

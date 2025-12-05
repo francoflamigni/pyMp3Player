@@ -485,7 +485,7 @@ class CDinfo:
                 sec_utili = tot_sec - pre_gap
                 dur_tot = int(sec_utili / 75.)
                 lenght = int(lenght)
-                start = dur_tot - lenght
+                start = dur_tot - lenght - 0.5
                 a = 0
 
             trk = {

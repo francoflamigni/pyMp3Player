@@ -24,7 +24,7 @@ OutputBaseFilename={#MyAppName}_{#MyAppVersion}.{#MyReleaseVersion}_setup
 
 Compression=lzma
 SolidCompression=yes
-UninstallDisplayIcon=.\icone\player.ico
+UninstallDisplayIcon={app}\{#MyAppName}\{#MyAppExeName}
 UsePreviousAppDir=yes
 WizardImageStretch=no
 SetupIconFile=.\icone\player.ico

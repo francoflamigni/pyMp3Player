@@ -15,6 +15,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from music_brainz import CDinfo
 
 from pyMyLib.utils import get_resource_file
+from utility import CDMonitor
 
 class FFmpegWorker(QThread):
     """Worker thread per le operazioni ffmpeg"""
@@ -187,13 +188,18 @@ class CDRipperMainWindow(QDialog):
         self.ffmpeg_worker = None
         self.tracks_data = []
 
-        self.setWindowTitle("CD Ripper con FFmpeg")
+        self.setWindowTitle("CD Ripper")
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_ripper.png')))
         self.setGeometry(100, 100, 1500, 800)
 
         self.init_ui()
         self.init_cd_drives()
         self.tracks_detected.connect(self.update_tracks_table)
+
+        self.monitor = CDMonitor(500, self.cd_drive_combo.currentText())
+        self.monitor.cd_aperto.connect(self.on_cd_aperto)
+        self.monitor.cd_chiuso.connect(self.on_cd_chiuso)
+        self.monitor.start()
 
     def init_ui(self):
         """Inizializza l'interfaccia utente"""
@@ -231,11 +237,14 @@ class CDRipperMainWindow(QDialog):
         self.cd_drive_combo = QComboBox()
         self.refresh_drives_btn = QPushButton("Aggiorna")
         self.refresh_drives_btn.clicked.connect(self.init_cd_drives)
+        self.eject_btn = QPushButton("Espelli")
+        self.eject_btn.clicked.connect(self.eject)
         self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
 
         cd_layout.addWidget(QLabel("Drive:"))
         cd_layout.addWidget(self.cd_drive_combo)
         cd_layout.addWidget(self.refresh_drives_btn)
+        cd_layout.addWidget(self.eject_btn)
 
         layout.addWidget(cd_group)
 
@@ -266,15 +275,13 @@ class CDRipperMainWindow(QDialog):
         self.stop_btn = QPushButton("Ferma")
         self.stop_btn.clicked.connect(self.stop_ripping)
         self.stop_btn.setEnabled(False)
-        self.eject_btn = QPushButton("Espelli")
-        self.eject_btn.clicked.connect(self.eject)
+
 
         quality_layout.addWidget(QLabel("Qualità MP3:"))
         quality_layout.addWidget(self.quality_combo)
         quality_layout.addStretch()
         quality_layout.addWidget(self.start_btn)
         quality_layout.addWidget(self.stop_btn)
-        quality_layout.addWidget(self.eject_btn)
 
         output_layout.addLayout(dir_layout)
         output_layout.addLayout(quality_layout)
@@ -375,10 +382,18 @@ class CDRipperMainWindow(QDialog):
         """Rileva i drive CD disponibili"""
         for letter in detect_cd_drives():
             self.cd_drive_combo.addItem(letter)
+
         self.cd_drive_combo.setCurrentText(sel)
+        if self.cd_drive_combo.count() > 0 and self.cd_drive_combo.currentText() != sel:
+            self.cd_drive_combo.setCurrentIndex(0)
+            self.detect_tracks()
+            self.start_btn.setEnabled(True)
+        if self.cd_drive_combo.count() == 0:
+            self.clear_all()
+            self.start_btn.setEnabled(False)
         self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
-        self.detect_tracks()
-        self.start_btn.setEnabled(True)
+        #self.detect_tracks()
+        #self.start_btn.setEnabled(True)
 
     def browse_output_dir(self):
         """Seleziona directory di output"""
@@ -500,6 +515,24 @@ class CDRipperMainWindow(QDialog):
         dd = self.detect_tracks_byartist()
         a = 0
 
+    def on_cd_aperto(self):
+        self.init_cd_drives()
+
+    def on_cd_chiuso(self):
+        self.init_cd_drives()
+
+    def closeEvent(self, event):
+        self.monitor.stop()
+        event.accept()
+
+    def clear_all(self):
+        self.tracks_table.setRowCount(0)
+        self.artist_edit.setText("")
+        self.album_edit.setText("")
+        self.anno_edit.setText("")
+        self.genere_edit.setText("")
+        self.display_cover('')
+
     def start_ripping(self):
         """Avvia il processo di ripping"""
         # Validazioni
@@ -564,6 +597,7 @@ class CDRipperMainWindow(QDialog):
         self.progress_bar.setValue(0)
 
         # Avvia thread
+        self.monitor.stop()
         self.t0 = time.monotonic()
         self.ffmpeg_worker.start()
 
@@ -572,6 +606,7 @@ class CDRipperMainWindow(QDialog):
         if self.ffmpeg_worker:
             self.ffmpeg_worker.stop()
             self.status_label.setText("Arresto in corso...")
+        self.monitor.start()
 
     def eject(self):
         from utility import eject_cd
@@ -594,6 +629,7 @@ class CDRipperMainWindow(QDialog):
     def on_error(self, error_msg: str):
         """Chiamato in caso di errore"""
         QMessageBox.critical(self, "Errore", error_msg)
+        self.monitor.start()
 
     def on_ripping_finished(self):
         te = time.monotonic()
@@ -614,6 +650,7 @@ class CDRipperMainWindow(QDialog):
 
         self.status_label.setText(status_text)
         self.status_progress.setText("")
+        self.monitor.start()
 
     def cover_download(self, id):
         from music_brainz import CoverArtWorker
