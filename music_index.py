@@ -1,3 +1,4 @@
+from profiler import checkpoint
 import os
 
 import copy
@@ -178,7 +179,9 @@ class MusicIndexDlg(QDialog):
 
         v.addLayout(h0)
         v.addWidget(splitter2)
+        checkpoint("Prima Init")
         self.res = self.music.init(self.last_folder)
+        checkpoint("Dopo Init")
         if self.res == self.music.INDEX_LOADED:
             self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()

@@ -1,12 +1,25 @@
+from profiler import checkpoint
+checkpoint("Start")
 import io
 import sys
 import os
-#import wikipedia
+checkpoint("Dopo io sys os")
 import base64
-import requests
+#import requests
+checkpoint("Dopo base64")
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu
+checkpoint("Dopo qt")
 from enum import Enum
+checkpoint("End")
+
+def close_splash():
+    import importlib
+    if '_PYI_SPLASH_IPC' in os.environ and importlib.util.find_spec("pyi_splash"):
+        import pyi_splash
+        #pyi_splash.update_text('UI Loaded ...')
+        pyi_splash.close()
+        #log.info('Splash screen closed.')
 
 def qpixmap_to_bytes(pixmap):
     from PIL import ImageQt
@@ -157,6 +170,7 @@ class WikipediaWorker(QRunnable):
     # --- Funzioni di supporto all'interno della classe Worker ---
 
     def _get_image_url(self):
+        import requests
         """Ottiene l'URL dell'immagine da Wikipedia (codice che funziona ora)."""
         # [Codice esatto che ti ho fornito in precedenza per l'URL]
         S = requests.Session()
@@ -179,6 +193,8 @@ class WikipediaWorker(QRunnable):
         return None
 
     def _get_base64_image_tag(self, url):
+        import requests
+        #import base64
         """Scarica l'immagine e la converte in un tag <img> Base64."""
         try:
             R = requests.get(url, headers={"User-Agent": self.USER_AGENT}, timeout=5)

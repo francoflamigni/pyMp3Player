@@ -1,18 +1,32 @@
+from profiler import checkpoint
+checkpoint("Inizio")
+
 import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox)
-from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction
+from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
+from PyQt6.QtCore import Qt, QRect
+
+checkpoint("Dopo QT")
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
+checkpoint("Dopo qframelesswindow")
 
 from pyMyLib.qtUtils import informMessage, AddMenuItem, set_application_icon
+checkpoint("Dopo pyMyLib q")
 from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
+checkpoint("Dopo pyMyLib")
+
 from dialogs import RadioDlg, AppConfig
+checkpoint("Dopo dialogs")
 from music_index import MusicIndexDlg
+checkpoint("Dopo music_index")
 from music_player import MusicPlayerDlg
-from utility import detect_cd_drives
+checkpoint("Dopo music_player")
+from utility import detect_cd_drives, close_splash
+checkpoint("Dopo utility")
 from mp3_tag import GENRE
 
 '''
@@ -46,30 +60,46 @@ class Player(FramelessDialog): #QMainWindow):
         os.environ["PATH"] += os.pathsep + str(get_resource_path_pathlib(__file__, 'exe'))
 
         self.ini = iniConf(AppConfig)
+        checkpoint("Dopo iniConf")
 
+        '''
         self.splash = None
-
+        checkpoint("Prima splash")
         f = get_resource_file(__file__, 'icone',  'splash.bmp')
         if os.path.isfile(f):
-            self.splash = QSplashScreen(QPixmap(f))
+            self.splash = create_fast_splash_pyqt6()
+            checkpoint("prima QPixmap")
+            #self.splash = QSplashScreen(QPixmap(f))
+            checkpoint("Dopo splash")
             self.splash.show()
+            checkpoint("Dopo process")
+        '''
 
         self.background_mode = False
+        checkpoint("create_ui")
         self.create_ui()
 
-        if self.splash is not None:
-            self.splash.close()
+        checkpoint("close splash")
+        close_splash()
+        #if self.splash is not None:
+        #    self.splash.close()
 
         self.show()
+        checkpoint("dopo show")
 
     def show(self):
         QMainWindow.show(self)
+        self.raise_()  # Porta in primo piano
+        self.activateWindow()  # Attiva la finestra
+        self.setWindowState(
+            self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         QApplication.processEvents()
         sz = self.dlg.prog.size()
         sz.setWidth(100)
         self.dlg.prog.setFixedSize(sz)
 
         self.dlg.process()
+        checkpoint("Attivo")
 
     def createTabBar(self):
         tool = QToolBar()
@@ -163,14 +193,17 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab = QStackedWidget(self)
 
         self.dlg = MusicIndexDlg(self)
+        checkpoint("Dopo MusicIndexDlg")
         self.dlg.play_signal.connect(self.open_file)
         self.tab.addWidget(self.dlg)
 
         rd = RadioDlg(self)
+        checkpoint("Dopo RadioDlg")
         rd.radio_signal.connect(self.open_radio)
         self.tab.addWidget(rd)
 
         self.ply = MusicPlayerDlg(self)
+        checkpoint("Dopo MusicPlayerDlg")
         self.tab.addWidget(self.ply)
 
         v.addWidget(self.tab)
@@ -325,6 +358,5 @@ class Player(FramelessDialog): #QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     set_application_icon(app, f'Mysoft.{AppConfig}.v1', get_resource_file(__file__, 'icone', 'player.ico'))
-    #app.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'player.ico')))
     player = Player()
     sys.exit(app.exec())
