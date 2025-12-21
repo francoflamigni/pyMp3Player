@@ -9,23 +9,21 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
                              QAbstractItemView, QMenu, QToolTip)
 
 from mp3_tag import Music
-#from music_brainz import brainz
 
 from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
 from pyMyLib.utils import iniConf, get_resource_file
 
 from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
-#from utility import WikipediaWorker
-#from myShazam import myShazam
+
 
 def info_album(artist, album, parent=None):
+    #from music_brainz import CDinfo
+    #cdi = CDinfo()
+    #df = cdi.detect_info_by_metadata(None, artist, album)
     from music_brainz import brainz
     brainz(artist, album)
 
 def edit_album(artist, album, dir, parent=None):
-    from music_brainz import MusicInfo
-    mi = MusicInfo(artist, album)
-    #genneri = mi.get_genres_from_album()
     from format_convert import AudioConverter
     ac = AudioConverter(dir)
     ac.exec()
@@ -179,9 +177,7 @@ class MusicIndexDlg(QDialog):
 
         v.addLayout(h0)
         v.addWidget(splitter2)
-        checkpoint("Prima Init")
         self.res = self.music.init(self.last_folder)
-        checkpoint("Dopo Init")
         if self.res == self.music.INDEX_LOADED:
             self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
@@ -242,7 +238,7 @@ class MusicIndexDlg(QDialog):
             self.artists.clearSelection()
             self.albums.clear()
             return
-        items = self.artists.findItems(txt, Qt.MatchContains)
+        items = self.artists.findItems(txt, Qt.MatchFlag.MatchContains)
         if items:
             items[0].setSelected(True)
             self.artists.scrollToItem(items[0])

@@ -1,29 +1,22 @@
 from profiler import checkpoint
-checkpoint("Start")
 
 import os
 import time
 from pyMyLib.utils import iniConf, get_resource_path_pathlib, get_resource_file
-checkpoint("Dopo pyMyLib")
 
 vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc')) #os.path.join(os.getcwd(), 'exe/VLC')
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
-checkpoint("Dopo vlc")
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
                              QFrame, QDial, QSlider, QMessageBox)
-checkpoint("Dopo qt")
 
 from pyMyLib.qtUtils import set_background, waitCursor
-checkpoint("Dopo pyMyLib q")
 
 from dialogs import lyric_song, AppConfig
-checkpoint("Dopo dialogs")
 import scrobbler
-checkpoint("Dopo scrobbler")
 
 def get_tm(secs):
     min = int(secs / 60)

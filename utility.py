@@ -1,17 +1,11 @@
 from profiler import checkpoint
-checkpoint("Start")
 import io
 import sys
 import os
-checkpoint("Dopo io sys os")
 import base64
-#import requests
-checkpoint("Dopo base64")
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu
-checkpoint("Dopo qt")
 from enum import Enum
-checkpoint("End")
 
 def close_splash():
     import importlib

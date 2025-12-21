@@ -1,7 +1,7 @@
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
-#from difflib import SequenceMatcher
+
 import time
 from datetime import datetime
 
@@ -35,9 +35,9 @@ class MusicInfo:
     def setup_musicbrainz():
         """Configure the MusicBrainz API client"""
         musicbrainzngs.set_useragent(
-            "PythonMusicInfo",
-            "0.1",
-            "https://github.com/yourusername/pythonmusicinfo"
+            "Euterpe",
+            "1.5",
+            "tuaemail@example.com"
         )
 
     '''
@@ -78,6 +78,21 @@ class MusicInfo:
         except:
             pass
         return
+
+    def get_release(self):
+        try:
+            releases = musicbrainzngs.search_releases(
+                query=f'artist:"{self.artist_name}" AND release:"{self.album_title}"',
+                offset=0,
+                limit=1
+            )
+            return [{
+                'id': r['id'],
+                'title': r.get('title')
+            } for r in releases['release-list']]
+        except:
+            return []
+        a = 0
 
     ''' ricerca gli album dato l'id di un artista '''
     def get_album(self):
@@ -158,11 +173,17 @@ class MusicInfo:
         offset = 0
         works = []
         self.finished = True
+
+        trk = self.album['tracks']
+        #query = f"arid:{self.id_artist} AND work:'{self.album['title']}'"
+        #ress = musicbrainzngs.search_works(query=query, includes=["artist-rels"], limit = limit, offset = 0)
+        a = 0
         try:
             while True:
                 result = musicbrainzngs.browse_works(
                     artist=self.id_artist,
                     includes=["release-rels", "artist-rels", "recording-rels"],
+                    #includes=["artist-rels"],
                     offset=offset,
                     limit=limit
                 )
@@ -210,6 +231,7 @@ class MusicInfo:
                 return False
         return  True
 
+    ''' testo html da info struttura '''
     def get_album_detail_string(self):
         if self.get_album_details():
             html = []
@@ -280,6 +302,18 @@ class MusicInfo:
 
         return genres_list
 
+    def get_cover_info(self, release_id):
+
+        try:
+            # Usa get_image_list di musicbrainzngs
+            image_data = musicbrainzngs.get_image_front(release_id)
+            return image_data
+        except musicbrainzngs.ResponseError:
+            return None
+        except Exception as e:
+            print(f"Errore nel recupero info copertina: {e}")
+            return None
+
 class CDinfo:
     def __init__(self, drive=''):
         self.drive = drive
@@ -296,7 +330,7 @@ class CDinfo:
             device: Percorso del dispositivo CD (None per default)
 
         Returns:
-            dict: Informazioni sul disco
+            dict: Informazioni sul disco: id, n settori offset e start di ogni traccia
         """
         try:
             # Legge il disco
@@ -348,69 +382,11 @@ class CDinfo:
 
                 release_info = []
                 for release in releases:
-                    #download_cover_art(release['id'], r"c:\tmp\cover.jpg")
-                    info = {
-                        'id': release['id'],
-                        'title': release.get('title', 'N/A'),
-                        'date': release.get('date', 'N/A'),
-                        'country': release.get('country', 'N/A'),
-                        'barcode': release.get('barcode', 'N/A'),
-                        'genre': release.get('genre', ''),
-                        'artists': []
-                    }
-
-                    # Artisti
-                    if 'artist-credit' in release:
-                        for artist_credit in release['artist-credit']:
-                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
-                                info['artists'].append({
-                                    'name': artist_credit['artist']['name'],
-                                    'id': artist_credit['artist']['id']
-                                })
-
-                    # Tracce (se disponibili)
-                    if 'medium-list' in release:
-                        info['mediums'] = []
-                        for medium in release['medium-list']:
-                            id = medium['disc-list'][0]['id'] if medium['disc-list'] else 0
-                            m_info = {
-                                'id': id,
-                                'title': medium.get('title', release['title']),
-                                'tracks': []
-                            }
-
-                            if 'track-list' in medium:
-                                for track in medium['track-list']:
-                                    recording = track.get('recording', 'N/A')
-                                    track_info = {
-                                        'position': track.get('position', 'N/A'),
-                                        'title': recording.get('title', 'N/A'),
-                                        'length': track.get('length', 'N/A')
-                                    }
-
-                                    # Artista della traccia
-                                    if 'artist-credit' in track:
-                                        track_artists = []
-                                        for artist_credit in track['artist-credit']:
-                                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
-                                                track_artists.append(artist_credit['artist']['name'])
-                                        track_info['artists'] = track_artists
-
-                                    m_info['tracks'].append(track_info)
-                                info['mediums'].append(m_info)
-
+                    info = self.decode_release(release)
                     release_info.append(info)
-
-                return {
-                    'discid': self.discid,
-                    'releases': release_info
-                }
+                return release_info
             else:
-                return {
-                    'discid': self.discid,
-                    'releases': [],
-                    'message': 'Nessun release trovato per questo DiscID'
-                }
+                return []
 
         except musicbrainzngs.WebServiceError as e:
             print(f"Errore API MusicBrainz: {e}")
@@ -420,28 +396,34 @@ class CDinfo:
             return None
 
     ''' Ricerca metadati sul cd artitsta, titolo e titoli tracce '''
-    def detects_info(self, df):
+    def detects_info_by_id(self, df):
         mb_info = self.search_musicbrainz_by_discid(df['id'])
 
-        if mb_info and mb_info['releases']:
-            print(f"Trovati {len(mb_info['releases'])} release:")
+        if mb_info:
+            self.integrateinfo(df, mb_info)
 
-            for i, release in enumerate(mb_info['releases'], 1):
-                df["album"] = f"{release['title']}"
-                df["artisti"] =  f"{', '.join([a['name'] for a in release['artists']])}"
-                df['idr'] = f"{release['id']}"
+        return df
 
-                try:
-                    anno = datetime.strptime(release['date'], "%Y-%m-%d").year
-                except:
-                    anno = release['date']
-                df["anno"] = f"{anno}"
-                df["genere"] = f"{release['genre']}"
+    def integrateinfo(self, df, releases, id=0):
+        for i, release in enumerate(releases):
+            df["album"] = f"{release['title']}"
+            df["artisti"] = f"{', '.join([a['name'] for a in release['artists']])}"
+            df['idr'] = f"{release['id']}"
 
-                trk = df['tracce']
+            try:
+                anno = datetime.strptime(release['date'], "%Y-%m-%d").year
+            except:
+                anno = release['date']
+            df["anno"] = f"{anno}"
+            df["genere"] = f"{release.get('genre', '')}"
+
+            # Tracce (se disponibili)
+            if 'mediums' in release:
                 for medium in release['mediums']:
-                    if medium['id'] != df['id']:
+                    if id != 0 and medium['id'] != id:
                         continue
+
+                    trk = df['tracce']
                     df["album"] = f"{medium['title']}"
                     if 'tracks' in medium and medium['tracks']:
                         for track in medium['tracks']:
@@ -449,10 +431,21 @@ class CDinfo:
                             if p:
                                 p = int(p) -1
                                 tr = trk[p]
-                                title = track.get('title', 'N/A')
-                                tr['titolo'] = title
-                        break
-        return df
+                                tr['titolo'] = track.get('title', 'N/A')
+                                tr['length'] =  track.get('length', 'N/A')
+                                tr['position'] = p
+
+                            # Artista della traccia
+                                if 'artists' in track:
+                                    track_artists = []
+                                    for artist_credit in track['artists']:
+                                        if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                            track_artists.append(artist_credit['artist']['name'])
+                                        else:
+                                            track_artists.append(artist_credit)
+                                    tr['artists'] = track_artists
+                    break
+
 
     def cd_to_internal(self):
         df = self.detects_tracks()
@@ -501,11 +494,10 @@ class CDinfo:
             "durata totale":  f"{disc_info['length']}",
             "tracce": trks
         }
-        # ricerca titoli ed artista
-        return self.detects_info(df)
+        return df
 
 
-    def search_musicbrainz_by_metadata(self, artist=None, album=None):
+    def detect_info_by_metadata(self, df, artist=None, album=None):
         """
         Cerca informazioni su MusicBrainz usando artista e/o titolo album
 
@@ -525,10 +517,7 @@ class CDinfo:
                 query_parts.append(f'release:"{album}"')
 
             if not query_parts:
-                return {
-                    'releases': [],
-                    'message': 'Specificare almeno artista o album'
-                }
+                return df
 
             query = ' AND '.join(query_parts)
 
@@ -543,75 +532,95 @@ class CDinfo:
                 releases = result['release-list']
                 release_info = []
 
-                for release in releases:
+                for rel in releases:
                     # Per ogni release trovato, ottiene i dettagli completi
                     detailed_release = musicbrainzngs.get_release_by_id(
-                        release['id'],
+                        rel['id'],
                         includes=['artists', 'recordings', 'release-groups']
                     )
 
-                    rel = detailed_release['release']
-                    #download_cover_art(rel['id'], r"c:\tmp.cover.jpg")
-                    info = {
-                        'id': rel['id'],
-                        'title': rel.get('title', 'N/A'),
-                        'date': rel.get('date', 'N/A'),
-                        'country': rel.get('country', 'N/A'),
-                        'barcode': rel.get('barcode', 'N/A'),
-                        'score': release.get('ext:score', '0'),  # Score di matching
-                        'artists': []
-                    }
-
-                    # Artisti
-                    if 'artist-credit' in rel:
-                        for artist_credit in rel['artist-credit']:
-                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
-                                info['artists'].append({
-                                    'name': artist_credit['artist']['name'],
-                                    'id': artist_credit['artist']['id']
-                                })
-
-                    # Tracce
-                    if 'medium-list' in rel:
-                        info['tracks'] = []
-                        for medium in rel['medium-list']:
-                            if 'track-list' in medium:
-                                for track in medium['track-list']:
-                                    recording = track.get('recording', {})
-                                    track_info = {
-                                        'position': track.get('position', 'N/A'),
-                                        'title': recording.get('title', 'N/A'),
-                                        'length': track.get('length', 'N/A')
-                                    }
-
-                                    # Artista della traccia
-                                    if 'artist-credit' in track:
-                                        track_artists = []
-                                        for artist_credit in track['artist-credit']:
-                                            if isinstance(artist_credit, dict) and 'artist' in artist_credit:
-                                                track_artists.append(artist_credit['artist']['name'])
-                                        track_info['artists'] = track_artists
-
-                                    info['tracks'].append(track_info)
-
+                    release = detailed_release['release']
+                    info = self.decode_release(release)
                     release_info.append(info)
 
-                return {
-                    'releases': release_info,
-                    'count': len(release_info)
-                }
+                if df:
+                    self.integrateinfo(df, release_info)
+                    return df
+                else:
+                    ID_ARTISTA = release_info[0]['artists'][0]['id']
+                    ID_RELEASE = release_info[0]['id']
+                    query = f"arid:{ID_ARTISTA} "#AND reid:{ID_RELEASE}"
+                    try:
+                        ress = musicbrainzngs.search_works(query=query, limit=100, offset=0)
+                    except Exception as e:
+                        b = 1
+                    a = 0
             else:
-                return {
-                    'releases': [],
-                    'message': 'Nessun release trovato'
-                }
-
+                return df
         except musicbrainzngs.WebServiceError as e:
             print(f"Errore API MusicBrainz: {e}")
             return None
         except Exception as e:
             print(f"Errore ricerca: {e}")
             return None
+
+
+    def decode_release(self, release):
+        info = {
+            'id': release['id'],
+            'title': release.get('title', 'N/A'),
+            'date': release.get('date', 'N/A'),
+            'country': release.get('country', 'N/A'),
+            'barcode': release.get('barcode', 'N/A'),
+            'genre': release.get('genre', ''),
+            #'score': release.get('ext:score', '0'),  # Score di matching
+            'artists': []
+        }
+
+        # Artisti
+        if 'artist-credit' in release:
+            for artist_credit in release['artist-credit']:
+                if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                    info['artists'].append({
+                        'name': artist_credit['artist']['name'],
+                        'id': artist_credit['artist']['id']
+                    })
+
+        # Tracce (se disponibili)
+        if 'medium-list' in release:
+            info['mediums'] = []
+            for medium in release['medium-list']:
+                try:
+                    id = medium['disc-list'][0]['id']
+                except:
+                    id = 0
+                m_info = {
+                    'id': id,
+                    'title': medium.get('title', release['title']),
+                    'tracks': []
+                }
+
+                if 'track-list' in medium:
+                    for track in medium['track-list']:
+                        recording = track.get('recording', 'N/A')
+                        track_info = {
+                            'position': track.get('position', 'N/A'),
+                            'title': recording.get('title', 'N/A'),
+                            'length': track.get('length', 'N/A')
+                        }
+
+                        # Artista della traccia
+                        if 'artist-credit' in track:
+                            track_artists = []
+                            for artist_credit in track['artist-credit']:
+                                if isinstance(artist_credit, dict) and 'artist' in artist_credit:
+                                    track_artists.append(artist_credit['artist']['name'])
+                            track_info['artists'] = track_artists
+
+                        m_info['tracks'].append(track_info)
+                    info['mediums'].append(m_info)
+        return info
+
 
 from PyQt6.QtCore import QObject, pyqtSignal
 class CoverArtSignals(QObject):
@@ -661,34 +670,6 @@ class CoverArtWorker(QObject):
             self.signals.error.emit(
                 f"Errore imprevisto: {e}"
             )
-
-'''
-def download_cover_art(release_id, save_path):
-
-    """Scarica la copertina frontale di un rilascio MusicBrainz."""
-
-    # URL per la copertina frontale a dimensione piena (front)
-    caa_url = f"https://coverartarchive.org/release/{release_id}/front"
-
-    try:
-        # 1. Effettua la richiesta HTTP (CAA reindirizzerà all'immagine effettiva)
-        response = requests.get(caa_url, stream=True, timeout=10)
-        response.raise_for_status()  # Solleva un errore per codici 4xx/5xx
-
-        # 2. Salva il contenuto binario nel file
-        with open(save_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        print(f"Copertina scaricata con successo in: {save_path}")
-        return True
-
-    except requests.exceptions.RequestException as e:
-        print(f"Errore nello scaricare la copertina: {e}")
-        # Gestisci il caso in cui non ci sia copertina (restituisce 404)
-        return False
-'''
-
 
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
@@ -815,5 +796,370 @@ def brainz(artist, album):
 
     a = 0
 
+import requests
+class CoverDownloader:
+    def __init__(self, app='euterpe', ver='1.5', mail='tuaemail@example.com', rate_limit=1.0):
+        self.headers = {
+            'User-Agent': f'{app}/{ver} ( {mail} )',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        self.mb_url = "https://musicbrainz.org/ws/2"
+        self.caa_url = "https://coverartarchive.org"
+        self.rate_limit = rate_limit
+        self.last_mb_request = 0
 
+    def _wait_rate_limit(self):
+        """Rispetta il rate limit per MusicBrainz."""
+        elapsed = time.time() - self.last_mb_request
+        if elapsed < self.rate_limit:
+            time.sleep(self.rate_limit - elapsed)
+        self.last_mb_request = time.time()
+
+    def search_release_fast(self, artist, album, limit=1):
+        """
+        Ricerca veloce usando l'endpoint search diretto.
+        Restituisce solo il release ID, niente altro.
+        """
+        # Query Lucene ottimizzata
+        query = f'artist:"{artist}" AND release:"{album}"'
+
+        url = f"{self.mb_url}/release"
+        params = {
+            'query': query,
+            'limit': limit,  # Solo il primo risultato!
+            'fmt': 'json'
+        }
+
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=self.headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            releases = data.get('releases', [])
+
+            if not releases:
+                return None
+
+            # Ritorna solo l'ID
+            return [{
+                'id': r['id'],
+                'title': r.get('title'),
+                'score': int(r.get('ext:score', 0))
+            } for r in releases]
+
+        except Exception as e:
+            print(f"Errore ricerca: {e}")
+            return None
+
+    def get_recording_credits(self, recording_id):
+        """
+        Recupera compositori e parolieri per una specifica registrazione.
+
+        Args:
+            recording_id: ID recording MusicBrainz
+
+        Returns:
+            dict: {'composers': [...], 'lyricists': [...]}
+        """
+        url = f"{self.mb_url}/recording/{recording_id}"
+
+        params = {
+            'inc': 'artist-credits+work-rels',
+            'fmt': 'json'
+        }
+
+        try:
+            self._wait_rate_limit()
+
+            response = requests.get(
+                url,
+                params=params,
+                headers=self.headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                return {'composers': [], 'lyricists': []}
+
+            data = response.json()
+
+            composers = []
+            lyricists = []
+
+            # Le info di compositori/parolieri sono nelle relations
+            if 'relations' in data:
+                for rel in data['relations']:
+                    if rel.get('type') == 'performance' and 'work' in rel:
+                        work = rel['work']
+
+                        # Cerca nelle relations del work
+                        if 'relations' in work:
+                            for work_rel in work['relations']:
+                                rel_type = work_rel.get('type')
+
+                                if 'artist' in work_rel:
+                                    artist_name = work_rel['artist'].get('name')
+
+                                    if rel_type == 'composer' and artist_name:
+                                        if artist_name not in composers:
+                                            composers.append(artist_name)
+
+                                    elif rel_type == 'lyricist' and artist_name:
+                                        if artist_name not in lyricists:
+                                            lyricists.append(artist_name)
+
+            return {
+                'composers': composers,
+                'lyricists': lyricists
+            }
+
+        except Exception as e:
+            return {'composers': [], 'lyricists': []}
+
+    def get_album_info(self, release_id, include_credits=False):
+        """
+        Recupera TUTTE le informazioni dell'album.
+
+        Include: recordings (tracklist con durate), artist-credits, release-groups
+
+        Args:
+            release_id: ID release MusicBrainz
+            include_credits: Se True, recupera compositori/parolieri (più lento!)
+
+        Returns:
+            dict con tutte le info o None
+        """
+
+        #aa = self.get_recording_credits(release_id)
+        url = f"{self.mb_url}/release/{release_id}"
+
+        # inc= specifica cosa includere nella risposta
+        params = {
+            #'inc': 'recordings+artist-rels+release-rels+recording-rels+artist-credits+release-groups+labels+recording-level-rels+work-level-rels+work-rels',
+            'inc': 'recordings+artist-credits+release-groups+labels',
+            'fmt': 'json'
+        }
+
+        try:
+            self._wait_rate_limit()
+
+            response = requests.get(
+                url,
+                params=params,
+                headers=self.headers,
+                timeout=15
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+
+            # Estrai informazioni
+            album_info = {
+                'release_id': release_id,
+                'title': data.get('title', 'Unknown'),
+                'artist': 'Unknown',
+                'date': data.get('date', 'N/A'),
+                'year': None,
+                'country': data.get('country', 'N/A'),
+                'label': None,
+                'barcode': data.get('barcode'),
+                'total_tracks': 0,
+                'total_duration_ms': 0,
+                'total_duration_formatted': '0:00',
+                'tracks': []
+            }
+
+            # Estrai artista
+            if 'artist-credit' in data and data['artist-credit']:
+                artists = [ac['artist']['name'] for ac in data['artist-credit']
+                           if 'artist' in ac]
+                album_info['artist'] = ' & '.join(artists)
+
+            # Estrai anno dalla data
+            if album_info['date']:
+                try:
+                    album_info['year'] = int(album_info['date'].split('-')[0])
+                except:
+                    pass
+
+            # Estrai label
+            if 'label-info' in data and data['label-info']:
+                labels = [li['label']['name'] for li in data['label-info']
+                          if 'label' in li and 'name' in li['label']]
+                if labels:
+                    album_info['label'] = labels[0]
+
+            # Estrai tracklist
+            if 'media' in data:
+                track_number = 1
+                total_duration_ms = 0
+
+                for medium in data['media']:
+                    if 'tracks' in medium:
+                        for track in medium['tracks']:
+                            recording = track.get('recording', {})
+                            recording_id = recording.get('id')
+
+                            # Durata in millisecondi
+                            duration_ms = recording.get('length')
+                            duration_formatted = 'Unknown'
+
+                            if duration_ms:
+                                total_duration_ms += duration_ms
+                                # Converti ms in mm:ss
+                                seconds = duration_ms // 1000
+                                minutes = seconds // 60
+                                secs = seconds % 60
+                                duration_formatted = f"{minutes}:{secs:02d}"
+
+                            # Artista della traccia (può essere diverso dall'album)
+                            track_artist = album_info['artist']
+                            if 'artist-credit' in recording and recording['artist-credit']:
+                                artists = [ac['artist']['name']
+                                           for ac in recording['artist-credit']
+                                           if 'artist' in ac]
+                                if artists:
+                                    track_artist = ' & '.join(artists)
+
+                            # Inizializza crediti
+                            composers = []
+                            lyricists = []
+                            writers = []
+
+                            track_info = {
+                                'number': track_number,
+                                'title': recording.get('title', 'Unknown'),
+                                'artist': track_artist,
+                                'duration_ms': duration_ms,
+                                'duration': duration_formatted,
+                                'recording_id': recording_id,
+                                'composers': composers if include_credits else None,
+                                'lyricists': lyricists if include_credits else None,
+                                'writers': writers if include_credits else None
+                            }
+
+                            album_info['tracks'].append(track_info)
+                            track_number += 1
+                album_info['total_tracks'] = len(album_info['tracks'])
+                album_info['total_duration_ms'] = total_duration_ms
+
+                # Formatta durata totale
+                if total_duration_ms > 0:
+                    total_seconds = total_duration_ms // 1000
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+
+                    if hours > 0:
+                        album_info['total_duration_formatted'] = f"{hours}:{minutes:02d}:{seconds:02d}"
+                    else:
+                        album_info['total_duration_formatted'] = f"{minutes}:{seconds:02d}"
+
+            return album_info
+
+        except Exception as e:
+            print(f"Errore recupero info: {e}")
+            return None
+
+    def get_cover(self, release_id, size='500'):
+        """
+        Download diretto da Cover Art Archive.
+        NO rate limiting, NO autenticazione.
+        """
+        url = f"{self.caa_url}/release/{release_id}/front"
+        if size:
+            url = f"{url}/-{size}"
+
+        try:
+            response = requests.get(
+                url,
+                headers=self.headers,
+                timeout=15,
+                allow_redirects=True
+            )
+
+            if response.status_code != 200:
+                return None
+
+            # Verifica dimensione
+            if len(response.content) < 1000:
+                return None
+
+            return response.content
+
+        except Exception as e:
+            return None
+
+    def download_album_info(self, artist, album, include_credits=False):
+        """
+        Recupera informazioni complete dell'album cercando prima la release.
+
+        Args:
+            artist: Nome artista
+            album: Nome album
+            include_credits: Se True, include compositori/parolieri (più lento)
+
+        Returns:
+            dict con info complete o None
+        """
+        print(f"🔍 Cerco: {artist} - {album}")
+
+        mi = MusicInfo(artist, album)
+        releases1 = mi.get_release()
+
+        # 1. Cerca release
+        releases = self.search_release_fast(artist, album, limit=1)
+
+        if not releases:
+            print(f"  ✗ Release non trovata")
+            return None
+
+        release = releases[0]
+        print(f"  📀 Release trovata: {release['title']} (ID: {release['id']})")
+
+        # 2. Recupera info complete
+        print(f"  📥 Recupero informazioni...")
+        if include_credits:
+            print(f"  📝 Include compositori e parolieri (può richiedere più tempo)")
+
+        info = self.get_album_info(release['id'], include_credits=include_credits)
+
+        if info:
+            print(f"  ✅ Informazioni recuperate!")
+            print(f"     Tracce: {info['total_tracks']}")
+            print(f"     Durata: {info['total_duration_formatted']}")
+        else:
+            print(f"  ✗ Errore recupero informazioni")
+
+        return info
+
+    def download_cover(self, artist, album, size='500'):
+
+        start = time.time()
+
+        t1 = time.time()
+        # 1. Ricerca release ID
+        release = self.search_release_fast(artist, album)
+        t2 = time.time()
+
+        if not release:
+            elapsed = time.time() - start
+            print(f"  ? Release non trovata ({elapsed:.2f}s)")
+            return None
+
+        try:
+            release_id = release[0]['id']
+            return self.get_cover(release_id, size)
+        except Exception as e:
+            return None
 

@@ -1,6 +1,6 @@
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAction
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle, QCheckBox,
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu)
 
@@ -519,40 +519,5 @@ class mySearch(QDialog):
         if dlg.exec() == 1:
             return dlg.selected
         return None
-
-class configDlg(QDialog):
-    def __init__(self, parent):
-        super(configDlg, self).__init__(parent)
-        self.wparent = parent
-
-        v = QVBoxLayout(self)
-        ini = iniConf(AppConfig)
-        md = ini.get('MAIN', 'splittermode')
-        self.ui_mode = QCheckBox('Modo Splitter', self)
-        if md == '1':
-            self.ui_mode.setCheckState(Qt.CheckState.Checked)
-        else:
-            self.ui_mode.setCheckState(Qt.CheckState.Unchecked)
-        v.addWidget(self.ui_mode)
-        v.addLayout(exitBtn(self))
-
-    def accept(self):
-        v = '0'
-        if self.ui_mode.isChecked():
-            v = '1'
-
-        ini = iniConf(AppConfig)
-        s = ini.get('MAIN')
-        if s is None:
-            s = {}
-        s['splittermode'] = v
-        ini.set_sez('MAIN', s)
-        ini.save()
-
-        self.done(1)
-
-    @staticmethod
-    def run(parent):
-        dlg = configDlg(parent).exec()
 
 

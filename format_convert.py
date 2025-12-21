@@ -481,6 +481,10 @@ class AudioConverter(QDialog):
         self.load_cover_clip_button.clicked.connect(self.load_cover_from_clipboard)
         cover_buttons_layout.addWidget(self.load_cover_clip_button)
 
+        self.load_cover_online_button = QPushButton("in Rete")
+        self.load_cover_online_button.clicked.connect(self.load_cover_online)
+        cover_buttons_layout.addWidget(self.load_cover_online_button)
+
         self.remove_cover_button = QPushButton("Rimuovi")
         self.remove_cover_button.clicked.connect(self.remove_cover)
         self.remove_cover_button.setEnabled(False)
@@ -715,6 +719,80 @@ class AudioConverter(QDialog):
 
         except Exception as e:
             QMessageBox.warning(self, "Errore", f"Impossibile caricare dal clipboard: {e}")
+
+    def load_cover_online(self):
+        # 1 determina artista e titolo album
+        artista = self.global_artist.text()
+        if not artista:
+            artista = self.table.item(0, 2).text()
+            if not artista:
+                self.status_label.setText("Nessun artista")
+                return
+        album = self.global_album.text()
+        if not album:
+            album = self.table.item(0, 3).text()
+            if not album:
+                self.status_label.setText("Nessun album")
+                return
+        self.status_label.setText("Ricerca copertina....")
+        QApplication.processEvents()
+        from music_brainz import CoverDownloader
+        cdi = CoverDownloader()
+        #info = cdi.download_album_info(artista, album, True)
+        image_data = cdi.download_cover(artista, album)
+        if image_data:
+            self.status_label.setText("Copertina caricata")
+            self._load_cover(image_data)
+        else:
+            self.status_label.setText("Nessuna copertina")
+
+        return
+        res = cdi.search_musicbrainz_by_metadata(artista, album)
+        try:
+            id = res['releases'][0]['id']
+        except:
+            return
+        from music_brainz import CoverArtWorker, MusicInfo
+        """Avvia la routine di download in un thread separato."""
+        mi = MusicInfo("", "")
+        res = mi.get_cover_info(id)
+        self.display_cover(res)
+        return
+        qpixmap = QPixmap(res)
+
+        # ⚠️ Esempio di dati che dovresti ottenere altrove (es. da musicbrainzngs)
+        test_release_id = id
+        temp_save_path = r"c:\tmp\cover2.jpg"
+
+        #self.status_label.setText("Download in corso...")
+
+        # 1. Crea il Thread
+        self.thread = QThread()
+
+        # 2. Crea il Worker e sposta nel Thread
+        self.worker = CoverArtWorker(test_release_id, temp_save_path)
+        self.worker.moveToThread(self.thread)
+
+        # 3. Collega i segnali
+        self.thread.started.connect(self.worker.run)
+        self.worker.signals.finished.connect(self.on_download_success)
+        self.worker.signals.error.connect(self.on_download_error)
+
+        # Collega la pulizia all'uscita del worker
+        self.worker.signals.finished.connect(self.thread.quit)
+        self.worker.signals.error.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.signals.finished.connect(self.worker.deleteLater)
+        self.worker.signals.error.connect(self.worker.deleteLater)
+
+        # 4. Avvia il thread
+        self.thread.start()
+
+    def on_download_success(self, file_path):
+        a = 0
+
+    def on_download_error(self):
+        a = 0
 
     def _load_cover(self, image_data):
         from utility import resize_image_data

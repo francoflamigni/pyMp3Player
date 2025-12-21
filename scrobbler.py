@@ -1,12 +1,10 @@
 from profiler import checkpoint
-checkpoint("Start")
+
 # -*- coding: utf-8 -*-
 import logging
-checkpoint("Dopo logging")
 import urllib.error
 import urllib.parse
 import urllib.request
-checkpoint("Dopo urllib")
 import re
 import struct
 #from lyricsgenius import Genius
@@ -17,7 +15,6 @@ formatter = logging.Formatter(
 )
 
 from pyMyLib.qtUtils import waitCursor
-checkpoint("Dopo pyMyLib q")
 
 null_handler = logging.NullHandler()
 null_handler.setFormatter(formatter)

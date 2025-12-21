@@ -405,9 +405,10 @@ class CDRipperMainWindow(QDialog):
             self.output_dir_edit.setText(dir_path)
 
     def detect_tracks(self):
-        drive = self.cd_drive_combo.currentText()
-        cdi = CDinfo(drive)
-        df = cdi.detects_tracks()
+        cdi = CDinfo(self.cd_drive_combo.currentText())
+        res = cdi.detects_tracks()
+        df = cdi.detects_info_by_id(res)
+
         self.cover_download(df.get('idr', ''))
         self.update_tracks_table(df)
         self.start_btn.setEnabled(True)
@@ -417,25 +418,12 @@ class CDRipperMainWindow(QDialog):
         album = self.album_edit.text()
         if artist and album:
             cdi = CDinfo(self.cd_drive_combo.currentText())
-            df = cdi.detects_tracks()
-            res = cdi.search_musicbrainz_by_metadata(artist, album)
-            if not res:
-                return
-            for rel in res['releases']:
-                if len(rel['tracks']) != len(df['tracce']):
-                    continue
-
-                df["album"] =  f"{rel['title']}"
-                df["artisti"] = f"{', '.join([a['name'] for a in rel['artists']])}"
-
-                #anno = datetime.strptime(release['date'], "%Y-%m-%d").year
-                df["anno"] = f"{rel['date']}"
-                df["genere"] = rel.get("genre", "")
-
-                for i, track in enumerate(df['tracce']):
-                    track['titolo'] = rel['tracks'][i]['title']
-
-            self.update_tracks_table(df)
+            res = cdi.detects_tracks()
+            df = cdi.detect_info_by_metadata(res, artist, album)
+            if df:
+                self.cover_download(df.get('idr', ''))
+                self.update_tracks_table(df)
+            self.start_btn.setEnabled(True)
 
     def update_tracks_table(self, tracks_data=None):
         """Aggiorna la tabella delle tracce"""
@@ -686,7 +674,7 @@ class CDRipperMainWindow(QDialog):
 
     def on_download_success(self, file_path):
         """Gestisce il segnale di successo (nel thread principale)."""
-        self.status_label.setText(f"SUCCESS: Copertina salvata in {file_path}")
+        self.status_label.setText("")
         self.display_cover(file_path)
         #self.download_button.setEnabled(True)
 
@@ -694,7 +682,7 @@ class CDRipperMainWindow(QDialog):
 
     def on_download_error(self, message):
         """Gestisce il segnale di errore (nel thread principale)."""
-        #self.status_label.setText(f"ERRORE: {message}")
+        self.status_label.setText("")
         #self.download_button.setEnabled(True)
 
         # Pulizia: rimuovi eventuali file parziali o temporanei

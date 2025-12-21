@@ -326,11 +326,13 @@ class tracks:
         self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs, genre)
         return self.id
 
+    ''' Ritorna una lista di tracce dati i loro id '''
     def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         #if tr[0].num is not None:
         tr.sort(key=lambda x: x.num if x.num is not None else 0)
         return [t.title for t in tr if art in t.artist]
+
     def size(self):
         return len(self.name)
 
@@ -383,6 +385,7 @@ class albums:
         self.title[title] = album(tag.album, year, self.id, path)
         return self.id
 
+    ''' Ritorna un elenco di album dato un elenco di id di album '''
     def find(self, ids):
         albums = [v for v in self.title.values() if v.id in ids]
         #if albums[0].year is not None:
@@ -409,6 +412,7 @@ class album_artist:
         if t not in self.a_a:
             self.a_a.append(t)
 
+    ''' Ritorna gli id degli album del''artista individuato dal suo id'''
     def find_albums(self, id):
         v = [q[0] for q in self.a_a if q[1] == id]
         return v
@@ -430,6 +434,7 @@ class album_track:
         if t not in self.a_t:
             self.a_t.append(t)
 
+    ''' Ritorna tutte le tracce di un album'''
     def find_tracks(self, album_id):
         v = [t[1] for t in self.a_t if t[0] == album_id]
         return v
