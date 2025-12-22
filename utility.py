@@ -450,7 +450,7 @@ class GlobalInputEventFilter(QObject):
         # Cattura solo gli eventi di movimento del mouse
         if event.type() == QEvent.Type.MouseMove or event.type() == QEvent.Type.KeyPress:
             self.mouse_moved.emit()
-            print("Input event")
+            #print("Input event")
 
         # Restituisci False per non interferire con l'evento
         return False
