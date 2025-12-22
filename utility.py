@@ -3,8 +3,8 @@ import io
 import sys
 import os
 import base64
-from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer
-from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu
+from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent
+from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu, QApplication
 from enum import Enum
 
 def close_splash():
@@ -125,7 +125,7 @@ class WikipediaWorker(QRunnable):
         self.setAutoDelete(True)
         self.lang = lang
 
-        self.USER_AGENT = "IlTuoProgrammaDiTagging/1.0 (la_tua_email@example.com)"  # Usa il tuo vero User-Agent
+        self.USER_AGENT = "Euterpe/1.0 (contatto: tuaemail@esempio.it)"
 
     def run(self):
         import wikipedia
@@ -203,7 +203,7 @@ class WikipediaWorker(QRunnable):
             # Crea il tag <img> con i dati incorporati
             return f'<img src="data:{content_type};base64,{base64_encoded_data}" style="max-width:200px; max-height:200px; display:block; margin:auto;">'
 
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             return None  # Fallimento nel download dell'immagine
         except Exception:
             return None  # Altri errori
@@ -441,3 +441,54 @@ class CDMonitor(QObject):
         """Ferma il monitoraggio del lettore CD."""
         self.timer.stop()
 
+class GlobalInputEventFilter(QObject):
+    from PyQt6.QtCore import pyqtSignal
+    # Segnale personalizzato per il movimento del mouse
+    mouse_moved = pyqtSignal()
+
+    def eventFilter(self, obj, event):
+        # Cattura solo gli eventi di movimento del mouse
+        if event.type() == QEvent.Type.MouseMove or event.type() == QEvent.Type.KeyPress:
+            self.mouse_moved.emit()
+            print("Input event")
+
+        # Restituisci False per non interferire con l'evento
+        return False
+
+class IdleTimeout:
+    def __init__(self, parent, idle_time, timeout_fun):
+        self.idle_timer = None
+        self.idle_timeout = None
+        self.timeout_fun = timeout_fun
+        if idle_time != 0:
+            self.idle_timer = QTimer()
+            self.idle_timer.timeout.connect(self.timeout)
+            self.global_event_filter = GlobalInputEventFilter(parent)
+            QApplication.instance().installEventFilter(self.global_event_filter)
+            self.global_event_filter.mouse_moved.connect(self.start_idle_timer)
+            #self.installEventFilter(self)
+
+            # Tempo di inattività in millisecondi (es: 5 minuti = 300000 ms)
+            self.idle_timeout = idle_time * 60000 # trasforma minuti im msec
+
+            # Avvia il timer
+            self.start_idle_timer()
+
+    def __del__(self):
+        self.stop_idle_timer()
+
+    def timeout(self):
+        #self.stop_idle_timer()
+        self.timeout_fun()
+
+    def start_idle_timer(self):
+        if self.idle_timeout != 0:
+            """Avvia/Resetta il timer"""
+            self.idle_timer.start(self.idle_timeout)
+
+    def stop_idle_timer(self):
+        try:
+            self.idle_timer.timeout.disconnect()
+            #self.idle_timer.stop()
+        except:
+            pass

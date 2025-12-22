@@ -96,7 +96,7 @@ class MusicIndexDlg(QDialog):
         h0.addSpacing(10)
         h0.addWidget(self.te)
 
-        self.artists = myList(self, 'artisti')
+        self.artists = myList(self, 'artisti', cursor=1)
         self.artists.setStyleSheet("""
             QListWidget::item:selected {
                 background-color: #FFFF77; /* Colore di sfondo della selezione */

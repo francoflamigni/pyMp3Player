@@ -23,53 +23,57 @@ def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
     return QCursor(scaled_pixmap, hotspot_x, hotspot_y)
 
 class myList(QListWidget):
-    def __init__(self, parent, txt=''):
+    def __init__(self, parent, txt='', cursor=0):
         super().__init__(parent)
         self.wparent = parent
         self.itc = None
         if txt != '':
             self.addItem(txt)
         self.setMouseTracking(True)
+        self.cursor = cursor
 
     def setSelCur(self, it):
         if self.itc != it:
             self.itc = it
 
     def mouseMoveEvent(self, event):
-        if self.hasFocus() is False:
-            self.setFocus()
-            self.unsetCursor()
-            super(QListWidget, self).mouseMoveEvent(event)
-            return
+        if not self.cursor:
 
-        it = self.itemAt(event.pos())
-        x = event.pos().x()
-        #print(x)
-        if self.itc is not None:
-            if it != self.itc or x > 50:
+            if self.hasFocus() is False:
+                self.setFocus()
                 self.unsetCursor()
-            else:
-                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
+                super(QListWidget, self).mouseMoveEvent(event)
+                return
+
+            it = self.itemAt(event.pos())
+            x = event.pos().x()
+            #print(x)
+            if self.itc is not None:
+                if it != self.itc or x > 50:
+                    self.unsetCursor()
+                else:
+                    self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
 
         super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            it = self.itemAt(event.pos())
-            if it is not None:
-                p = self.mapToGlobal(event.pos())
-                self.wparent.contextMenu(p, self, it)
-        elif event.button() == Qt.MouseButton.LeftButton:
-            it = self.itemAt(event.pos())
-            x = event.pos().x()
-            if it == self.itc and x <= 50:
-                try:
-                    self.unsetCursor()
-                    self.wparent.play_item(self)
-                except:
-                    pass
-            elif it != self.itc and x <= 50:
-                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
+        if not self.cursor:
+            if event.button() == Qt.MouseButton.RightButton:
+                it = self.itemAt(event.pos())
+                if it is not None:
+                    p = self.mapToGlobal(event.pos())
+                    self.wparent.contextMenu(p, self, it)
+            elif event.button() == Qt.MouseButton.LeftButton:
+                it = self.itemAt(event.pos())
+                x = event.pos().x()
+                if it == self.itc and x <= 50:
+                    try:
+                        self.unsetCursor()
+                        self.wparent.play_item(self)
+                    except:
+                        pass
+                elif it != self.itc and x <= 50:
+                    self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
         super(QListWidget, self).mousePressEvent(event)
 
 def lyric_song(artist, track, parent=None):
@@ -113,15 +117,6 @@ class RadioDlg(QDialog):
             azione_cerca,
             QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
         )
-
-        '''
-        b0 = QPushButton(self)
-        b0.setIcon(QIcon(os.path.join(os.getcwd(), 'icone/search.png')))
-        b0.clicked.connect(self.search)
-        self.ed.returnPressed.connect(self.search)
-        h.addWidget(self.ed)
-        h.addWidget(b0)
-        '''
 
         sp = QSplitter(self)
         sp.setOrientation(Qt.Orientation.Vertical)
@@ -274,7 +269,6 @@ class RadioDlg(QDialog):
             dat = qi.data(Qt.ItemDataRole.UserRole)
             url = dat.url
             self.radio_signal.emit(url, dat.favicon)
-            #self.wparent.open_radio(url, dat.favicon)
 
     def favorite_changed(self):
         items = self.favorites.selectedItems()
@@ -284,6 +278,7 @@ class RadioDlg(QDialog):
     def play_item(self, lst):
         if lst == self.favorites:
             self.play()
+
     def play(self):
         rad = self.favorites.selectedItems()[0].text()
         rd = self.ini.get('radio')
@@ -293,7 +288,6 @@ class RadioDlg(QDialog):
         if len(dat) > 1:
             fav = dat[1]
         self.radio_signal.emit(url, fav)
-        #self.wparent.open_radio(url, fav)
 
 class RadioStation:
     def __init__(self, name='', url='', ico=None, paese='', favicon=''):

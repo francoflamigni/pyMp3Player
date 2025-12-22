@@ -67,7 +67,20 @@ class Player(FramelessDialog): #QMainWindow):
         #if self.splash is not None:
         #    self.splash.close()
 
+        self.Install_idle_fun()
         self.show()
+
+    def Install_idle_fun(self):
+        from utility import IdleTimeout
+        self.idle_timer = None
+        #ini = iniConf(AppConfig, self.user.nome)
+        idle_time = 1 #self.ini.get(mDir.CONF_DATE, mDir.IDLE_TIME)
+        try:
+            idle_time = int(idle_time)
+        except:
+            idle_time = 0
+        if idle_time != 0:
+            self.idle_timer = IdleTimeout(self, idle_time, self.idle_background)
 
     def show(self):
         QMainWindow.show(self)
@@ -244,6 +257,10 @@ class Player(FramelessDialog): #QMainWindow):
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 
+    def idle_background(self):
+        if not self.background_mode and self.ply.mode == self.ply.Mode_None :
+            self.background()
+
     def background(self, reset=False):
         if self.background_mode or reset:
             self.background_mode = False
@@ -260,7 +277,7 @@ class Player(FramelessDialog): #QMainWindow):
 
     def _background(self, index):
         if index == 0:
-            self.background(True)
+            self.background(True) # forza l'uscita dal background mode
 
         import random
         from scrobbler import leggi_stringa_offline
