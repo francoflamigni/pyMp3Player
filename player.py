@@ -73,8 +73,7 @@ class Player(FramelessDialog): #QMainWindow):
     def Install_idle_fun(self):
         from utility import IdleTimeout
         self.idle_timer = None
-        #ini = iniConf(AppConfig, self.user.nome)
-        idle_time = 1 #self.ini.get(mDir.CONF_DATE, mDir.IDLE_TIME)
+        idle_time = self.ini.get('user', 'tmout')
         try:
             idle_time = int(idle_time)
         except:
@@ -224,10 +223,13 @@ class Player(FramelessDialog): #QMainWindow):
             AddMenuItem("Riproduci CD", fun=cd, enab=drives,
                         ico=get_resource_file(__file__, 'icone', 'cd_play.png')),
 
-            AddMenuItem("Background", fun=self.background, enab=not self.background_mode),
+            AddMenuItem("Background", fun=self.background, enab=not self.background_mode,
+                        ico=get_resource_file(__file__, 'icone', 'background.png')),
 
             AddMenuItem("Sincronizza", fun=self.sync_folder,
                         ico=get_resource_file(__file__, 'icone', 'folders_sync.png')),
+            AddMenuItem("Preferenze", fun=self.preference,
+                        ico=get_resource_file(__file__, 'icone', 'preferences.png')),
             AddMenuItem("Informazioni", fun=self.info)
         ]
         contextMenu.addActions(actions)
@@ -311,6 +313,11 @@ class Player(FramelessDialog): #QMainWindow):
         from sync_folders import SyncApp
         msg = SyncApp(self, self.dlg.last_folder)
         msg.exec()
+
+    def preference(self):
+        from dialogs import ConfigBox
+        if ConfigBox.run(self, self.ini) == 1:
+            self.Install_idle_fun()
 
     def create_playlist(self):
         #self.get_generi()

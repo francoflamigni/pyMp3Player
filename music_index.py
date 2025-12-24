@@ -269,19 +269,29 @@ class MusicIndexDlg(QDialog):
                 if len(album) > 0:
                     album = album[0].text()
                 track = it.text()
-            ctx.addAction("Aggiunge alla playlist").triggered.connect(lambda x: self.add_playlist(artist, album, track))
+            if artist:
+                ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
+                (ctx.addAction(ico, "Aggiunge alla playlist").
+                 triggered.connect(lambda x: self.add_playlist(artist, album, track)))
             if wd == self.tracks:
-                ctx.addAction("Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
+                ico = QIcon(get_resource_file(__file__, 'icone', 'lyric.png'))
+                ctx.addAction(ico, "Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
             else:
-                ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
+                if artist:
+                    ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
             if wd == self.albums:
                 album = self.albums.selectedItems()
                 if album and self.tracks.count():
                     album = album[0].text()
                     trk = self.tracks.item(0).text()
-                    v = self.music.tracks.name[trk + '@' + album]
-                    dir = os.path.dirname(v.file)
-                    ctx.addAction("Edit").triggered.connect(lambda x: edit_album(artist, album, dir, self.wparent))
+                    try:
+                        v = self.music.tracks.name[trk + '@' + album]
+                        dir = os.path.dirname(v.file)
+                        ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
+                        (ctx.addAction(ico, "Edit tag").
+                         triggered.connect(lambda x: edit_album(artist, album, dir, self.wparent)))
+                    except:
+                        pass
                 a = 0
 
         ctx.exec(p)

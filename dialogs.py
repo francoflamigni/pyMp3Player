@@ -2,7 +2,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAction
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
-                             QPlainTextEdit, QAbstractItemView, QMenu)
+                             QPlainTextEdit, QAbstractItemView, QMenu, QLabel, QGroupBox, QComboBox, QFormLayout,
+                             QSpinBox)
 
 import scrobbler
 
@@ -379,7 +380,7 @@ class lyricsDlg(QDialog):
         self.txt_box = myPlainText(self)
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
-        self.app_lang = 'fr'
+        self.app_lang = parent.ini.get('user', 'lang')
         self.tr_box = None
 
         self.txt_box.setText(self.txt)
@@ -514,4 +515,50 @@ class mySearch(QDialog):
             return dlg.selected
         return None
 
+''' finestra principale per le opzioni e la configurazione'''
+class ConfigBox(QDialog):
+    def __init__(self, parent, ini:iniConf):
+        super().__init__()
+        self.ini = ini
+        self.ini.config_read()
+        lang = self.ini.get('user', 'lang')
 
+        self.setWindowTitle('Preferenze')
+        center_in_parent(self, parent, 200, 160)
+        vb = QVBoxLayout(self)
+
+        qf1 = QFormLayout(self)
+        qf1.addWidget(QLabel('Lingua preferita'))
+        self.c1 = QComboBox()
+        self.c1.addItems(['IT', 'FR', 'EN', 'SP'])
+        self.c1.setCurrentText(lang)
+        qf1.addWidget(self.c1)
+        tmout = self.ini.get('user', 'tmout')
+        try:
+            tmout = int(tmout)
+        except:
+            tmout = 0
+        vb.addLayout(qf1)
+
+        qf2 = QFormLayout(self)
+        qf2.addWidget(QLabel('Timeout background'))
+        self.maxidle = QSpinBox(self)
+        self.maxidle.setRange(0, 300)
+        self.maxidle.setValue(tmout)
+        qf2.addWidget(self.maxidle)
+        vb.addLayout(qf2)
+
+        vb.addLayout(exitBtn(self))
+
+    def accept(self):
+        lang = self.c1.currentText()
+        self.ini.set('user', 'lang', lang)
+        tmout = str(self.maxidle.value())
+        self.ini.set('user', 'tmout', tmout)
+        self.ini.save()
+
+        self.done(1)
+
+    @staticmethod
+    def run(parent, ini):
+        return ConfigBox(parent, ini).exec()

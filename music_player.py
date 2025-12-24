@@ -8,13 +8,13 @@ vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc')) #os.path.join(os.
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QFont, QBrush, QColor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QMessageBox)
+                             QFrame, QDial, QApplication, QSlider, QGroupBox, QMessageBox, QWidget,
+                             QGraphicsDropShadowEffect)
 
 from pyMyLib.qtUtils import set_background, waitCursor
-
 from dialogs import lyric_song, AppConfig
 import scrobbler
 
@@ -80,13 +80,22 @@ class MusicPlayerDlg(QDialog):
         # control_frame note, play - pause- slider bar
         wdd = self.control_frame()
 
-        equalize_ctrl = Equalizer(self.mediaplayer)
-
         # volume
-        vol = self.volume_ui(equalize_ctrl.get_preset())
+        vol = self.volume_ui() #equalize_ctrl.get_preset())
+
+        # equalizzatore
+        equalizer = self.equalizer_ui()
+        '''
+        equalize_ctrl = Equalizer(self.mediaplayer)
+        ve = QVBoxLayout()
+        ve.setContentsMargins(0, 0, 0, 0)
+        ve.setSpacing(0)
+        ve.addWidget(equalize_ctrl.get_preset(), alignment=Qt.AlignmentFlag.AlignCenter)
+        ve.addWidget(equalize_ctrl)
+        '''
         h2 = QHBoxLayout()
-        h2.addWidget(equalize_ctrl)
-        h2.addLayout(vol)
+        h2.addWidget(equalizer)
+        h2.addWidget(vol)
 
         v2 = QVBoxLayout(self)
         v2.addLayout(h3)
@@ -265,18 +274,33 @@ class MusicPlayerDlg(QDialog):
                 self.listplayer.previous()
             self.update_ui()
 
-    def volume_ui(self, cmb):
+    def equalizer_ui(self):
+        equalize_ctrl = Equalizer(self.mediaplayer)
+        qe = QGroupBox(self)
+        ve = QVBoxLayout(qe)
+        ve.setContentsMargins(4, 0, 2, 0)
+        ve.setSpacing(0)
+        ve.addWidget(equalize_ctrl.get_preset(), alignment=Qt.AlignmentFlag.AlignLeft)
+        ve.addWidget(equalize_ctrl)
+        return qe
 
-        self.volumeDial = QDial(self)
+    def volume_ui(self):
+        vc = VolumeControl()
+        vc.volumeDial.setValue(self.mediaplayer.audio_get_volume())
+        vc.volumeDial.valueChanged.connect(self.set_volume)
+        return vc
+
+        self.volumeDial = VolumeDial(self)  #QDial(self)
         self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
         self.volumeDial.setToolTip("Volume")
         self.volumeDial.setNotchesVisible(True)
-        self.volumeDial.setMaximumHeight(80)
+        #self.volumeDial.setMaximumHeight(80)
         self.volumeDial.valueChanged.connect(self.set_volume)
-        v3 = QVBoxLayout()
-        v3.addWidget(cmb)  #self.cmb)
-        v3.addWidget(self.volumeDial)
-        return v3
+        #v3 = QVBoxLayout()
+        #v3.setContentsMargins(0, 0, 0, 0)
+        #v3.addWidget(cmb)  #self.cmb)
+        #v3.addWidget(self.volumeDial)
+        return self.volumeDial #v3
 
     def set_volume(self, volume):
         # Set the volume
@@ -543,6 +567,38 @@ class Equalizer(QFrame):
                       for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
 
         self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
+        self.cmb.setStyleSheet(
+            """
+            QComboBox {
+                background: transparent;      /* Prende lo sfondo del QFrame sottostante */
+                border: 0px solid #555555;    /* Un bordo sottile per definirla */
+                padding-right: 20px;
+                margin-left: 5px;
+                /* Blu Elettrico Neon - Massima saturazione */
+                color: #4444FF;           
+                font-family: 'Consolas';
+                font-weight: bold;
+                font-size: 16px;
+                /* Effetto ombra per distaccare il testo dal metallo */
+                qproperty-alignment: 'AlignCenter';
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border: none;             /* <--- QUESTO elimina la riga nera verticale */
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                /* Puoi personalizzare la freccia o lasciarla di sistema */
+                image: none; 
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid transparent; /* Crea un triangolino pulito */
+                margin-right: 5px;
+            }
+        """
+        )
         self.equalizer = vlc.libvlc_audio_equalizer_new_from_preset(0)
 
     def init_ui(self):
@@ -557,13 +613,30 @@ class Equalizer(QFrame):
 
         he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
 
-        self.setStyleSheet("QFrame {background-color: rgb(220, 255, 255);"
-                         "border-width: 1;"
-                         "border-radius: 8;"
-                         "border-style: solid;"
-                         "border-color: rgb(10, 10, 10)}"
-                         )
+        self.setStyleSheet("""
+            QFrame {
+                /* Effetto metallo satinato: gradiente con riflessi multipli */
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #e0e0e0, 
+                    stop:0.2 #f5f5f5, 
+                    stop:0.4 #bcbcbc, 
+                    stop:0.6 #ffffff, 
+                    stop:0.8 #9a9a9a, 
+                    stop:1 #cccccc);
+
+                border-style: solid;
+                border-width: 1px;
+                border-radius: 8px;
+                border-color: #333333;
+
+                /* Un leggero bordo interno per dare tridimensionalità */
+                border-top: 1px solid #ffffff;
+                border-left: 1px solid #ffffff;
+            }
+        """)
+
         self.setLayout(he)
+
 
     def get_preset(self):
         return self.cmb
@@ -648,24 +721,46 @@ def slider_style():
     }
 
     QSlider::groove:horizontal {
-        border: 0px;
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #888, stop:1 #ddd);
-        height: 12px;
-        border-radius: 10px;
+        border: 1px solid #333;
+        /* Grigio antracite sfumato: non troppo scuro, non troppo chiaro */
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                                    stop:0 #444, 
+                                    stop:0.5 #555, 
+                                    stop:1 #444);
+        height: 10px;
+        border-radius: 5px;
     }
 
-    QSlider::handle {
-        background: qradialgradient(cx:0, cy:0, radius: 1.2, fx:0.35,
-                                    fy:0.3, stop:0 #eef, stop:1 #002);
-        height: 10px;
+    QSlider::handle:horizontal {
+        /* EFFETTO SFERA GRIGIA: 
+           fx e fy al 35% spostano il riflesso della luce per dare l'effetto tondo 3D */
+        background: qradialgradient(cx:0.5, cy:0.5, radius: 1.0, fx:0.35, fy:0.35, 
+                                    stop:0 #ffffff,   /* Riflesso luce diretta */
+                                    stop:0.5 #bcbcbc, /* Grigio medio corpo sfera */
+                                    stop:1 #666666);  /* Grigio scuro per l'ombra ai bordi */
+        
+        border: 1px solid #888;
         width: 20px;
+        height: 16px;
+        /* Margine negativo per uscire dai 12px del groove (20-12)/2 = 4 */
+        margin: -3px 0px; 
         border-radius: 10px;
+        min-width: 20px;
+        min-height: 20px;
     }
 
     QSlider::sub-page:horizontal {
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00C, stop:1 #00C);
-        border-top-left-radius: 7px;
-        border-bottom-left-radius: 7px;
+        /* Gradiente "Neon": Blu profondo ai bordi e Azzurro quasi bianco al centro */
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+            stop:0 #002266, 
+            stop:0.2 #0066ff, 
+            stop:0.5 #b3d1ff,  /* Il "core" della luce */
+            stop:0.8 #0066ff, 
+            stop:1 #002266);
+        
+        /* Bordo esterno che simula il riflesso della luce */
+        border: 1px solid #3385ff;
+        border-radius: 5px;
     }
 
     """
@@ -694,6 +789,205 @@ def eq_slider_style():
     }
     """
     return QSS
+'''
+class VolumeControl(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.volumeDial = VolumeDial()
+
+        layout.addSpacing(20)
+        layout.addStretch()
+        layout.addWidget(self.volumeDial, alignment=Qt.AlignmentFlag.AlignBottom)
+        self.setStyleSheet("""
+            background-color: #0a0a0a;
+            border: 1px solid #333333; /* Colore grigio scuro */
+            border-radius: 4px;        /* Opzionale: angoli arrotondati */
+        """)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 1. Definiamo l'area e il testo
+        # Spostiamo il rettangolo di disegno 10px più in basso
+        text_rect = QRectF(0, -10, self.width(), 120)
+        text = f"{self.volumeDial.value()}%"
+
+        font = QFont("Consolas", 28, QFont.Weight.Bold)
+        painter.setFont(font)
+
+        # 2. DISEGNO DEL BAGLIORE (GLOW)
+        # Invece di sdoppiare il testo, usiamo una penna con colore sfumato
+        # e lo disegniamo con un'opacità ridotta per creare l'alone
+        glow_color = QColor("#00FFFF")
+        glow_color.setAlpha(60)  # Molto trasparente
+        painter.setPen(glow_color)
+
+        # Disegniamo il testo leggermente traslato in varie direzioni
+        # di 1 solo pixel per simulare la diffusione della luce (soft glow)
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            painter.drawText(text_rect.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, text)
+
+        # 3. DISEGNO DEL TESTO PRINCIPALE (FILAMENTO LED)
+        # Usiamo il blu elettrico acceso al centro
+        painter.setPen(QColor("#00FFFF"))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)
+'''
+
+
+class VolumeControl(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("VolumeContainer")
+
+        # Layout verticale
+        layout = QVBoxLayout(self)
+        layout.setSpacing(0)  # Spazio tra testo e dial
+        #layout.setContentsMargins(10, 20, 10, 10)
+        layout.setContentsMargins(0, 0, 0, 0)# Padding interno del bordo
+
+        # 1. LA SCRITTA (Usiamo una QLabel invece del paintEvent)
+        self.val_label = QLabel("30%")
+        self.val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.val_label.setStyleSheet("""
+            color: #FF0000; 
+            font-family: 'Consolas'; 
+            font-size: 26px; 
+            font-weight: bold;
+            background: back;
+            border: 1px;
+            border-radius: 8px;
+            padding: 5px;
+            margin: 10px;
+        """)
+
+        # AGGIUNGIAMO UN VERO EFFETTO BAGLIORE (Glow)
+        glow = QGraphicsDropShadowEffect()
+        glow.setBlurRadius(15)
+        glow.setColor(QColor("#FF0000"))
+        glow.setOffset(0, 0)
+        self.val_label.setGraphicsEffect(glow)
+
+        # 2. IL DIAL
+        self.volumeDial = VolumeDial()
+        # Aggiorna il testo della label quando muovi il dial
+        self.volumeDial.valueChanged.connect(self.update_text)
+
+        # Costruzione Layout
+        layout.addWidget(self.val_label)
+        layout.addStretch()  # Spinge il dial verso il basso
+        layout.addWidget(self.volumeDial, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Stile del bordo (Ricorda il paintEvent per il QWidget!)
+        self.setStyleSheet("""
+            QWidget#VolumeContainer {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #e0e0e0, 
+                    stop:0.2 #f5f5f5, 
+                    stop:0.4 #bcbcbc, 
+                    stop:0.6 #ffffff, 
+                    stop:0.8 #9a9a9a, 
+                    stop:1 #cccccc);
+                border: 1px solid #333333;
+                border-radius: 8px;
+            }
+        """)
+
+    def update_text(self, value):
+        self.val_label.setText(f"{value}%")
+
+    def paintEvent(self, event):
+        # Necessario per disegnare il bordo del QWidget
+        from PyQt6.QtWidgets import QStyleOption, QStyle
+        from PyQt6.QtGui import QPainter
+        opt = QStyleOption()
+        opt.initFrom(self)
+        painter = QPainter(self)
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, painter, self)
+
+class VolumeDial(QDial):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        #self.setMinimum(0)
+        #self.setMaximum(100)
+        #self.setValue(30)
+        self.setFixedWidth(140)
+        self.setFixedHeight(140)
+        self.setWrapping(False)
+
+        # Questo forza Qt a usare un algoritmo di tracciamento più lineare
+        self.setNotchTarget(3.0)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        #painter.translate(0, 20)
+
+        width = self.width()
+        height = self.height()
+        outer_radius = min(width, height) / 2 - 15
+        center = self.rect().center()
+
+        # --- 1. TACCHE FITTE E CORTE ---
+        pen_ticks = QPen(QColor("#777777"), 1)
+        painter.setPen(pen_ticks)
+        num_ticks = 51  # Tacche ogni 2%
+        for i in range(num_ticks):
+            painter.save()
+            painter.translate(width / 2, height / 2)
+            angle = 135 + (i * (270 / (num_ticks - 1)))
+            painter.rotate(angle)
+            # Tacche più corte (solo 5 pixel)
+            painter.drawLine(int(outer_radius - 5), 0, int(outer_radius), 0)
+            painter.restore()
+
+        # --- 2. ARCO SOTTILE ---
+        arc_rect = QRectF(width / 2 - outer_radius + 15, height / 2 - outer_radius + 15,
+                          (outer_radius - 15) * 2, (outer_radius - 15) * 2)
+
+        # Sfondo arco
+        painter.setPen(QPen(QColor("#222222"), 2))
+        painter.drawArc(arc_rect, -135 * 16, -270 * 16)
+
+        # Progresso Cyan
+        value_norm = (self.value() - self.minimum()) / (self.maximum() - self.minimum())
+        pen_progress = QPen(QColor("#FF0000"), 3)
+        painter.setPen(pen_progress)
+        painter.drawArc(arc_rect, -135 * 16, int(value_norm * -270 * 16))
+
+        # --- 3. MANOPOLA METALLIZZATA CON EFFETTO LUCE ---
+        knob_rect = arc_rect.adjusted(10, 10, -10, -10)
+
+        # Gradiente lineare per l'effetto metallo/luce
+        gradient = QLinearGradient(knob_rect.topLeft(), knob_rect.bottomRight())
+        gradient.setColorAt(0.0, QColor("#e0e0e0"))  # Luce
+        gradient.setColorAt(0.5, QColor("#888888"))  # Mezzo tono
+        gradient.setColorAt(1.0, QColor("#444444"))  # Ombra
+
+        painter.setPen(QPen(QColor("#FF0000"), 1))
+        painter.setBrush(QBrush(gradient))
+        painter.drawEllipse(knob_rect)
+
+        # Riflesso interno circolare per profondità
+        inner_shadow_rect = knob_rect.adjusted(3, 3, -3, -3)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(255, 255, 255, 50), 2))
+        painter.drawArc(inner_shadow_rect, 45 * 16, 180 * 16)
+
+        # --- 4. INDICATORE (PALLINO SCURO SU METALLO) ---
+        painter.save()
+        painter.translate(width / 2, height / 2)
+        rotation = 135 + (value_norm * 270)
+        painter.rotate(rotation)
+        painter.setBrush(QBrush(QColor("#222222")))
+        painter.setPen(QPen(QColor("#00f0ff"), 1))  # Bordo cyan sottile
+        painter.drawEllipse(int(knob_rect.width() / 2 - 18), -6, 12, 12)
+        painter.restore()
 
 from typing import Optional
 

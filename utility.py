@@ -173,17 +173,19 @@ class WikipediaWorker(QRunnable):
         URL = "https://it.wikipedia.org/w/api.php"
         PARAMS = {
             "action": "query", "format": "json", "prop": "pageimages",
-            "titles": self.artist_name, "pithumbsize": 200  # Usa un thumbnail più piccolo
+            "titles": self.artist_name, "pithumbsize": 200, "redirects": 1  # Usa un thumbnail più piccolo
         }
+        try:
+            R = S.get(url=URL, params=PARAMS)
+            R.raise_for_status()
+            data = R.json()
+            pages = data.get("query", {}).get("pages", {})
+            page = next(iter(pages.values()), None)
 
-        R = S.get(url=URL, params=PARAMS)
-        R.raise_for_status()
-        data = R.json()
-        pages = data.get("query", {}).get("pages", {})
-        page_id = next(iter(pages.keys()), None)
-
-        if page_id and page_id != "-1":
-            return pages[page_id].get("thumbnail", {}).get("source")
+            if page and "thumbnail" in page:
+                return page["thumbnail"].get("source")
+        except Exception as e:
+            print(f"Errore API Wikipedia: {e}")
         return None
 
     def _get_base64_image_tag(self, url):
@@ -457,6 +459,7 @@ class GlobalInputEventFilter(QObject):
 
 class IdleTimeout:
     def __init__(self, parent, idle_time, timeout_fun):
+        self.stop_idle_timer()
         self.idle_timer = None
         self.idle_timeout = None
         self.timeout_fun = timeout_fun
