@@ -6,16 +6,17 @@ import sys
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtCore import Qt, QRect, QSize, QTimer
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
 from pyMyLib.qtUtils import informMessage, AddMenuItem, set_application_icon
 from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 
-from dialogs import RadioDlg, AppConfig
+from dialogs import AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
+from music_radio import RadioDlg
 from utility import detect_cd_drives, close_splash
 from mp3_tag import GENRE
 
@@ -25,6 +26,8 @@ https://streamurl.link/ per trovare stazioni radio
 
 INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.5.1\n02 Novembre 2025'
 
+from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
         super().__init__(parent)
@@ -33,6 +36,15 @@ class MyTitleBar(StandardTitleBar):
         self.setIcon(QIcon(get_resource_file(__file__, 'icone', 'player.ico')))
         self.maxBtn.hide()
         self.setDoubleClickEnabled(False)
+
+        altezza_barra = self.height()
+        self.closeBtn.setFixedSize(altezza_barra, altezza_barra)
+
+        self.closeBtn.setIcon(get_resource_file(__file__, 'icone', 'off.svg'))
+        self.closeBtn.setHoverColor(Qt.GlobalColor.red)
+        self.closeBtn.setPressedColor(Qt.GlobalColor.red)
+        self.closeBtn.setHoverBackgroundColor(QColor(0, 0, 0, 0))  #Qt.GlobalColor.white)  #QColor(232, 17, 35))
+        self.closeBtn.setPressedBackgroundColor(QColor(241, 112, 122))
 
         lay = self.layout()
         lay.insertSpacing(3, 5)
@@ -51,21 +63,10 @@ class Player(FramelessDialog): #QMainWindow):
 
         self.ini = iniConf(AppConfig)
 
-        '''
-        self.splash = None
-        f = get_resource_file(__file__, 'icone',  'splash.bmp')
-        if os.path.isfile(f):
-            self.splash = create_fast_splash_pyqt6()
-            #self.splash = QSplashScreen(QPixmap(f))
-            self.splash.show()
-        '''
-
         self.background_mode = False
         self.create_ui()
 
         close_splash()
-        #if self.splash is not None:
-        #    self.splash.close()
 
         self.Install_idle_fun()
         self.show()
@@ -332,7 +333,7 @@ class Player(FramelessDialog): #QMainWindow):
             for t in lst:
                 self.dlg.add_playlist(*t)
 
-            tip = self.dlg.tab.tabToolTip(1)
+            tip = self.dlg.playPlaylist.toolTip()
             stat = {}
             for t in lst:
                 if t[0] in stat.keys():
@@ -342,9 +343,9 @@ class Player(FramelessDialog): #QMainWindow):
                     stat[t[0]] = 1
             lines = [f"{key}: {value}" for key, value in stat.items()]
             tip = f"{tip}\n {'\n'.join(lines)}"
-            self.dlg.tab.setTabToolTip(1, tip)
+            self.dlg.playPlaylist.setToolTip(tip)
 
-            self.dlg.tab.setCurrentIndex(1)
+            self.dlg.switch_to_page(1)
 
     def get_generi(self):
         from collections import defaultdict

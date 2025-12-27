@@ -1,3 +1,4 @@
+import os
 import subprocess
 import re
 
@@ -950,6 +951,11 @@ class AudioConverter(QDialog):
     def on_file_converted(self, filename, success):
         """Callback per file convertito."""
         status = "✓" if success else "✗"
+        basename = os.path.basename(filename)
+        items = self.table.findItems(basename, Qt.MatchFlag.MatchExactly)
+        if items:
+            track_num = items[0].row()
+            self.table.item(track_num, 0).setCheckState(Qt.CheckState.Unchecked)
         print(f"{status} {filename}")
 
     def on_conversion_finished(self):

@@ -1,17 +1,18 @@
 from profiler import checkpoint
 
 import os
+import math
 import time
 from pyMyLib.utils import iniConf, get_resource_path_pathlib, get_resource_file
 
-vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc')) #os.path.join(os.getcwd(), 'exe/VLC')
+vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc'))
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF
-from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QFont, QBrush, QColor
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QApplication, QSlider, QGroupBox, QMessageBox, QWidget,
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QWidget,
                              QGraphicsDropShadowEffect)
 
 from pyMyLib.qtUtils import set_background, waitCursor
@@ -65,10 +66,59 @@ class MusicPlayerDlg(QDialog):
         self.timer.timeout.connect(self.update_ui)
 
         ''' Parte superiore con copertina e spettro'''
-        h3 = QHBoxLayout()
+        group_box = QGroupBox()
+        group_box.setObjectName("HiFiGroup")
+
+        group_box.setStyleSheet("""
+            QGroupBox#HiFiGroup {
+                /* 1. EFFETTO METALLO SATINATO (Gradiente Diagonale) */
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #e0e0e0, 
+                    stop:0.2 #f5f5f5, 
+                    stop:0.4 #bcbcbc, 
+                    stop:0.6 #ffffff, 
+                    stop:0.8 #9a9a9a, 
+                    stop:1 #cccccc);
+
+                /* 2. BORDO INCASSATO */
+                border: 1px solid #333333;
+                border-radius: 8px;
+                margin-top: 2px; /* Spazio per il titolo che "galleggia" sul bordo */
+                font-weight: bold;
+            }
+
+            /* 3. STILE DEL TITOLO (LED ROSSO) */
+            QGroupBox#HiFiGroup::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center; /* Posiziona il titolo in alto al centro */
+                padding: 0 10px;
+                color: #FF0000;                  /* Rosso come il volume */
+                font-family: 'Consolas';
+                background-color: transparent;   /* Lo fa apparire sopra il metallo */
+            }
+        """)
+        h3 = QHBoxLayout(group_box)
         self.videoframe = QFrame()
+        self.videoframe.setStyleSheet("""
+             QFrame {
+                    border: 1px solid #FF0000;
+                    border-radius: 8px;        /* Regola la stondatura qui */
+                    background-color: transparent;
+                    margin: 0px;               /* Rimuove l'offset esterno */
+                    padding: 0px;              /* Rimuove lo spazio interno */
+                }      
+        """)
         self.videoframe.setMinimumSize(QSize(200, 200))
         self.cover = QLabel()
+        self.cover.setStyleSheet("""
+            QLabel {
+                border: 1px solid #FF0000;
+                border-radius: 8px;        /* Regola la stondatura qui */
+                background-color: transparent;
+                margin: 0px;               /* Rimuove l'offset esterno */
+                padding: 0px;              /* Rimuove lo spazio interno */
+            }
+        """)
         self.cover.setMinimumSize(QSize(200, 200))
         self.cover.setMaximumWidth(200)
         h3.addStretch()
@@ -81,26 +131,20 @@ class MusicPlayerDlg(QDialog):
         wdd = self.control_frame()
 
         # volume
-        vol = self.volume_ui() #equalize_ctrl.get_preset())
+        vol = self.volume_ui()
 
         # equalizzatore
         equalizer = self.equalizer_ui()
-        '''
-        equalize_ctrl = Equalizer(self.mediaplayer)
-        ve = QVBoxLayout()
-        ve.setContentsMargins(0, 0, 0, 0)
-        ve.setSpacing(0)
-        ve.addWidget(equalize_ctrl.get_preset(), alignment=Qt.AlignmentFlag.AlignCenter)
-        ve.addWidget(equalize_ctrl)
-        '''
+
         h2 = QHBoxLayout()
         h2.addWidget(equalizer)
         h2.addWidget(vol)
 
         v2 = QVBoxLayout(self)
-        v2.addLayout(h3)
+        v2.addWidget(group_box)
         v2.addWidget(wdd)
         v2.addLayout(h2)
+        v2.setContentsMargins(2, 0, 2, 2)
 
     def position_slider_ui(self):
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
@@ -277,8 +321,10 @@ class MusicPlayerDlg(QDialog):
     def equalizer_ui(self):
         equalize_ctrl = Equalizer(self.mediaplayer)
         qe = QGroupBox(self)
+        #qe.setContentsMargins(0, 0, 0, 0)
         ve = QVBoxLayout(qe)
-        ve.setContentsMargins(4, 0, 2, 0)
+        ve.setContentsMargins(4, 0, 4, 0)
+
         ve.setSpacing(0)
         ve.addWidget(equalize_ctrl.get_preset(), alignment=Qt.AlignmentFlag.AlignLeft)
         ve.addWidget(equalize_ctrl)
@@ -289,18 +335,6 @@ class MusicPlayerDlg(QDialog):
         vc.volumeDial.setValue(self.mediaplayer.audio_get_volume())
         vc.volumeDial.valueChanged.connect(self.set_volume)
         return vc
-
-        self.volumeDial = VolumeDial(self)  #QDial(self)
-        self.volumeDial.setValue(self.mediaplayer.audio_get_volume())
-        self.volumeDial.setToolTip("Volume")
-        self.volumeDial.setNotchesVisible(True)
-        #self.volumeDial.setMaximumHeight(80)
-        self.volumeDial.valueChanged.connect(self.set_volume)
-        #v3 = QVBoxLayout()
-        #v3.setContentsMargins(0, 0, 0, 0)
-        #v3.addWidget(cmb)  #self.cmb)
-        #v3.addWidget(self.volumeDial)
-        return self.volumeDial #v3
 
     def set_volume(self, volume):
         # Set the volume
@@ -863,7 +897,10 @@ class VolumeControl(QWidget):
             border: 1px;
             border-radius: 8px;
             padding: 5px;
-            margin: 10px;
+            margin-top: 10px;
+            margin-left: 15px;
+            margin-right: 15px;
+            margin-bottom: 0px;
         """)
 
         # AGGIUNGIAMO UN VERO EFFETTO BAGLIORE (Glow)
@@ -895,11 +932,51 @@ class VolumeControl(QWidget):
                     stop:1 #cccccc);
                 border: 1px solid #333333;
                 border-radius: 8px;
+                margin-bottom: 0px;
+                padding: 0px;
             }
         """)
 
+    @staticmethod
+    def percentage_to_db(percentage):
+        if percentage <= 0:
+            return -80.0 # Considerato silenzio assoluto
+
+        # Parametri per simulare un amplificatore reale
+        # Range dinamico: 60 dB (da -60 a 0)
+        # Questa formula "schiaccia" la parte bassa per dare più precisione
+        # e fa sì che il 50% della manopola sia circa -30/-40 dB
+
+        # Usiamo una costante di curvatura (k)
+        # k = 2 è una buona simulazione di un potenziometro logaritmico
+        k = 2
+        normalized_val = (math.pow(10, k * percentage / 100.0) - 1) / (math.pow(10, k) - 1)
+
+        if normalized_val <= 0: return -80.0
+
+        db = 20 * math.log10(normalized_val)
+
+        # Limitiamo il fondo scala a -60dB per non avere numeri troppo grandi
+        return max(db, -60.0)
+
     def update_text(self, value):
-        self.val_label.setText(f"{value}%")
+        type = 'db'
+        if type == 'db':
+            db_val = self.percentage_to_db(value)
+            db_text = f"{db_val:.1f} dB"
+            '''
+            db_text = f"{db_val:.1f} dB"
+            if value <= 0:
+                db_text = "-∞ dB"
+            else:
+                # Formula audio standard
+                db_val = 20 * math.log10(value / 100.0)
+                # Arrotondiamo a 1 decimale per un look professionale
+                db_text = f"{db_val:.1f} dB"
+            '''
+        else:
+            db_text = f"{value}%"
+        self.val_label.setText(db_text)
 
     def paintEvent(self, event):
         # Necessario per disegnare il bordo del QWidget
@@ -913,24 +990,27 @@ class VolumeControl(QWidget):
 class VolumeDial(QDial):
     def __init__(self, parent=None):
         super().__init__(parent)
-        #self.setMinimum(0)
-        #self.setMaximum(100)
-        #self.setValue(30)
+
+        self.setWrapping(False)
         self.setFixedWidth(140)
         self.setFixedHeight(140)
-        self.setWrapping(False)
+        # Memorizziamo l'ultimo valore valido per evitare salti
+        self.last_valid_value = self.value()
 
         # Questo forza Qt a usare un algoritmo di tracciamento più lineare
         self.setNotchTarget(3.0)
 
+        self.setSingleStep(1)
+        self.setPageStep(10)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        #painter.translate(0, 20)
 
         width = self.width()
         height = self.height()
-        outer_radius = min(width, height) / 2 - 15
+        gap = 11
+        outer_radius = min(width, height) / 2 - gap
         center = self.rect().center()
 
         # --- 1. TACCHE FITTE E CORTE ---
@@ -947,8 +1027,8 @@ class VolumeDial(QDial):
             painter.restore()
 
         # --- 2. ARCO SOTTILE ---
-        arc_rect = QRectF(width / 2 - outer_radius + 15, height / 2 - outer_radius + 15,
-                          (outer_radius - 15) * 2, (outer_radius - 15) * 2)
+        arc_rect = QRectF(width / 2 - outer_radius + gap, height / 2 - outer_radius + gap,
+                          (outer_radius - gap) * 2, (outer_radius - gap) * 2)
 
         # Sfondo arco
         painter.setPen(QPen(QColor("#222222"), 2))
@@ -985,9 +1065,77 @@ class VolumeDial(QDial):
         rotation = 135 + (value_norm * 270)
         painter.rotate(rotation)
         painter.setBrush(QBrush(QColor("#222222")))
-        painter.setPen(QPen(QColor("#00f0ff"), 1))  # Bordo cyan sottile
+        #painter.setPen(QPen(QColor("#00f0ff"), 1))  # Bordo cyan sottile
+        painter.setPen(QPen(QColor("#FF0000"), 1))  # Cambiato da Cyan a Rosso
         painter.drawEllipse(int(knob_rect.width() / 2 - 18), -6, 12, 12)
         painter.restore()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._updateValueFromMouse(event.pos())
+        # Chiamiamo comunque il super() se vogliamo mantenere
+        # alcuni comportamenti standard (come il focus)
+        super().mousePressEvent(event)
+
+    # 2. Viene chiamato quando sposti il mouse tenendo premuto
+    def mouseMoveEvent(self, event):
+        # Durante il trascinamento, aggiorniamo continuamente il valore
+        self._updateValueFromMouse(event.pos())
+        # NOTA: Qui spesso NON si chiama super().mouseMoveEvent(event)
+        # per evitare che il comportamento standard di Qt "litighi" con il tuo
+        self.update()
+
+    def _updateValueFromMouse(self, pos):
+
+        width = self.width()
+        height = self.height()
+        dx = pos.x() - width / 2
+        dy = pos.y() - height / 2
+
+        angle_rad = math.atan2(dy, dx)
+        angle_deg = (math.degrees(angle_rad) + 360) % 360
+
+        # Trasliamo lo zero all'inizio del tuo arco (135°)
+        adjusted_angle = (angle_deg - 135 + 360) % 360
+
+        # 1. GESTIONE ZONA MORTA (il vuoto di 90° in basso)
+        # Se siamo tra 270 e 360, forziamo i limiti senza calcolare valori intermedi
+        if adjusted_angle > 270:
+            if adjusted_angle > 315:
+                new_value = self.minimum()
+            else:
+                new_value = self.maximum()
+        else:
+            # 2. CALCOLO VALORE NORMALE
+            percentage = adjusted_angle / 270.0
+            new_value = int(self.minimum() + percentage * (self.maximum() - self.minimum()))
+
+        # 3. FILTRO ANTI-SALTO (IL SEGRETO)
+        # Se il salto è superiore al 50% dell'intero range,
+        # probabilmente il mouse è passato velocemente sopra la zona morta.
+        limit_range = self.maximum() - self.minimum()
+        if abs(new_value - self.last_valid_value) > (limit_range * 0.5):
+            # Ignoriamo il salto e manteniamo il limite più vicino
+            if self.last_valid_value < (limit_range * 0.5):
+                new_value = self.minimum()
+            else:
+                new_value = self.maximum()
+
+        # 4. AGGIORNAMENTO
+        self.last_valid_value = new_value
+        self.blockSignals(True)
+        self.setValue(new_value)
+        self.blockSignals(False)
+        self.valueChanged.emit(new_value)
+        self.update()
+
+    # IMPORTANTE: Rimuovi ogni interferenza dei metodi originali
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._updateValueFromMouse(event.pos())
+
+    def mouseMoveEvent(self, event):
+        self._updateValueFromMouse(event.pos())
 
 from typing import Optional
 

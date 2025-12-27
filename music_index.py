@@ -3,10 +3,11 @@ import os
 
 import copy
 from PyQt6.QtCore import Qt, QEvent, QRect, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QCursor, QAction
+from PyQt6.QtGui import QPixmap, QIcon, QCursor, QAction, QFont
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QTabWidget,
-                             QAbstractItemView, QMenu, QToolTip)
+                             QAbstractItemView, QMenu, QToolTip, QFrame, QStackedWidget, QGraphicsOpacityEffect,
+                             QSizePolicy)
 
 from mp3_tag import Music
 
@@ -48,6 +49,166 @@ class infoDlg(QDialog):
         dlg = infoDlg(parent, txt)
         dlg.exec()
 
+
+from PyQt6.QtWidgets import QStackedWidget
+from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup
+
+
+class SlidingStackedWidget(QStackedWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.duration = 400  # Millisecondi della transizione
+        self.curve = QEasingCurve.Type.OutQuint  # Movimento fluido e naturale
+
+class SlidingStackedWidget(QStackedWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.duration = 500  # Un po' più lento per godersi la dissolvenza
+        self.curve = QEasingCurve.Type.OutCubic
+
+    def slide_to_index(self, index):
+        if self.currentIndex() == index:
+            return
+
+        old_widget = self.currentWidget()
+        new_widget = self.widget(index)
+        direction = 1 if index > self.currentIndex() else -1
+        width = self.width()
+
+        # --- PREPARAZIONE OPACITÀ ---
+        # Creiamo gli effetti di opacità per entrambi i widget
+        eff_old = QGraphicsOpacityEffect(old_widget)
+        eff_new = QGraphicsOpacityEffect(new_widget)
+        old_widget.setGraphicsEffect(eff_old)
+        new_widget.setGraphicsEffect(eff_new)
+
+        # Il nuovo widget parte invisibile e fuori schermo
+        new_widget.setGeometry(direction * width, 0, width, self.height())
+        new_widget.show()
+        new_widget.raise_()
+
+        self.group = QParallelAnimationGroup()
+
+        # --- ANIMAZIONI POSIZIONE (SLIDE) ---
+        anim_pos_old = QPropertyAnimation(old_widget, b"pos")
+        anim_pos_old.setDuration(self.duration)
+        anim_pos_old.setEndValue(QPoint(-direction * (width // 2), 0)) # Esce solo a metà per effetto profondità
+        self.group.addAnimation(anim_pos_old)
+
+        anim_pos_new = QPropertyAnimation(new_widget, b"pos")
+        anim_pos_new.setDuration(self.duration)
+        anim_pos_new.setEndValue(QPoint(0, 0))
+        self.group.addAnimation(anim_pos_new)
+
+        # --- ANIMAZIONI OPACITÀ (FADE) ---
+        anim_fade_old = QPropertyAnimation(eff_old, b"opacity")
+        anim_fade_old.setDuration(self.duration)
+        anim_fade_old.setStartValue(1.0)
+        anim_fade_old.setEndValue(0.0)
+        self.group.addAnimation(anim_fade_old)
+
+        anim_fade_new = QPropertyAnimation(eff_new, b"opacity")
+        anim_fade_new.setDuration(self.duration)
+        anim_fade_new.setStartValue(0.0)
+        anim_fade_new.setEndValue(1.0)
+        self.group.addAnimation(anim_fade_new)
+
+        # --- PULIZIA FINALE ---
+        def cleanup():
+            self.setCurrentIndex(index)
+            # Rimuoviamo gli effetti per liberare risorse e permettere interazioni pulite
+            old_widget.setGraphicsEffect(None)
+            new_widget.setGraphicsEffect(None)
+
+        self.group.finished.connect(cleanup)
+        self.group.start()
+
+
+from PyQt6.QtWidgets import QAbstractButton
+from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush
+from PyQt6.QtCore import Qt, QRectF, QPropertyAnimation, pyqtProperty
+
+from PyQt6.QtWidgets import QAbstractButton
+from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush
+from PyQt6.QtCore import Qt, QRectF, QPropertyAnimation, pyqtProperty
+
+
+class HiFiToggle(QAbstractButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Larghezza fissa a 15px, altezza ridotta a 40px
+        self.setFixedSize(15, 90)
+        # Forza il widget a non espandersi orizzontalmente
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setCheckable(True)
+        self._pos = 0.0
+
+    @pyqtProperty(float)
+    def pos(self): return self._pos
+
+    @pos.setter
+    def pos(self, p):
+        self._pos = p
+        self.update()
+
+    def nextCheckState(self):
+        super().nextCheckState()
+        end = 1.0 if self.isChecked() else 0.0
+        self.anim = QPropertyAnimation(self, b"pos")
+        self.anim.setDuration(150)  # Più veloce essendo piccola
+        self.anim.setEndValue(end)
+        self.anim.start()
+
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+
+        icon_area = 20  # Spazio riservato a ogni icona
+        padding = 5  # <--- DISTANZA tra icona e slot nero
+
+        # Calcoliamo lo slot centrale sottraendo icone e padding
+        slot_y_start = icon_area + padding
+        slot_h = h - (2 * (icon_area + padding))
+        slot_rect = QRectF(1, slot_y_start, w - 2, slot_h)
+
+        # 1. DISEGNO SLOT (Incasso)
+        painter.setPen(QPen(QColor("#222222"), 1))
+        painter.setBrush(QColor("#050505"))
+        painter.drawRoundedRect(slot_rect, 3, 3)
+
+        # 2. ICONE (Distanziate)
+        font = QFont("Segoe UI Symbol", 9)
+        painter.setFont(font)
+
+        # Icona Superiore (Nota) - Disegnata nel suo spazio dedicato in alto
+        color_top = QColor("#FF0000") if not self.isChecked() else QColor("#440000")
+        painter.setPen(color_top)
+        painter.drawText(QRectF(0, 0, w, icon_area), Qt.AlignmentFlag.AlignCenter, "♫")
+
+        # Icona Inferiore (Lista) - Disegnata nel suo spazio dedicato in basso
+        color_bottom = QColor("#FF0000") if self.isChecked() else QColor("#440000")
+        painter.setPen(color_bottom)
+        painter.drawText(QRectF(0, h - icon_area, w, icon_area), Qt.AlignmentFlag.AlignCenter, "≡")
+
+        # 3. CORSA DELLA LEVETTA (Allineata allo slot)
+        y_range = slot_h - (w - 2) - 4
+        # La corsa ora parte dall'inizio dello slot (slot_y_start)
+        y_pos = slot_y_start + 2 + (self._pos * y_range)
+        knob_rect = QRectF(1, y_pos, w - 2, w - 2)
+        # 4. GRADIENTE METALLICO
+        grad = QLinearGradient(knob_rect.topLeft(), knob_rect.bottomRight())
+        grad.setColorAt(0, QColor("#f0f0f0"))
+        grad.setColorAt(0.5, QColor("#999999"))
+        grad.setColorAt(1, QColor("#555555"))
+
+        # 5. DISEGNO POMOLO
+        painter.setPen(QPen(QColor("#111111"), 1))
+        painter.setBrush(grad)
+        painter.drawRoundedRect(knob_rect, 2, 2)
 
 class MusicIndexDlg(QDialog):
     play_signal = pyqtSignal(list)
@@ -140,25 +301,87 @@ class MusicIndexDlg(QDialog):
         splitter2.setOrientation(Qt.Orientation.Vertical)
         splitter2.setContentsMargins(0, 0, 0, 0)
         splitter2.addWidget(splitter1)
-        self.tab = QTabWidget(self)
-        self.tab.setTabPosition(QTabWidget.TabPosition.West)
-        self.tab.tabBarDoubleClicked.connect(self.play_playlist)
+
+        '''
+        sidebar = QFrame()
+        sidebar.setFixedWidth(15)  # Molto stretta per non rubare spazio
+        sidebar.setStyleSheet("background-color: #FFFFFF; border-right: 1px solid #333;")
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Pulsanti della sidebar
+        btn_page1 = QPushButton("♫")
+        #btn_page1.setIcon(QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
+        btn_page1.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #555; /* Spento */
+                border: none;
+                font-size: 20px;
+            }
+            QPushButton:checked {
+                color: #FF0000; /* Acceso (LED) */
+                border-left: 3px solid #FF0000; /* Barretta laterale di stato */
+            }        
+        """)
+        btn_page2 = QPushButton("⚙")
+        sidebar_layout.addWidget(btn_page1)
+        sidebar_layout.addWidget(btn_page2)
+        sidebar_layout.addStretch()
+        '''
+        self.toggle_switch = HiFiToggle()
+        # Colleghiamo il segnale alla transizione
+        self.toggle_switch.toggled.connect(
+            lambda checked: self.tab.slide_to_index(1 if checked else 0)
+        )
+
+        self.tab = SlidingStackedWidget() #QStackedWidget()
+        #btn_page1.clicked.connect(lambda: self.tab.slide_to_index(0))
+        #btn_page2.clicked.connect(lambda: self.tab.slide_to_index(1))
+
+        #self.tab = QTabWidget(self)
+        #self.tab.setTabPosition(QTabWidget.TabPosition.West)
+        #self.tab.tabBarDoubleClicked.connect(self.play_playlist)
         self.tab.setMaximumWidth(250)
 
         self.pix = QLabel()
 
         vl = QVBoxLayout()
-        self.plst = myList(self)
+        vl.setContentsMargins(0, 0, 0, 0)
+        vl.setSpacing(1)
+        self.plst = myList(self, cursor=1)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        bp = QPushButton(self)
-        bp.setIcon(QIcon(get_resource_file(__file__, 'icone', 'play.png')))
-        bp.clicked.connect(lambda x: self.play_playlist(1))
+        self.plst.setStyleSheet("""
+            QListWidget::item:selected {
+                background-color: #77FF77; /* Colore di sfondo della selezione */
+                color: black;            /* Colore del testo della selezione */
+            }
+        """)
+        self.playPlaylist = QPushButton(self)
+        self.playPlaylist.setIcon(QIcon(get_resource_file(__file__, 'icone', 'play.png')))
+        self.playPlaylist.clicked.connect(lambda x: self.play_playlist(1))
         vl.addWidget(self.plst)
-        vl.addWidget(bp)
+        vl.addWidget(self.playPlaylist)
+        vl.setContentsMargins(0, 0, 0, 0)
+        vl.setSpacing(1)
         wd = QWidget(self)
-        wd.setContentsMargins(0, 0, 0, 0)
         wd.setLayout(vl)
 
+        self.tab.addWidget(self.pix)
+        self.tab.addWidget(wd)
+
+        wd1 = QWidget(self)
+        hv = QHBoxLayout(wd1)
+        hv.setContentsMargins(1, 0, 1, 1)
+        hv.setSpacing(0)
+        hv.addWidget(self.toggle_switch)
+        hv.addWidget(self.tab)
+        hv.addWidget(self.tracks)
+        splitter2.addWidget(wd1)
+
+
+
+        '''
         self.tab.addTab(self.pix, '')
         self.tab.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
         self.tab.setTabToolTip(0, 'copertina')
@@ -166,7 +389,8 @@ class MusicIndexDlg(QDialog):
         self.tab.addTab(wd, '')
         self.tab.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
         self.tab.setTabToolTip(1, 'playlist')
-
+        '''
+        '''
         self.h = QHBoxLayout()
         self.h.setContentsMargins(1, 1, 1, 1)
         self.h.addWidget(self.tab)
@@ -174,6 +398,7 @@ class MusicIndexDlg(QDialog):
         wd = QWidget()
         wd.setLayout(self.h)
         splitter2.addWidget(wd)
+        '''
 
         v.addLayout(h0)
         v.addWidget(splitter2)
@@ -252,37 +477,42 @@ class MusicIndexDlg(QDialog):
 
     def contextMenu(self, p, wd, it):
         ctx = QMenu(self)
-        if wd == self.artists:
+        if wd == self.artists: #nessuna azione nella lista artisti
             return
-        if wd == self.plst:
-            ctx.addAction("Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
-            ctx.addAction("Rimuove selezionati").triggered.connect(lambda x: self.remove_playlist('selected'))
+        if wd == self.plst: #nella lista play list rimuove tutti o selezionati
+            ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_remove.png'))
+            ctx.addAction(ico, "Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
+            ico = QIcon(get_resource_file(__file__, 'icone', 'remove_selected.png'))
+            ctx.addAction(ico, "Rimuove selezionati").triggered.connect(lambda x: self.remove_playlist('selected'))
+            ico = QIcon(get_resource_file(__file__, 'icone', 'shuffle.png'))
+            ctx.addAction(ico, "Mischia").triggered.connect(self.scramble_playlist)
         else:
             artist = self.artists.selectedItems()
-            if len(artist) > 0:
-                artist = artist[0].text()
-            if wd == self.albums:
+            if not artist: #l'artista deve essere selezionato
+                return
+            artist = artist[0].text()
+            if wd == self.albums: #se lista album it è l'elemento selezionato
                 album = it.text()
-                track = ''
-            else:
+                if not album:
+                    return
+                track = '' # track vuoto ad indicare tutte quelle dell'album
+            else: #siamo nella lista tracce
                 album = self.albums.selectedItems()
+                if not album:
+                    return
                 if len(album) > 0:
                     album = album[0].text()
                 track = it.text()
-            if artist:
-                ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
-                (ctx.addAction(ico, "Aggiunge alla playlist").
+
+            ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
+            (ctx.addAction(ico, "Aggiunge alla playlist").
                  triggered.connect(lambda x: self.add_playlist(artist, album, track)))
             if wd == self.tracks:
                 ico = QIcon(get_resource_file(__file__, 'icone', 'lyric.png'))
                 ctx.addAction(ico, "Testo").triggered.connect(lambda x: lyric_song(artist, track, self.wparent))
             else:
-                if artist:
-                    ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
-            if wd == self.albums:
-                album = self.albums.selectedItems()
-                if album and self.tracks.count():
-                    album = album[0].text()
+                ctx.addAction("Informazioni").triggered.connect(lambda x: info_album(artist, album, self.wparent))
+                if self.tracks.count():
                     trk = self.tracks.item(0).text()
                     try:
                         v = self.music.tracks.name[trk + '@' + album]
@@ -305,6 +535,30 @@ class MusicIndexDlg(QDialog):
     def clear_playlist(self):
         self.plst.clear()
 
+    def switch_to_page(self, index):
+        """Sincronizza lo StackedWidget e la Levetta"""
+
+        # 1. Cambia la pagina con l'animazione slide
+        self.tab.slide_to_index(index)
+
+        # 2. Aggiorna la levetta
+        # Blocchiamo i segnali per evitare che la levetta richiami
+        # di nuovo slide_to_index in un ciclo infinito
+        self.toggle_switch.blockSignals(True)
+
+        # Se index è 0 (Cover) -> checked = False (Su)
+        # Se index è 1 (List)  -> checked = True (Giù)
+        self.toggle_switch.setChecked(index == 1)
+
+        # 3. Forziamo l'animazione fisica della levetta (perché setChecked non chiama nextCheckState)
+        end_val = 1.0 if index == 1 else 0.0
+        self.toggle_switch.anim = QPropertyAnimation(self.toggle_switch, b"pos")
+        self.toggle_switch.anim.setDuration(150)
+        self.toggle_switch.anim.setEndValue(end_val)
+        self.toggle_switch.anim.start()
+
+        self.toggle_switch.blockSignals(False)
+
     def add_playlist(self, artist, album, track):
         if track != '':
             vi = [self.music.tracks.name[track + '@' + album]]
@@ -312,18 +566,22 @@ class MusicIndexDlg(QDialog):
             trks = self.music.find_tracks(album, artist)
             vi = [self.music.tracks.name[trk + '@' + album] for trk in trks if trk]
 
+        tot_time = 0
         for p in vi:
             qi = QListWidgetItem(p.title)
             qi.setData(Qt.ItemDataRole.UserRole, p)
+            qi.setToolTip(f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}")
             self.plst.addItem(qi)
+            tot_time += p.tm_sec
 
-        tot_time = 0
+        '''
         for r in range(self.plst.count()):
             qi = self.plst.item(r)
             p = qi.data(Qt.ItemDataRole.UserRole)
             mes = f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}"
             qi.setToolTip(mes)
             tot_time += p.tm_sec
+        '''
 
         h = int(tot_time / 3600)
         m = int((tot_time - h * 3600) / 60)
@@ -334,7 +592,8 @@ class MusicIndexDlg(QDialog):
         tm += str(m) + 'm ' + str(s) + 's'
 
         mes = 'playlist brani: ' + str(self.plst.count()) + ' durata: ' + tm
-        self.tab.setTabToolTip(1, mes)
+        self.playPlaylist.setToolTip( mes)
+        self.switch_to_page(1)
 
     def remove_playlist(self, type):
         if type == 'all':
@@ -345,6 +604,17 @@ class MusicIndexDlg(QDialog):
             for r in reversed(rs):
                 self.plst.takeItem(r)
             a = 0
+
+    def scramble_playlist(self):
+        import random
+        vi = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.plst.count())]
+        self.plst.clear()
+        random.shuffle(vi)
+        for p in vi:
+            qi = QListWidgetItem(p.title)
+            qi.setData(Qt.ItemDataRole.UserRole, p)
+            qi.setToolTip(f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}")
+            self.plst.addItem(qi)
 
     def process(self):
         if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
@@ -469,6 +739,7 @@ class MusicIndexDlg(QDialog):
             tracks = self.music.find_tracks(trk_name, art_name)
             self.get_track_pix(trk_name, art_name, self.pix)
             self.tracks.addItems(a for a in tracks)
+            self.switch_to_page(0)
 
     def get_track_pix(self, trk_name, art_name, pix):
         pic = self.music.find_pic(trk_name, art_name)
@@ -504,20 +775,22 @@ class MusicIndexDlg(QDialog):
         QApplication.processEvents()
 
     def play_song(self):
-        alb = self.albums.selectedItems()[0].text()
-        trk = self.tracks.selectedItems()[0].text()
-        t = trk + '@' + alb
-        tt = self.music.tracks.name[t]
-        self.play_signal.emit([tt])
-        #self.wparent.open_file([tt])
+        try:
+            alb = self.albums.selectedItems()[0].text()
+            trk = self.tracks.selectedItems()[0].text()
+            t = trk + '@' + alb
+            tt = self.music.tracks.name[t]
+            self.play_signal.emit([tt])
+        except:
+            pass
 
     def play_album(self):
-        sel_alb = self.albums.selectedItems()
-        if sel_alb is None or len(sel_alb) == 0:
-            return
-        alb = sel_alb[0].text()
-        trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
+        try:
+            alb = self.albums.selectedItems()[0].text()
+            trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
 
-        v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
-        self.play_signal.emit(v)
-        #self.wparent.open_file(v)
+            v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
+            self.play_signal.emit(v)
+        except:
+            pass
+

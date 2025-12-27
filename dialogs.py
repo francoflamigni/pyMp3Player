@@ -58,246 +58,28 @@ class myList(QListWidget):
         super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
-        if not self.cursor:
-            if event.button() == Qt.MouseButton.RightButton:
-                it = self.itemAt(event.pos())
-                if it is not None:
-                    p = self.mapToGlobal(event.pos())
-                    self.wparent.contextMenu(p, self, it)
-            elif event.button() == Qt.MouseButton.LeftButton:
-                it = self.itemAt(event.pos())
-                x = event.pos().x()
-                if it == self.itc and x <= 50:
-                    try:
-                        self.unsetCursor()
-                        self.wparent.play_item(self)
-                    except:
-                        pass
-                elif it != self.itc and x <= 50:
-                    self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
+        if event.button() == Qt.MouseButton.RightButton:
+            it = self.itemAt(event.pos())
+            if it is not None:
+                p = self.mapToGlobal(event.pos())
+                self.wparent.contextMenu(p, self, it)
+        elif not self.cursor and event.button() == Qt.MouseButton.LeftButton:
+            it = self.itemAt(event.pos())
+            x = event.pos().x()
+            if it == self.itc and x <= 50:
+                try:
+                    self.unsetCursor()
+                    self.wparent.play_item(self)
+                except:
+                    pass
+            elif it != self.itc and x <= 50:
+                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
         super(QListWidget, self).mousePressEvent(event)
 
 def lyric_song(artist, track, parent=None):
     txt = scrobbler.song_text(artist, track)
     if len(txt) > 0:
         lyricsDlg.run(parent, txt, track)
-
-class tableMenu(QTableWidget):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.wparent = parent
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            p = event.pos()
-            it = self.itemAt(p)
-            self.wparent.contextMenu(self.mapToGlobal(p), self, it)
-        super(QTableWidget, self).mousePressEvent(event)
-
-
-class RadioDlg(QDialog):
-    radio_signal = pyqtSignal(str, str)
-    def __init__(self, parent):
-        super(RadioDlg, self).__init__(parent)
-        self.ini = parent.ini
-        self.wparent = parent
-        self.setObjectName("radio_widget")
-        set_background(self)
-
-        v = QVBoxLayout(self)
-
-        h = QHBoxLayout()
-        self.ed = QLineEdit(self)
-        self.ed.returnPressed.connect(self.search)
-        h.addWidget(self.ed)
-
-        icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
-        azione_cerca = QAction(icona_cerca, "Cerca", self)
-        azione_cerca.triggered.connect(self.search)
-        self.ed.addAction(
-            azione_cerca,
-            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
-        )
-
-        sp = QSplitter(self)
-        sp.setOrientation(Qt.Orientation.Vertical)
-
-        v1 = QVBoxLayout()
-        v1.addLayout(h)
-        self.table = tableMenu(self)
-        v1.addWidget(self.table)
-
-        w = QWidget()
-        w.setLayout(v1)
-        sp.addWidget(w)
-
-        self.favorites = myList(self)
-        self.favorites.doubleClicked.connect(self.play)
-        self.favorites.itemSelectionChanged.connect(self.favorite_changed)
-        sp.addWidget(self.favorites)
-        v.addWidget(sp)
-
-        rd = self.ini.get('radio')
-        if rd is not None:
-            for d in rd.keys():
-                self.favorites.addItem(d)
-
-    def search(self):
-        from pyradios import RadioBrowser
-        src = self.ed.text()
-        if len(src) > 0:
-            waitCursor(True)
-            rb = RadioBrowser()
-            a = rb.search(name=src, name_exact=False, hidebroken=True)
-            self.fill_table(a)
-            waitCursor()
-
-    def load_icons(self, list):
-        row = 0
-        for l in list:
-            if 'ref' in l['url']:
-                continue
-            im = scrobbler.get_thumbnail(l['favicon'])
-            if im is not None:
-                qii = self.table.item(row, 1)
-                qp = QPixmap()
-                qp.loadFromData(im)
-                qii.setIcon(QIcon(qp))
-            row += 1
-
-    def fill_table(self, rList):
-        self.table.setRowCount(0)
-        if len(rList) == 0:
-            return
-        radios = []
-        for l in rList:
-            if 'ref' in l['url']:
-                continue
-            r = RadioStation(l['name'], l['url'], None, l['country'], l['favicon'])
-            radios.append(r)
-
-        searcher = Thread(target=self.load_icons, args=(rList,))
-        searcher.start()
-
-        fields = ['Nome', 'icon', 'paese', ' ']
-        self.table.setColumnCount(len(fields))
-        self.table.setHorizontalHeaderLabels(fields)
-        self.table.cellClicked.connect(self.onCellClicked)
-
-        horizontalHeader = self.table.horizontalHeader()
-        horizontalHeader.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        horizontalHeader.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        horizontalHeader.resizeSection(1, 30)
-        horizontalHeader.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        horizontalHeader.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        horizontalHeader.resizeSection(3, 30)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-
-        for r in radios:
-            numRows = self.table.rowCount()
-
-            self.table.insertRow(numRows)
-            name = r.name
-            if len(name) > 25:
-                name = name[:25]
-            qi = QTableWidgetItem(name)
-            qi.setToolTip(r.url)
-            qi.setData(Qt.ItemDataRole.UserRole, r)
-            self.table.setItem(numRows, 0, qi)
-
-            qii = QTableWidgetItem()
-            if r.ico is not None:
-                qp = QPixmap()
-                qp.loadFromData(r.ico)
-                qii.setIcon(QIcon(qp))
-            self.table.setItem(numRows, 1, qii)
-            self.table.setItem(numRows, 2, QTableWidgetItem(r.paese))
-            qi1 = QTableWidgetItem()
-            qi1.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
-            self.table.setItem(numRows, 3, qi1)
-            self.table.setColumnWidth(3, 10)
-
-    def contextMenu(self, p, wd, it):
-        if it is None:
-            return
-        ctx = QMenu(self)
-        if wd == self.table:
-            #it = self.table.itemAt( self.table.mapFromGlobal(p))
-            if it.column() != 0:
-                it = self.table.item(it.row(), 0)
-            ctx.addAction("Aggiunge ai preferiti").triggered.connect(lambda x: self.add_favourites(it))
-        else:
-            #it = self.favorites.itemAt(p)
-            ctx.addAction("Rimuove dai preferiti").triggered.connect(lambda x: self.del_favourites(it))
-
-        ctx.exec(p)
-
-    def add_favourites(self, it):
-        r = it.data(Qt.ItemDataRole.UserRole)
-        if r is None:
-            return
-        nome = r.name
-        k = self.favorites.findItems(nome, Qt.MatchFlag.MatchExactly)
-
-        if len(k) > 0:
-            if yesNoMessage('Sostituzione', 'Esiste già una emittente di nome ' + nome + ' sostituirla?'):
-                self.del_favourites(k[0])
-            else:
-                return
-
-        rd = self.ini.get('radio')
-        if rd is None:
-            rd = {}
-        rd[nome] = r.url + '@' + r.favicon
-        self.ini.set_sez('radio', rd)
-        self.ini.save()
-        self.favorites.addItem(nome)
-        a = 0
-
-    def del_favourites(self, it):
-        row = self.favorites.row(it)
-        qi = self.favorites.takeItem(row)
-        nome = qi.text()
-
-        rd = self.ini.get('radio')
-        del rd[nome]
-        self.ini.set_sez('radio', rd)
-        self.ini.save()
-
-    def onCellClicked(self, nr, nc):
-        if nc == 3:
-            qi = self.table.item(nr, 0)
-            dat = qi.data(Qt.ItemDataRole.UserRole)
-            url = dat.url
-            self.radio_signal.emit(url, dat.favicon)
-
-    def favorite_changed(self):
-        items = self.favorites.selectedItems()
-        if len(items) > 0:
-            self.favorites.setSelCur(items[0])
-
-    def play_item(self, lst):
-        if lst == self.favorites:
-            self.play()
-
-    def play(self):
-        rad = self.favorites.selectedItems()[0].text()
-        rd = self.ini.get('radio')
-        dat = rd[rad].split('@')
-        url = dat[0]
-        fav = ''
-        if len(dat) > 1:
-            fav = dat[1]
-        self.radio_signal.emit(url, fav)
-
-class RadioStation:
-    def __init__(self, name='', url='', ico=None, paese='', favicon=''):
-        self.name = name
-        self.url = url
-        self.ico = ico
-        self.paese = paese
-        self.favicon = favicon
-
 
 class myPlainText(QPlainTextEdit):
     def __init__(self, parent=None):

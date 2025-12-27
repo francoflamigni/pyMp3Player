@@ -4,7 +4,7 @@ from typing import Set, Tuple
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator, QIcon
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QAbstractItemView, QTableWidgetItem, QPushButton, \
-    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout, QComboBox
+    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout, QComboBox, QLayout
 
 from pyMyLib.utils import get_resource_file
 
@@ -281,7 +281,7 @@ class PlayListDlg(QDialog):
         self.table.setColumnCount(len(self.fields))
         self.table.setHorizontalHeaderLabels(self.fields)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(1, 120)
         self.table.cellClicked.connect(self.handle_cell_clicked)
@@ -303,6 +303,28 @@ class PlayListDlg(QDialog):
         bt_crea.clicked.connect(self.crea)
 
         vlayout.addWidget(bt_crea)
+        self.setup_geometry()
+        #self.layout().setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+
+    def setup_geometry(self):
+        # 1. Adattiamo le colonne al contenuto
+        # Colonna 0 (es. numero o icona) e Colonna 1 (testo lungo)
+        #self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        #self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+
+        # 2. Calcoliamo la larghezza totale necessaria
+        # Sommiamo la larghezza delle colonne + intestazione verticale (se visibile)
+        v_header_width = self.table.verticalHeader().width() if self.table.verticalHeader().isVisible() else 0
+        total_width = v_header_width + self.table.columnWidth(0) + self.table.columnWidth(1) + 50
+
+        # 3. Impostiamo le dimensioni della TABELLA
+        self.table.setFixedWidth(total_width)
+        self.table.setFixedHeight(500)  # <--- IMPOSTA QUI L'ALTEZZA VERTICALE CHE DESIDERI
+
+        # 4. Forziamo la DIALOG ad adattarsi alla tabella
+        # Rimuoviamo i margini del layout per non avere bordi vuoti
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.layout().setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
 
     def handle_cell_clicked(self, row, column):
 
@@ -381,6 +403,10 @@ class PlayListDlg(QDialog):
             except:
                 continue
         duration = self.dw.get_duration_seconds()
+        if not duration:
+            self.dw.hours_edit.setFocus()
+            self.dw.hours_edit.selectAll()
+            return
         a = 0
         self.list = Create_playlist(self.index, preferences, duration)
         if self.list:

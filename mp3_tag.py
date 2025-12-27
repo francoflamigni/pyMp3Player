@@ -24,6 +24,8 @@ GENRE = [
 def find_last(path):
     f = os.path.join(path, '**')
     list_of_files = glob.glob(f, recursive=True)
+    if not list_of_files:
+        return {}
     latest_file = max(list_of_files, key=os.path.getmtime)
     r = os.path.relpath(latest_file, path)
     v = os.path.getmtime(latest_file)
@@ -74,7 +76,7 @@ class Music:
         # trova il file modificato più di recente
         lst = list(find_last(folder).values())
         if len(lst) == 0:
-            return Music.NO_FILES
+            return Music.NO_FILE
         lst = lst[0]
 
         # trova la data di ultima modifica registrata
