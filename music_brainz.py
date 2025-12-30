@@ -448,14 +448,15 @@ class CDinfo:
 
 
     def cd_to_internal(self):
-        df = self.detects_tracks()
+        res = self.detects_tracks()
+        df = self.detects_info_by_id(res)
         from mp3_tag import track
         trks = []
         if df:
             for i, t in enumerate(df['tracce']):
                 tk = track(title=t.get('titolo', ''), album=df.get('album', ''), artist=df.get('artisti', ''), id=0, file='', num=t['traccia'], tm_sec=t['durata'], genre='')
                 trks.append(tk)
-        return trks
+        return trks, df.get('idr', '')
 
     ''' individua il numero di tracce, la loro durata e l'offset iniziale se disponibili anche i titoli'''
     def detects_tracks(self):

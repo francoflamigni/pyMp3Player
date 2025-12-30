@@ -9,7 +9,7 @@ vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc'))
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QThread
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
                              QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
@@ -108,7 +108,7 @@ class MusicPlayerDlg(QDialog):
                 }      
         """)
         self.videoframe.setMinimumSize(QSize(200, 200))
-        self.cover = QLabel()
+        self.cover = CoverLabel() #QLabel()
         self.cover.setStyleSheet("""
             QLabel {
                 border: 1px solid #FF0000;
@@ -118,6 +118,7 @@ class MusicPlayerDlg(QDialog):
                 padding: 0px;              /* Rimuove lo spazio interno */
             }
         """)
+        # Carica il tuo vinile di default
         self.cover.setMinimumSize(QSize(200, 200))
         self.cover.setMaximumWidth(200)
         h3.addStretch()
@@ -290,6 +291,7 @@ class MusicPlayerDlg(QDialog):
             self.set_play_icon(MusicPlayerDlg.Mode_Play)
             self.is_paused = True
             self.timer.stop()
+            self.animation_pause()
         else:
             if self.mode == MusicPlayerDlg.Mode_Cd:
                 self.listplayer.play()
@@ -302,6 +304,7 @@ class MusicPlayerDlg(QDialog):
             self.set_play_icon(MusicPlayerDlg.Mode_Pause)
             self.timer.start()
             self.is_paused = False
+            self.animation_play()
 
     def stopB(self):
         self.next_song_signal.emit(0)
@@ -313,6 +316,7 @@ class MusicPlayerDlg(QDialog):
         self.set_play_icon(MusicPlayerDlg.Mode_Play)
         self.mode = MusicPlayerDlg.Mode_None
         self.index = -1
+        self.animation_pause()
 
     def skip(self, inc):
         self.mediaplayer.stop()
@@ -341,9 +345,30 @@ class MusicPlayerDlg(QDialog):
         if self.mode != MusicPlayerDlg.Mode_None:
             self.stop()
 
-        from music_brainz import CDinfo
+        from music_brainz import CDinfo, CoverArtWorker
         cdi = CDinfo(media_input)
-        self.tracks = cdi.cd_to_internal()
+        self.tracks, cov = cdi.cd_to_internal()
+        if cov:
+            self.thread = QThread()
+            file = r"c:\tmp\cov.jpg"
+
+            # 2. Crea il Worker e sposta nel Thread
+            self.worker = CoverArtWorker(cov, file)
+            self.worker.moveToThread(self.thread)
+
+            # 3. Collega i segnali
+            self.thread.started.connect(self.worker.run)
+            self.worker.signals.finished.connect(self.show_cover)
+
+            # Collega la pulizia all'uscita del worker
+            self.worker.signals.finished.connect(self.thread.quit)
+            self.worker.signals.error.connect(self.thread.quit)
+            self.thread.finished.connect(self.thread.deleteLater)
+            self.worker.signals.finished.connect(self.worker.deleteLater)
+            self.worker.signals.error.connect(self.worker.deleteLater)
+            self.thread.start()
+
+        self.gestisci_visualizzazione_cover()
         self.index = 0
 
         medialist = self.instance.media_list_new()
@@ -367,6 +392,15 @@ class MusicPlayerDlg(QDialog):
         self.timer.start()
         self.cover.clear()
         self.update_ui()
+
+    def show_cover(self):
+        self.cover.reset()
+        file = r"c:\tmp\cov.jpg"
+        pixmap = QPixmap()
+        pixmap.load(file)
+
+        # Scala l'immagine mantenendo le proporzioni
+        self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
     def on_track_end(self, event):
         if self.mode != MusicPlayerDlg.Mode_Cd:
@@ -399,14 +433,15 @@ class MusicPlayerDlg(QDialog):
 
         pic = scrobbler.get_thumbnail(self.fav)
         if pic is not None:
+            self.cover.reset()
             qp = QPixmap()
             s2 = self.cover.size()
             if qp.loadFromData(pic):
                 s1 = qp.width(), qp.height()
-                self.cover.setPixmap(qp.scaledToHeight(self.cover.height())) #, Qt.AspectRatioMode.KeepAspectRatio))
+                #self.cover.setPixmap(qp.scaledToHeight(self.cover.height())) #, Qt.AspectRatioMode.KeepAspectRatio))
                 self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
         else:
-            self.cover.clear()
+            self.gestisci_visualizzazione_cover()
 
         return True
 
@@ -434,7 +469,17 @@ class MusicPlayerDlg(QDialog):
         prg = f"( {self.index + 1} / {len(self.tracks)} )"
         tt = f"{self.tracks[self.index].artist} - {self.tracks[self.index].album} - {self.tracks[self.index].title} {prg}"
         self.add_note(tt)
-        self.wparent.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
+
+        self.cover.reset()
+        is_cover = self.wparent.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
+        if not is_cover:
+            self.gestisci_visualizzazione_cover()
+
+    def gestisci_visualizzazione_cover(self):
+        # Carica il tuo vinile di default
+        path_vinile = get_resource_file(__file__, 'icone', 'vinyl.png')
+        self.cover.set_cover(QPixmap(path_vinile))
+        self.cover.animation.start()
 
     def inc_track_index(self, inc):
         if inc < 0:
@@ -471,7 +516,14 @@ class MusicPlayerDlg(QDialog):
             time.sleep(1.0)
         self.update_ui()
         waitCursor()
+        self.animation_play()
         return True
+
+    def animation_play(self):
+        self.cover.animation.resume() if self.cover.animation.state() == QPropertyAnimation.State.Paused else self.cover.animation.start()
+
+    def animation_pause(self):
+        self.cover.animation.pause()
 
     def currentChanged (self, index):
         if index == 1:
@@ -1125,3 +1177,65 @@ def calculate_single_loudness(file_path: str) -> Optional[float]:
     except Exception as e:
         print(f"Impossibile calcolare il loudness per {file_path}: {e}")
         return None
+
+
+from PyQt6.QtWidgets import QLabel
+from PyQt6.QtCore import QPropertyAnimation, pyqtProperty, Qt
+from PyQt6.QtGui import QPixmap, QPainter
+
+
+class CoverLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self.original_pixmap = QPixmap()
+
+        # Configuriamo l'animazione
+        self.animation = QPropertyAnimation(self, b"angle")
+        self.animation.setDuration(3000)  # Velocità di rotazione (3 secondi)
+        self.animation.setStartValue(0)
+        self.animation.setEndValue(360)
+        self.animation.setLoopCount(-1)  # Loop infinito
+
+    # Definiamo la proprietà "angle" per l'animatore
+    @pyqtProperty(int)
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self, value):
+        self._angle = value
+        self.update()  # Ridisegna la label ad ogni cambio di angolo
+
+    def set_cover(self, pixmap):
+        """Metodo per cambiare l'immagine (vinile o copertina vera)"""
+        self.original_pixmap = pixmap
+        self.update()
+
+    def reset(self):
+        self.animation.stop()
+        self.original_pixmap  = QPixmap()
+
+    def paintEvent(self, event):
+        if self.original_pixmap.isNull():
+            return super().paintEvent(event)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        # Calcoliamo le dimensioni per mantenere l'aspetto quadrato
+        side = min(self.width(), self.height())
+        rect = self.original_pixmap.scaled(
+            side, side,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ).rect()
+
+        # Portiamo il centro del disegno al centro della label
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.rotate(self._angle)
+
+        # Disegniamo l'immagine centrata rispetto al nuovo asse
+        painter.drawPixmap(-side // 2, -side // 2, side, side, self.original_pixmap)
+        painter.end()

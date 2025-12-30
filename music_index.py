@@ -309,12 +309,7 @@ class MusicIndexDlg(QDialog):
         )
 
         self.tab = SlidingStackedWidget() #QStackedWidget()
-        #btn_page1.clicked.connect(lambda: self.tab.slide_to_index(0))
-        #btn_page2.clicked.connect(lambda: self.tab.slide_to_index(1))
 
-        #self.tab = QTabWidget(self)
-        #self.tab.setTabPosition(QTabWidget.TabPosition.West)
-        #self.tab.tabBarDoubleClicked.connect(self.play_playlist)
         self.tab.setMaximumWidth(250)
 
         self.pix = QLabel()
@@ -351,27 +346,6 @@ class MusicIndexDlg(QDialog):
         hv.addWidget(self.tab)
         hv.addWidget(self.tracks)
         splitter2.addWidget(wd1)
-
-
-
-        '''
-        self.tab.addTab(self.pix, '')
-        self.tab.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
-        self.tab.setTabToolTip(0, 'copertina')
-
-        self.tab.addTab(wd, '')
-        self.tab.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'playlist.png')))
-        self.tab.setTabToolTip(1, 'playlist')
-        '''
-        '''
-        self.h = QHBoxLayout()
-        self.h.setContentsMargins(1, 1, 1, 1)
-        self.h.addWidget(self.tab)
-        self.h.addWidget(self.tracks)
-        wd = QWidget()
-        wd.setLayout(self.h)
-        splitter2.addWidget(wd)
-        '''
 
         v.addLayout(h0)
         v.addWidget(splitter2)
@@ -720,8 +694,10 @@ class MusicIndexDlg(QDialog):
             qp = QPixmap()
             if qp.loadFromData(pic):
                 pix.setPixmap(qp.scaled(pix.size(), Qt.AspectRatioMode.KeepAspectRatio))
+                return True
         else:
             pix.clear()
+            return False
 
     def track_changed(self):
         items = self.tracks.selectedItems()

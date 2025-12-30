@@ -155,6 +155,62 @@ class Player(FramelessDialog): #QMainWindow):
         self.tb.setTabIcon(2, QIcon(get_resource_file(__file__, 'icone', 'stereo.png')))
         self.tb.setTabToolTip(2, 'player')
         self.tb.currentChanged.connect(self.tab_changed)
+        path_icona_freccia = get_resource_file(__file__, 'icone', 'background.png').replace('\\', '/')
+        self.tb.setStyleSheet("""
+            QTabBar {
+                background: transparent;
+                border: none;
+            }
+            
+            QTabBar::tab {
+                background: #f0f0f0; /* Grigio chiaro come la tua barra */
+                border: 1px solid #d0d0d0;
+                /* Rendi i bordi laterali condivisi per evitare linee doppie */
+                margin-right: -1px; 
+                padding: 4px;
+                min-width: 20px;
+                border-radius: 0px; /* Iniziamo da un rettangolo pulito */
+                text-align: center;
+            }
+            
+            /* Arrotonda solo il primo tab a sinistra */
+            QTabBar::tab:first {
+                border-top-left-radius: 4px;
+                border-bottom-left-radius: 4px;
+            }
+            
+            /* Arrotonda solo l'ultimo tab a destra */
+            QTabBar::tab:last {
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+                margin-right: 0px;
+            }
+            
+            /* Rimuove lo spazio extra che Qt riserva per il testo anche se è vuoto */
+            QTabBar::tab:only-with-icon {
+                margin: 0px;
+            }
+            
+            /* Stile tab NON selezionato */
+            QTabBar::tab:!selected {
+                color: #888;
+                background: #e8e8e8;
+            }
+            
+            /* Stile tab selezionato */
+            QTabBar::tab:selected {
+                background: white;
+                /* Invece del bordo blu su tutto il perimetro, usiamo solo una linea */
+                border-bottom: 3px solid #FF0000; /* Rosso Euterpe */
+                color: black;
+            }
+            
+            QTabBar::tab:hover:!selected {
+                background: #f8f8f8;
+            }        
+        """)
+
+        '''
         self.tb.setStyleSheet("""
             QTabBar::tab {
                 /* Aggiunge il bordo intorno alla scheda */
@@ -179,6 +235,7 @@ class Player(FramelessDialog): #QMainWindow):
                 border-bottom-color: white; /* Per far sembrare che sia attaccata alla pagina sottostante */
             }
         """)
+        '''
 
         tool.addWidget(self.tb)
         spacer_fixed2 = QLabel()
@@ -187,19 +244,35 @@ class Player(FramelessDialog): #QMainWindow):
 
         self.genre_combo = QComboBox()
 
-        self.genre_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid;  /* Spessore del bordo (ad esempio 2 pixel) */
-                border-color: #555555; /* Colore del bordo (ad esempio un grigio scuro) */
-
-                
-                border-radius: 3px; /* Raggio per angoli arrotondati (opzionale) */
-
-                /* Padding opzionale per evitare che il testo tocchi il bordo */
-                padding: 2px 10px 2px 5px; 
-            }
+        self.genre_combo.setStyleSheet(f"""
+            QComboBox {{
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 1px 18px 1px 5px;
+                background-color: #fafafa;;
+            }}
+            
+            QComboBox::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #d0d0d0; /* Linea di separazione */
+            }}
+        
+            QComboBox::down-arrow {{
+                image: url({path_icona_freccia});
+                width: 12px;  /* Regola la dimensione dell'icona */
+                height: 12px;
+            }}          
+            
+            /* Il menu che scende (molto importante per l'estetica) */
+            QComboBox QAbstractItemView {{
+                border: 1px solid #d0d0d0;
+                selection-background-color: #FF0000;
+                background-color: white;
+                outline: none;
+            }}        
         """)
-
         v = [""]
         v.extend((GENRE))
         self.genre_combo.addItems(v)
@@ -273,7 +346,7 @@ class Player(FramelessDialog): #QMainWindow):
         contextMenu.exec(p)
 
     def get_track_pix(self, album, artist, cover):
-        self.dlg.get_track_pix(album, artist, cover)
+        return self.dlg.get_track_pix(album, artist, cover)
 
     ''' Chiama Shazam per avere il titolo'''
     def songTitle(self):

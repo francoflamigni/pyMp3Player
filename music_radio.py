@@ -1,6 +1,6 @@
 from PyQt6.QtCore import Qt, pyqtSignal, QStringListModel, QTimer
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QSplitter, QWidget, QHeaderView, \
-    QAbstractItemView, QTableWidgetItem, QStyle, QMenu, QTableWidget, QListWidgetItem, QCompleter
+    QAbstractItemView, QTableWidgetItem, QStyle, QMenu, QTableWidget, QListWidgetItem, QCompleter, QGroupBox
 from PyQt6.QtGui import QPixmap, QIcon, QAction
 
 from pyMyLib.qtUtils import set_background, yesNoMessage, waitCursor
@@ -10,18 +10,6 @@ from dialogs import myList
 '''
 https://streamurl.link/ per trovare stazioni radio
 '''
-
-class tableMenu(QTableWidget):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.wparent = parent
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            p = event.pos()
-            it = self.itemAt(p)
-            self.wparent.contextMenu(self.mapToGlobal(p), self, it)
-        super(QTableWidget, self).mousePressEvent(event)
 
 class RadioDlg(QDialog):
     radio_signal = pyqtSignal(str, str)
@@ -34,9 +22,10 @@ class RadioDlg(QDialog):
         set_background(self)
 
         v = QVBoxLayout(self)
+        v.setContentsMargins(1, 1, 1, 1)
 
-        h = QHBoxLayout()
-        h.setContentsMargins(1, 1, 1, 1)
+        #h = QHBoxLayout()
+        #h.setContentsMargins(1, 1, 1, 1)
         self.ed = QLineEdit(self)
         self.ed.returnPressed.connect(self.search)
         self.ed.setStyleSheet("""
@@ -45,7 +34,7 @@ class RadioDlg(QDialog):
                 padding-right: 55px; 
             }
         """)
-        h.addWidget(self.ed)
+        #h.addWidget(self.ed)
 
         # 1. Azione Cerca (Sempre visibile)
         icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
@@ -84,13 +73,13 @@ class RadioDlg(QDialog):
 
         v1 = QVBoxLayout()
         v1.setContentsMargins(1, 1, 1, 1)
-        v1.addLayout(h)
+        v1.addWidget(self.ed)
         self.table = QTableWidget(self)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(lambda pos: self.contextMenu(pos, None, None) )
         v1.addWidget(self.table)
 
-        w = QWidget()
+        w = QGroupBox() #QWidget()
         w.setLayout(v1)
         sp.addWidget(w)
 

@@ -291,10 +291,10 @@ def leggi_stringa_offline(testo: list):
     import soundfile as sf
     import sounddevice as sd
     import os
-    import time
 
     try:
-        lingua_rilevata = detect(testo[2])
+        #lingua_rilevata = detect(testo[2])
+        lingua_rilevata = detect(' '.join(testo))
 
         # Mappa codici lingua per gTTS
         mappa_lingue = {
@@ -321,10 +321,6 @@ def leggi_stringa_offline(testo: list):
 
             # Rimuovi il file temporaneo
             os.remove(filename)
-
-            # Pausa di 10ms tra le frasi
-            #if i < len(testo) - 1:
-            #    time.sleep(0.01)
 
     except Exception as e:
         print(f"Errore: {e}")
