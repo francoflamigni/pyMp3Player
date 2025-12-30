@@ -12,8 +12,7 @@ import vlc
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QWidget,
-                             QGraphicsDropShadowEffect)
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
 
 from pyMyLib.qtUtils import set_background, waitCursor
 from dialogs import lyric_song, AppConfig
@@ -131,10 +130,11 @@ class MusicPlayerDlg(QDialog):
         wdd = self.control_frame()
 
         # volume
-        vol = self.volume_ui()
+        ctrl_height = 170
+        vol = self.volume_ui(ctrl_height)
 
         # equalizzatore
-        equalizer = self.equalizer_ui()
+        equalizer = Equalizer(parent.ini, self.mediaplayer, ctrl_height)
 
         h2 = QHBoxLayout()
         h2.addWidget(equalizer)
@@ -195,12 +195,21 @@ class MusicPlayerDlg(QDialog):
         wdd = QFrame()
         wdd.setObjectName('slFrame')
 
-        wdd.setStyleSheet("QFrame#slFrame {background-color: rgb(220, 220, 220);"
-                            "border-width: 1;"
-                            "border-radius: 8;"
-                            "border-style: solid;"
-                            "border-color: rgb(10, 10, 10)}"
-                        )
+        self.setStyleSheet("""
+            QFrame#slFrame {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #e0e0e0, 
+                    stop:0.2 #f5f5f5, 
+                    stop:0.4 #bcbcbc, 
+                    stop:0.6 #ffffff, 
+                    stop:0.8 #9a9a9a, 
+                    stop:1 #cccccc);
+                border: 1px solid #333333;
+                border-radius: 8px;
+                margin-bottom: 0px;
+                padding: 0px;
+            }
+        """)
 
         v = QVBoxLayout()
         v.setContentsMargins(0, 0, 0, 0)
@@ -318,21 +327,9 @@ class MusicPlayerDlg(QDialog):
                 self.listplayer.previous()
             self.update_ui()
 
-    def equalizer_ui(self):
-        equalize_ctrl = Equalizer(self.mediaplayer)
-        qe = QGroupBox(self)
-        #qe.setContentsMargins(0, 0, 0, 0)
-        ve = QVBoxLayout(qe)
-        ve.setContentsMargins(4, 0, 4, 0)
-
-        ve.setSpacing(0)
-        ve.addWidget(equalize_ctrl.get_preset(), alignment=Qt.AlignmentFlag.AlignLeft)
-        ve.addWidget(equalize_ctrl)
-        return qe
-
-    def volume_ui(self):
-        vc = VolumeControl()
-        vc.volumeDial.setValue(self.mediaplayer.audio_get_volume())
+    def volume_ui(self, ctrl_height):
+        vc = VolumeControl(ctrl_height, self.mediaplayer.audio_get_volume())
+        #vc.volumeDial.setValue(self.mediaplayer.audio_get_volume())
         vc.volumeDial.valueChanged.connect(self.set_volume)
         return vc
 
@@ -547,7 +544,8 @@ class eqSlider(QSlider):
         self.band = band
         self.setObjectName(f"eq{band}")
         self.setStyleSheet(eq_slider_style())
-        self.setMaximumHeight(110)
+        self.setMaximumHeight(150)
+        #self.setMinimumHeight(120)
         self.setRange(-20, 20)
         self.setTickInterval(5)
         self.setTickPosition(QSlider.TickPosition.TicksBothSides)
@@ -584,29 +582,33 @@ class eqSlider(QSlider):
 
 
 class Equalizer(QFrame):
-    def __init__(self, mediaplayer):
+    def __init__(self, ini, mediaplayer, height=150):
         super().__init__()
         self.mediaplayer = mediaplayer
+        self.ini = ini
         self.cmb = None
         self.eq = []
         self.freq = []
+        self.setMaximumHeight(height)
         self.init_ui()
         self.equal_load()
 
     def init_equal(self):
         nf = vlc.libvlc_audio_equalizer_get_band_count()
         self.freq = [self.get_band(i) for i in range(nf)]
-        self.cmb = QComboBox(self)
+        self.cmb = QComboBox()
         self.cmb.addItems([str(vlc.libvlc_audio_equalizer_get_preset_name(i).decode('latin1'))
                       for i in range(vlc.libvlc_audio_equalizer_get_preset_count())])
 
         self.cmb.currentIndexChanged.connect(self.currentIndexChanged)
+        self.cmb.setFixedHeight(20)
         self.cmb.setStyleSheet(
             """
             QComboBox {
                 background: transparent;      /* Prende lo sfondo del QFrame sottostante */
                 border: 0px solid #555555;    /* Un bordo sottile per definirla */
                 padding-right: 20px;
+                padding-bottom: 1px;
                 margin-left: 5px;
                 /* Blu Elettrico Neon - Massima saturazione */
                 color: #4444FF;           
@@ -639,11 +641,15 @@ class Equalizer(QFrame):
         self.init_equal()
         nf = vlc.libvlc_audio_equalizer_get_band_count()
         self.eq = []
+
         he = QHBoxLayout()
-        he.setContentsMargins(5, 15, 5, 5)
+        he.setContentsMargins(5, 5, 5, 5)
+        he.setSpacing(7)
         for i in range(nf):
-            eq = self.add_slider(i, he)
+            eq = self.add_slider(i)
+            #eq.setFixedHeight(180)
             self.eq.append(eq)
+            he.addWidget(eq)
 
         he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
 
@@ -669,8 +675,13 @@ class Equalizer(QFrame):
             }
         """)
 
-        self.setLayout(he)
-
+        hv = QVBoxLayout()
+        hv.setContentsMargins(1, 1, 1, 1)
+        hv.setSpacing(0)
+        hv.addWidget(self.cmb)
+        hv.addStretch()
+        hv.addLayout(he)
+        self.setLayout(hv) #he)
 
     def get_preset(self):
         return self.cmb
@@ -680,7 +691,7 @@ class Equalizer(QFrame):
         s = str(int(f / 1000.)) + 'kHz' if f >= 1000. else str(int(f)) + 'Hz'
         return s
 
-    def add_slider(self, i, he):
+    def add_slider(self, i):
         eq = eqSlider(Qt.Orientation.Vertical, self, band=i)
 
         eq.sliderMoved.connect(lambda widget=eq: self.equal(widget))
@@ -689,7 +700,6 @@ class Equalizer(QFrame):
 
         v = self.equalizer.get_amp_at_index(i)
         eq.set_value(v)
-        he.addWidget(eq)
         return eq
 
     ''' richiamato quando si clicca o si muove uno slider '''
@@ -703,8 +713,8 @@ class Equalizer(QFrame):
 
     ''' richiamato quando si finisce di spostare uno slider '''
     def equal_sav(self, wid):
-        ini = iniConf(AppConfig)
-        eq_sav = ini.get('EQUALIZER')
+        #ini = iniConf(AppConfig)
+        eq_sav = self.ini.get('EQUALIZER')
         if eq_sav is None:
             eq_sav = {}
 
@@ -716,12 +726,12 @@ class Equalizer(QFrame):
         self.mediaplayer.set_equalizer(self.equalizer)
 
         eq_sav[o] = str(v)
-        ini.set_sez('EQUALIZER', eq_sav)
-        ini.save()
+        self.ini.set_sez('EQUALIZER', eq_sav)
+        self.ini.save()
 
     def equal_load(self):
-        ini = iniConf(AppConfig)
-        eq_sav = ini.get('EQUALIZER')
+        #ini = iniConf(AppConfig)
+        eq_sav = self.ini.get('EQUALIZER')
         if eq_sav is None:
             return
         if 'preset' in eq_sav.keys():
@@ -803,8 +813,8 @@ def slider_style():
 def eq_slider_style():
     QSS = """
     QSlider {
-        min-height: 90px;
-        border: 5px;
+        min-height: 120px;
+        border: 10px;
     }
 
     QSlider::groove:horizontal {
@@ -823,61 +833,12 @@ def eq_slider_style():
     }
     """
     return QSS
-'''
-class VolumeControl(QWidget):
-    def __init__(self):
-        super().__init__()
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(0)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.volumeDial = VolumeDial()
-
-        layout.addSpacing(20)
-        layout.addStretch()
-        layout.addWidget(self.volumeDial, alignment=Qt.AlignmentFlag.AlignBottom)
-        self.setStyleSheet("""
-            background-color: #0a0a0a;
-            border: 1px solid #333333; /* Colore grigio scuro */
-            border-radius: 4px;        /* Opzionale: angoli arrotondati */
-        """)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # 1. Definiamo l'area e il testo
-        # Spostiamo il rettangolo di disegno 10px più in basso
-        text_rect = QRectF(0, -10, self.width(), 120)
-        text = f"{self.volumeDial.value()}%"
-
-        font = QFont("Consolas", 28, QFont.Weight.Bold)
-        painter.setFont(font)
-
-        # 2. DISEGNO DEL BAGLIORE (GLOW)
-        # Invece di sdoppiare il testo, usiamo una penna con colore sfumato
-        # e lo disegniamo con un'opacità ridotta per creare l'alone
-        glow_color = QColor("#00FFFF")
-        glow_color.setAlpha(60)  # Molto trasparente
-        painter.setPen(glow_color)
-
-        # Disegniamo il testo leggermente traslato in varie direzioni
-        # di 1 solo pixel per simulare la diffusione della luce (soft glow)
-        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            painter.drawText(text_rect.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, text)
-
-        # 3. DISEGNO DEL TESTO PRINCIPALE (FILAMENTO LED)
-        # Usiamo il blu elettrico acceso al centro
-        painter.setPen(QColor("#00FFFF"))
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)
-'''
-
-
-class VolumeControl(QWidget):
-    def __init__(self):
+class VolumeControl(QFrame):
+    def __init__(self, height=150, vol = 0):
         super().__init__()
         self.setObjectName("VolumeContainer")
+        self.setMaximumHeight(height)
 
         # Layout verticale
         layout = QVBoxLayout(self)
@@ -886,12 +847,12 @@ class VolumeControl(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)# Padding interno del bordo
 
         # 1. LA SCRITTA (Usiamo una QLabel invece del paintEvent)
-        self.val_label = QLabel("30%")
+        self.val_label = QLabel("- -")
         self.val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.val_label.setStyleSheet("""
             color: #FF0000; 
             font-family: 'Consolas'; 
-            font-size: 26px; 
+            font-size: 24px; 
             font-weight: bold;
             background: back;
             border: 1px;
@@ -911,7 +872,7 @@ class VolumeControl(QWidget):
         self.val_label.setGraphicsEffect(glow)
 
         # 2. IL DIAL
-        self.volumeDial = VolumeDial()
+        self.volumeDial = VolumeDial(vol=vol)
         # Aggiorna il testo della label quando muovi il dial
         self.volumeDial.valueChanged.connect(self.update_text)
 
@@ -922,7 +883,7 @@ class VolumeControl(QWidget):
 
         # Stile del bordo (Ricorda il paintEvent per il QWidget!)
         self.setStyleSheet("""
-            QWidget#VolumeContainer {
+            QFrame#VolumeContainer {
                 background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 #e0e0e0, 
                     stop:0.2 #f5f5f5, 
@@ -936,6 +897,7 @@ class VolumeControl(QWidget):
                 padding: 0px;
             }
         """)
+        self.update_text(vol)
 
     @staticmethod
     def percentage_to_db(percentage):
@@ -977,6 +939,7 @@ class VolumeControl(QWidget):
         else:
             db_text = f"{value}%"
         self.val_label.setText(db_text)
+        #print(f"value: {value}")
 
     def paintEvent(self, event):
         # Necessario per disegnare il bordo del QWidget
@@ -988,12 +951,13 @@ class VolumeControl(QWidget):
         self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, painter, self)
 
 class VolumeDial(QDial):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, vol=0):
         super().__init__(parent)
 
         self.setWrapping(False)
         self.setFixedWidth(140)
         self.setFixedHeight(140)
+        self.setValue(vol)
         # Memorizziamo l'ultimo valore valido per evitare salti
         self.last_valid_value = self.value()
 
@@ -1097,6 +1061,7 @@ class VolumeDial(QDial):
 
         # Trasliamo lo zero all'inizio del tuo arco (135°)
         adjusted_angle = (angle_deg - 135 + 360) % 360
+        #print(f"adjusted_angle: {adjusted_angle}")
 
         # 1. GESTIONE ZONA MORTA (il vuoto di 90° in basso)
         # Se siamo tra 270 e 360, forziamo i limiti senza calcolare valori intermedi
@@ -1110,6 +1075,8 @@ class VolumeDial(QDial):
             percentage = adjusted_angle / 270.0
             new_value = int(self.minimum() + percentage * (self.maximum() - self.minimum()))
 
+        #print(f"angle: {angle_deg} adjusted_angle: {adjusted_angle} new_value: {new_value}  last_valid: {self.last_valid_value}")
+
         # 3. FILTRO ANTI-SALTO (IL SEGRETO)
         # Se il salto è superiore al 50% dell'intero range,
         # probabilmente il mouse è passato velocemente sopra la zona morta.
@@ -1122,6 +1089,7 @@ class VolumeDial(QDial):
                 new_value = self.maximum()
 
         # 4. AGGIORNAMENTO
+        #print(f"    final: {new_value}")
         self.last_valid_value = new_value
         self.blockSignals(True)
         self.setValue(new_value)

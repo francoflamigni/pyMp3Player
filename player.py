@@ -1,12 +1,15 @@
+import time
+
 from profiler import checkpoint
 
 import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox)
+                             QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox,
+                             QGraphicsOpacityEffect)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect, QSize, QTimer
+from PyQt6.QtCore import Qt, QRect, QSize, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -20,13 +23,7 @@ from music_radio import RadioDlg
 from utility import detect_cd_drives, close_splash
 from mp3_tag import GENRE
 
-'''
-https://streamurl.link/ per trovare stazioni radio
-'''
-
 INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.5.1\n02 Novembre 2025'
-
-from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
@@ -46,11 +43,32 @@ class MyTitleBar(StandardTitleBar):
         self.closeBtn.setHoverBackgroundColor(QColor(0, 0, 0, 0))  #Qt.GlobalColor.white)  #QColor(232, 17, 35))
         self.closeBtn.setPressedBackgroundColor(QColor(241, 112, 122))
 
+        self.minBtn.clicked.disconnect()
+        self.minBtn.clicked.connect(self.minimize_with_animation)
+
         lay = self.layout()
         lay.insertSpacing(3, 5)
 
         tb = parent.createTabBar()
         lay.insertWidget(4, tb)
+
+    def minimize_with_animation(self):
+        win = self.window()
+
+        # Animazione della window opacity (funziona sempre)
+        self.anim = QPropertyAnimation(win, b"windowOpacity")
+        self.anim.setDuration(600)
+        self.anim.setStartValue(1.0)
+        self.anim.setEndValue(0.0)
+        self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+
+        def on_finished():
+            win.showMinimized()
+            # Ripristina l'opacità per quando la finestra viene ripristinata
+            win.setWindowOpacity(1.0)
+
+        self.anim.finished.connect(on_finished)
+        self.anim.start()
 
 class Player(FramelessDialog): #QMainWindow):
     def __init__(self, master=None):
@@ -61,7 +79,7 @@ class Player(FramelessDialog): #QMainWindow):
 
         os.environ["PATH"] += os.pathsep + str(get_resource_path_pathlib(__file__, 'exe'))
 
-        self.ini = iniConf(AppConfig)
+        self.ini = iniConf(AppConfig, case_sensitive=True)
 
         self.background_mode = False
         self.create_ui()
@@ -70,6 +88,24 @@ class Player(FramelessDialog): #QMainWindow):
 
         self.Install_idle_fun()
         self.show()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+
+        # Controlla se la finestra sta venendo ripristinata dalla minimizzazione
+        if event.type() == event.Type.WindowStateChange:
+            if self.windowState() == Qt.WindowState.WindowNoState or \
+                    self.windowState() == Qt.WindowState.WindowMaximized:
+                # La finestra è stata ripristinata
+                win = self.window()
+                win.setWindowOpacity(0.0)
+
+                self.restore_anim = QPropertyAnimation(win, b"windowOpacity")
+                self.restore_anim.setDuration(600)
+                self.restore_anim.setStartValue(0.0)
+                self.restore_anim.setEndValue(1.0)
+                self.restore_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+                self.restore_anim.start()
 
     def Install_idle_fun(self):
         from utility import IdleTimeout

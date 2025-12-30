@@ -224,7 +224,7 @@ class MusicIndexDlg(QDialog):
         self.setObjectName("mp3_widget")
         set_background(self)
 
-        ini = iniConf(AppConfig)
+        ini = parent.ini #iniConf(AppConfig)
         self.last_folder = ini.get('CONF', 'last_folder')
 
         self.music = Music(parent.ini)
@@ -302,33 +302,6 @@ class MusicIndexDlg(QDialog):
         splitter2.setContentsMargins(0, 0, 0, 0)
         splitter2.addWidget(splitter1)
 
-        '''
-        sidebar = QFrame()
-        sidebar.setFixedWidth(15)  # Molto stretta per non rubare spazio
-        sidebar.setStyleSheet("background-color: #FFFFFF; border-right: 1px solid #333;")
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Pulsanti della sidebar
-        btn_page1 = QPushButton("♫")
-        #btn_page1.setIcon(QIcon(get_resource_file(__file__, 'icone', 'cover.png')))
-        btn_page1.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #555; /* Spento */
-                border: none;
-                font-size: 20px;
-            }
-            QPushButton:checked {
-                color: #FF0000; /* Acceso (LED) */
-                border-left: 3px solid #FF0000; /* Barretta laterale di stato */
-            }        
-        """)
-        btn_page2 = QPushButton("⚙")
-        sidebar_layout.addWidget(btn_page1)
-        sidebar_layout.addWidget(btn_page2)
-        sidebar_layout.addStretch()
-        '''
         self.toggle_switch = HiFiToggle()
         # Colleghiamo il segnale alla transizione
         self.toggle_switch.toggled.connect(

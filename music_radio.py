@@ -1,11 +1,15 @@
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QStringListModel, QTimer
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QSplitter, QWidget, QHeaderView, \
-    QAbstractItemView, QTableWidgetItem, QStyle, QMenu, QTableWidget
+    QAbstractItemView, QTableWidgetItem, QStyle, QMenu, QTableWidget, QListWidgetItem, QCompleter
 from PyQt6.QtGui import QPixmap, QIcon, QAction
 
 from pyMyLib.qtUtils import set_background, yesNoMessage, waitCursor
-from pyMyLib.utils import iniConf, get_resource_file
+from pyMyLib.utils import get_resource_file
 from dialogs import myList
+
+'''
+https://streamurl.link/ per trovare stazioni radio
+'''
 
 class tableMenu(QTableWidget):
     def __init__(self, parent):
@@ -25,6 +29,7 @@ class RadioDlg(QDialog):
         super(RadioDlg, self).__init__(parent)
         self.ini = parent.ini
         self.wparent = parent
+        self.x_aggiunta = False
         self.setObjectName("radio_widget")
         set_background(self)
 
@@ -34,15 +39,45 @@ class RadioDlg(QDialog):
         h.setContentsMargins(1, 1, 1, 1)
         self.ed = QLineEdit(self)
         self.ed.returnPressed.connect(self.search)
+        self.ed.setStyleSheet("""
+            QLineEdit {
+                /* Dai spazio a due icone (circa 50-60px) */
+                padding-right: 55px; 
+            }
+        """)
         h.addWidget(self.ed)
 
+        # 1. Azione Cerca (Sempre visibile)
         icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
-        azione_cerca = QAction(icona_cerca, "Cerca", self)
-        azione_cerca.triggered.connect(self.search)
-        self.ed.addAction(
-            azione_cerca,
-            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
-        )
+        self.azione_cerca = QAction(icona_cerca, "Cerca", self)
+        self.azione_cerca.triggered.connect(self.search)
+
+        # 2. Azione Cancella (Inizialmente nascosta)
+        icona_cancella = QIcon(get_resource_file(__file__, 'icone', 'delete.png'))  # Usa la tua icona X
+        self.azione_cancella = QAction(icona_cancella, "Cancella", self)
+        self.azione_cancella.setVisible(False)
+        self.azione_cancella.triggered.connect(lambda: self.ed.clear())
+
+        # Aggiunta alla QLineEdit (L'ordine di aggiunta determina la posizione)
+        self.ed.addAction(self.azione_cerca, QLineEdit.ActionPosition.TrailingPosition)
+        #self.ed.addAction(self.azione_cancella, QLineEdit.ActionPosition.TrailingPosition)
+        self.azione_cancella.setVisible(False)
+
+        # Collegamento per gestire la visibilità
+        self.ed.textChanged.connect(self.gestisci_pulsante_clear)
+        self.gestisci_pulsante_clear(self.ed.text())
+
+        # Nel setup della tua UI
+        self.ultime_ricerche = self.last_searches()  # Carica queste stringhe dal tuo ConfigParser
+        self.completer_model = QStringListModel(self.ultime_ricerche)
+        self.completer = QCompleter(self.completer_model, self)
+
+        # Configurazione per mostrare subito i suggerimenti
+        self.completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+
+        # Applica alla tua QLineEdit (quella con la QAction per la lente)
+        self.ed.setCompleter(self.completer)
 
         sp = QSplitter(self)
         sp.setOrientation(Qt.Orientation.Vertical)
@@ -50,7 +85,9 @@ class RadioDlg(QDialog):
         v1 = QVBoxLayout()
         v1.setContentsMargins(1, 1, 1, 1)
         v1.addLayout(h)
-        self.table = tableMenu(self)
+        self.table = QTableWidget(self)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(lambda pos: self.contextMenu(pos, None, None) )
         v1.addWidget(self.table)
 
         w = QWidget()
@@ -58,6 +95,38 @@ class RadioDlg(QDialog):
         sp.addWidget(w)
 
         self.favorites = myList(self)
+
+        self.favorites.setStyleSheet("""
+                QListWidget {
+                    background-color: #f5f5f5;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 4px;
+                    outline: none;
+                }
+                
+                QListWidget::item {
+                    background-color: transparent;
+                    /* Riduciamo il padding verticale al minimo (2px sopra e sotto) */
+                    padding: 2px 8px; 
+                    /* Azzeriamo il margine per attaccare le righe */
+                    margin: 0px;
+                    color: #333333;
+                    /* Un'altezza fissa opzionale se vuoi precisione assoluta */
+                    min-height: 20px; 
+                }
+                
+                QListWidget::item:hover {
+                    background-color: #e8e8e8;
+                    color: #FF0000;
+                }
+                
+                QListWidget::item:selected {
+                    background-color: #e0e0e0;
+                    color: #FF0000;
+                    /* Riduciamo lo spessore della barra laterale per non appesantire */
+                    border-left: 2px solid #FF0000; 
+                }            
+          """)
         self.favorites.doubleClicked.connect(self.play)
         self.favorites.itemSelectionChanged.connect(self.favorite_changed)
         sp.addWidget(self.favorites)
@@ -65,8 +134,29 @@ class RadioDlg(QDialog):
 
         rd = self.ini.get('radio')
         if rd is not None:
-            for d in rd.keys():
-                self.favorites.addItem(d)
+            for key, val in rd.items():
+                item = QListWidgetItem(key)
+                item.setData(Qt.ItemDataRole.UserRole, val)
+                self.favorites.addItem(item)
+                try:
+                    url = val.split('@')[0]
+                    item.setToolTip(url)
+                except:
+                    pass
+
+        QTimer.singleShot(0, lambda: self.azione_cancella.setVisible(bool(self.ed.text())))
+
+    def gestisci_pulsante_clear(self, testo):
+        if testo:
+            # La aggiungiamo solo quando serve
+            if not self.x_aggiunta:
+                self.ed.addAction(self.azione_cancella, QLineEdit.ActionPosition.TrailingPosition)
+                # IMPORTANTE: Se la aggiungi ora, finirà a sinistra della lente
+                # se la lente era stata aggiunta per prima.
+                self.x_aggiunta = True
+            self.azione_cancella.setVisible(True)
+        elif not testo and self.x_aggiunta:
+            self.azione_cancella.setVisible(False)
 
     def search(self):
         from pyradios import RadioBrowser
@@ -80,6 +170,8 @@ class RadioDlg(QDialog):
                           reverse=True
                           )
             self.fill_table(a)
+            if a:
+                self.update_last_searches()
             waitCursor()
 
     def load_icons(self, list):
@@ -90,10 +182,13 @@ class RadioDlg(QDialog):
                 continue
             im = scrobbler.get_thumbnail(l['favicon'])
             if im is not None:
-                qii = self.table.item(row, 1)
-                qp = QPixmap()
-                qp.loadFromData(im)
-                qii.setIcon(QIcon(qp))
+                try:
+                    qii = self.table.item(row, 1)
+                    qp = QPixmap()
+                    qp.loadFromData(im)
+                    qii.setIcon(QIcon(qp))
+                except:
+                    continue
             row += 1
 
     def fill_table(self, rList):
@@ -102,27 +197,34 @@ class RadioDlg(QDialog):
         if len(rList) == 0:
             return
         radios = []
+        s = set()
         for l in rList:
-            if 'ref' in l['url']:
+            if 'ref' in l['url'] or l['url'] in s:
                 continue
+            if l['lastcheckok'] == 0:
+                continue
+            s.add(l['url'])
             r = RadioStation(l['name'], l['url'], None, l['country'], l['favicon'], l['bitrate'], l['codec'])
             radios.append(r)
 
         searcher = Thread(target=self.load_icons, args=(rList,))
         searcher.start()
 
-        fields = ['Nome', 'icon', 'paese', ' ']
+        fields = ['Nome', 'icon', 'paese', 'codec', ' ']
         self.table.setColumnCount(len(fields))
         self.table.setHorizontalHeaderLabels(fields)
         self.table.cellClicked.connect(self.onCellClicked)
 
         horizontalHeader = self.table.horizontalHeader()
-        horizontalHeader.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        horizontalHeader.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        horizontalHeader.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents) #nome
+        horizontalHeader.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed) #icona
         horizontalHeader.resizeSection(1, 30)
         horizontalHeader.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        horizontalHeader.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        horizontalHeader.resizeSection(3, 30)
+        #horizontalHeader.resizeSection(2, 80) #paese
+        horizontalHeader.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        #horizontalHeader.resizeSection(3, 80)# codec
+        horizontalHeader.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed) # pulsante play
+        horizontalHeader.resizeSection(4, 30)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
         max_name_len = 40
@@ -145,25 +247,28 @@ class RadioDlg(QDialog):
                 qii.setIcon(QIcon(qp))
             self.table.setItem(numRows, 1, qii)
             self.table.setItem(numRows, 2, QTableWidgetItem(r.paese))
+            self.table.setItem(numRows, 3, QTableWidgetItem(r.codec))
+
             qi1 = QTableWidgetItem()
             qi1.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
-            self.table.setItem(numRows, 3, qi1)
-            self.table.setColumnWidth(3, 10)
+            self.table.setItem(numRows, 4, qi1)
+            self.table.setColumnWidth(4, 10)
 
-    def contextMenu(self, p, wd, it):
-        if it is None:
-            return
+    def contextMenu(self, pos, wd, it):
         ctx = QMenu(self)
-        if wd == self.table:
-            #it = self.table.itemAt( self.table.mapFromGlobal(p))
-            if it.column() != 0:
-                it = self.table.item(it.row(), 0)
-            ctx.addAction("Aggiunge ai preferiti").triggered.connect(lambda x: self.add_favourites(it))
-        else:
-            #it = self.favorites.itemAt(p)
-            ctx.addAction("Rimuove dai preferiti").triggered.connect(lambda x: self.del_favourites(it))
+        if not wd:
+            index = self.table.indexAt(pos)
+            if not index.isValid():
+                return  # Clic fuori dalle righe caricate
 
-        ctx.exec(p)
+            row = index.row()
+            it = self.table.item(row, 0)
+
+            ctx.addAction("Aggiunge ai preferiti").triggered.connect(lambda x: self.add_favourites(it))
+            ctx.exec(self.table.mapToGlobal(pos))
+        else:
+            ctx.addAction("Rimuove dai preferiti").triggered.connect(lambda x: self.del_favourites(it))
+            ctx.exec(pos)
 
     def add_favourites(self, it):
         r = it.data(Qt.ItemDataRole.UserRole)
@@ -198,7 +303,7 @@ class RadioDlg(QDialog):
         self.ini.save()
 
     def onCellClicked(self, nr, nc):
-        if nc == 3:
+        if nc == 4:
             qi = self.table.item(nr, 0)
             dat = qi.data(Qt.ItemDataRole.UserRole)
             url = dat.url
@@ -214,14 +319,34 @@ class RadioDlg(QDialog):
             self.play()
 
     def play(self):
-        rad = self.favorites.selectedItems()[0].text()
-        rd = self.ini.get('radio')
-        dat = rd[rad].split('@')
+        dat = self.favorites.selectedItems()[0].data(Qt.ItemDataRole.UserRole)
+        #rad = self.favorites.selectedItems()[0].text()
+        #rd = self.ini.get('radio')
+        dat = dat.split('@')
         url = dat[0]
         fav = ''
         if len(dat) > 1:
             fav = dat[1]
         self.radio_signal.emit(url, fav)
+
+    def last_searches(self):
+        return self.ini.get('radio-searches', 'recent').split(',')
+
+    def update_last_searches(self):
+        txt = self.ed.text()
+        if txt and txt not in self.ultime_ricerche:
+            self.ultime_ricerche.insert(0, txt)
+        if len(self.ultime_ricerche) > 4:
+            self.ultime_ricerche = self.ultime_ricerche[:4]
+
+        self.completer_model = QStringListModel(self.ultime_ricerche)
+        self.completer.setModel(self.completer_model)
+
+        slist = ",".join(self.ultime_ricerche)
+        self.ini.set('radio-searches', 'recent', slist)
+        self.ini.save()
+
+
 
 class RadioStation:
     def __init__(self, name='', url='', ico=None, paese='', favicon='', bitrate=0, codec=''):
