@@ -10,7 +10,7 @@ os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QThread
-from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor, QFont
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
                              QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
 
@@ -478,8 +478,33 @@ class MusicPlayerDlg(QDialog):
     def gestisci_visualizzazione_cover(self):
         # Carica il tuo vinile di default
         path_vinile = get_resource_file(__file__, 'icone', 'vinyl.png')
-        self.cover.set_cover(QPixmap(path_vinile))
+        pix = self.crea_vinile_personalizzato(path_vinile, "Euterpe")
+        self.cover.set_cover(pix) #QPixmap(path_vinile))
         self.cover.animation.start()
+
+    def crea_vinile_personalizzato(self, percorso_png, nome_artista):
+        # 1. Carica il file originale
+        pixmap = QPixmap(percorso_png)
+
+        # 2. Prepara il "pittore" per scrivere sopra l'immagine
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        # 3. Configura il font corsivo
+        # "Brush Script MT", "Lucida Handwriting" o "Segoe Script" sono comuni su Windows
+        font = QFont("Segoe Script", 24)
+        font.setItalic(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#333333"))  # Grigio scuro/Nero per l'etichetta
+
+        # 4. Disegna il testo al centro
+        # Definiamo l'area dell'etichetta (approssimativamente il centro)
+        rettangolo_centrale = pixmap.rect()
+        painter.drawText(rettangolo_centrale, Qt.AlignmentFlag.AlignCenter, nome_artista)
+
+        painter.end()
+        return pixmap
 
     def inc_track_index(self, inc):
         if inc < 0:

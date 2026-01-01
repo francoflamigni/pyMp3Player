@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox,
                              QGraphicsOpacityEffect)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect, QSize, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation
+from PyQt6.QtCore import Qt, QRect, QSize, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation, pyqtSignal
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -70,7 +70,7 @@ class MyTitleBar(StandardTitleBar):
         self.anim.finished.connect(on_finished)
         self.anim.start()
 
-class Player(FramelessDialog): #QMainWindow):
+class Player(FramelessDialog):
     def __init__(self, master=None):
         super().__init__()
 
@@ -318,7 +318,7 @@ class Player(FramelessDialog): #QMainWindow):
             cd.setIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_play.png')))
             for d in drives:
                 d1 = QAction(d, self)
-                d1.triggered.connect(lambda checked, drive_letter=d: self.open_cd(drive_letter))
+                d1.triggered.connect(lambda checked, drive_letter=d: self._open_cd(drive_letter))
                 cd.addAction(d1)
         actions = [
             AddMenuItem("Dispositivi Bluetooth", fun=self.bluetooth,
@@ -368,6 +368,9 @@ class Player(FramelessDialog): #QMainWindow):
         self.ply.open_cd(drive)
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
+
+    def _open_cd(self, drive):
+        QTimer.singleShot(100, lambda: self.open_cd(drive))
 
     def idle_background(self):
         if not self.background_mode and self.ply.mode == self.ply.Mode_None :
