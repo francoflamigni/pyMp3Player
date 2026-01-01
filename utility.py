@@ -1,3 +1,5 @@
+import tempfile
+
 from profiler import checkpoint
 import io
 import sys
@@ -130,12 +132,21 @@ class WikipediaWorker(QRunnable):
     def run(self):
         import wikipedia
         wikipedia.set_lang(self.lang)
+        cachedir = r"c:\tmp\cache"
+        os.makedirs(cachedir, exist_ok=True)
 
         try:
             # 1. OTTIENI URL IMMAGINE E RIASSUNTO (Codice precedente)
             #summary = wikipedia.summary(self.artist_name, sentences=5)
             #formatted_summary = textwrap(summary, width=50).replace("\n", "<br>")
             #self.signals.result.emit(formatted_summary, self.cursor_pos)
+            file_cache = os.path.join(cachedir, f"{self.artist_name}.html")
+            if os.path.exists(file_cache):
+                with open(file_cache, "r", encoding="utf-8") as f:
+                    tooltip_html = f.read()
+                    self.signals.result.emit(tooltip_html, self.cursor_pos)
+                    return
+
 
             tooltip_html = f"<b>{self.artist_name}</b><br><hr>"
 
@@ -154,6 +165,9 @@ class WikipediaWorker(QRunnable):
             tooltip_html += formatted_summary
 
             self.signals.result.emit(tooltip_html, self.cursor_pos)
+            file_cache = os.path.join(cachedir, f"{self.artist_name}.html")
+            with open(file_cache, "w", encoding="utf-8") as f:
+                f.write(tooltip_html)
 
         except Exception as e:
             self.signals.error.emit(f"Errore nella gestione del tooltip: {e}")
