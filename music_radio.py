@@ -5,7 +5,7 @@ from PyQt6.QtGui import QPixmap, QIcon, QAction
 
 from pyMyLib.qtUtils import set_background, yesNoMessage, waitCursor
 from pyMyLib.utils import get_resource_file
-from dialogs import myList
+from utility import myList
 
 '''
 https://streamurl.link/ per trovare stazioni radio

@@ -1,3 +1,5 @@
+import asyncio
+
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
@@ -84,13 +86,13 @@ class MusicInfo:
             releases = musicbrainzngs.search_releases(
                 query=f'artist:"{self.artist_name}" AND release:"{self.album_title}"',
                 offset=0,
-                limit=1
+                limit=5
             )
             return [{
                 'id': r['id'],
                 'title': r.get('title')
             } for r in releases['release-list']]
-        except:
+        except Exception as e:
             return []
         a = 0
 
@@ -218,6 +220,7 @@ class MusicInfo:
         if self.finished:
             return False
 
+        releases = self.get_release()
         if self.id_artist is None:
             if not self.get_artist():
                 return False
@@ -303,16 +306,9 @@ class MusicInfo:
         return genres_list
 
     def get_cover_info(self, release_id):
-
-        try:
-            # Usa get_image_list di musicbrainzngs
-            image_data = musicbrainzngs.get_image_front(release_id)
-            return image_data
-        except musicbrainzngs.ResponseError:
-            return None
-        except Exception as e:
-            print(f"Errore nel recupero info copertina: {e}")
-            return None
+        # Usa get_image_list di musicbrainzngs
+        image_data = musicbrainzngs.get_image_front(release_id)
+        return image_data
 
 class CDinfo:
     def __init__(self, drive=''):
@@ -798,8 +794,10 @@ def brainz(artist, album):
     a = 0
 
 import requests
-class CoverDownloader:
-    def __init__(self, app='euterpe', ver='1.5', mail='tuaemail@example.com', rate_limit=1.0):
+class CoverDownloader(QObject):
+    cover_ready = pyqtSignal(str, bytes)
+    def __init__(self, app='euterpe', ver='1.5', mail='luigi.collini@gmail.com', rate_limit=1.0):
+        super().__init__()
         self.headers = {
             'User-Agent': f'{app}/{ver} ( {mail} )',
             'Accept': 'application/json',
@@ -1081,25 +1079,23 @@ class CoverDownloader:
         if size:
             url = f"{url}/-{size}"
 
-        try:
-            response = requests.get(
-                url,
-                headers=self.headers,
-                timeout=15,
-                allow_redirects=True
-            )
+        response = requests.get(
+            url,
+            headers=self.headers,
+            timeout=15,
+            allow_redirects=True,
+            stream=True
+        )
 
-            if response.status_code != 200:
-                return None
-
-            # Verifica dimensione
-            if len(response.content) < 1000:
-                return None
-
-            return response.content
-
-        except Exception as e:
+        if response.status_code != 200:
             return None
+
+        # Verifica dimensione
+        #if len(response.content) < 1000:
+        #    return None
+
+        return response.content
+
 
     def download_album_info(self, artist, album, include_credits=False):
         """
@@ -1119,7 +1115,7 @@ class CoverDownloader:
         releases1 = mi.get_release()
 
         # 1. Cerca release
-        releases = self.search_release_fast(artist, album, limit=1)
+        releases = self.search_release_fast(artist, album, limit=3)
 
         if not releases:
             print(f"  ✗ Release non trovata")
@@ -1144,23 +1140,42 @@ class CoverDownloader:
 
         return info
 
-    def download_cover(self, artist, album, size='500'):
+    def download_cover(self, artist='', album='', id='', size='500'):
+        from threading import Thread
+        Thread(target=self._download_cover, args=(artist, album, id), daemon=True).start()
+
+    def _download_cover(self, artist, album, id, size='500'):
 
         start = time.time()
 
         t1 = time.time()
-        # 1. Ricerca release ID
-        release = self.search_release_fast(artist, album)
-        t2 = time.time()
-
-        if not release:
-            elapsed = time.time() - start
-            print(f"  ? Release non trovata ({elapsed:.2f}s)")
-            return None
+        if artist and album:
+            try:
+                # 1. Ricerca release ID
+                release = self.search_release_fast(artist, album)
+                release_id = release[0]['id']
+                t2 = time.time()
+                if not release:
+                    elapsed = time.time() - start
+                    print(f"  ? Release non trovata ({elapsed:.2f}s)")
+                    self.cover_ready.emit("Errore release non trovata", b"")
+                    return None
+            except Exception as e:
+                self.cover_ready.emit("Errore release non trovata", b"")
+                return None
+        elif id:
+            release_id = id
+        else:
+            self.cover_ready.emit("Dati incompleti", b"")
 
         try:
-            release_id = release[0]['id']
-            return self.get_cover(release_id, size)
+            #release_id = release[0]['id']
+            data =  self.get_cover(release_id, size)
+            if data:
+                self.cover_ready.emit("", data)
+            else:
+                self.cover_ready.emit("Errore", b"")
         except Exception as e:
+            self.cover_ready.emit(f"{e}", b"")
             return None
 

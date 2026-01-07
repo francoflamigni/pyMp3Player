@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, 
 from pyMyLib.qtUtils import set_background, waitCursor
 from dialogs import lyric_song, AppConfig
 import scrobbler
+from utility import ShazamButtonHandler, songInfoDlg
 
 def get_tm(secs):
     min = int(secs / 60)
@@ -41,6 +42,7 @@ class MusicPlayerDlg(QDialog):
         self.tracks = []
         self.index = -1
         self.listplayer = None
+        self.radio_info = None
 
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
@@ -108,7 +110,7 @@ class MusicPlayerDlg(QDialog):
                 }      
         """)
         self.videoframe.setMinimumSize(QSize(200, 200))
-        self.cover = CoverLabel() #QLabel()
+        self.cover = CoverLabel()
         self.cover.setStyleSheet("""
             QLabel {
                 border: 1px solid #FF0000;
@@ -171,11 +173,6 @@ class MusicPlayerDlg(QDialog):
     def set_position(self):
         # Set the movie position according to the position slider.
 
-        # The vlc MediaPlayer needs a float value between 0 and 1, Qt uses
-        # integer variables, so you need a factor; the higher the factor, the
-        # more precise are the results (1000 should suffice).
-
-        # Set the media position to where the slider was dragged
         self.timer.stop()
         pos = self.positionslider.value()
         self.mediaplayer.set_position(pos / 1000.0)
@@ -217,7 +214,7 @@ class MusicPlayerDlg(QDialog):
         v.addWidget(self.note)
         v.addLayout(hs)
         v.addLayout(hbt)
-        v.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize) #SetMaximumSize)
+        v.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
 
         wdd.setLayout(v)
         return wdd
@@ -225,7 +222,6 @@ class MusicPlayerDlg(QDialog):
     def play_stop_ui(self):
         self.playbutton = QPushButton(self)
         self.playbutton.setMaximumWidth(30)
-        #self.set_play_icon(Player.Mode_Play)
         self.playbutton.clicked.connect(self.play_pause)
 
         stopbutton = QPushButton(self)
@@ -262,14 +258,42 @@ class MusicPlayerDlg(QDialog):
         self.titlebutton.setMaximumWidth(30)
         self.titlebutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
         self.titlebutton.setToolTip('riconosce brano')
-        self.titlebutton.clicked.connect(self.wparent.songTitle)
+        self.titlebutton.clicked.connect(self.find_song)
+        self.blink_handler = ShazamButtonHandler(self.titlebutton)
         hbt.addWidget(self.lyricbutton)
         hbt.addWidget(self.titlebutton)
         return hbt
 
+    def find_song(self):
+        from myShazam import myShazam
+        ms = myShazam(time=3)
+        ms.found_song.connect(self._find_song)
+        self.blink_handler.start_blinking()
+        ms.guess()
+
+    def _find_song(self, out):
+        mes = ''
+        if 'Error' in out.keys():
+            mes = out['Error']
+        elif 'Retry' in out.keys():
+            self.ttt = out['Retry']
+            return
+        else:
+            mes = f"Artista: {out['artist']}\nAlbum: {out['album']}\nTitolo: {out['title']}\n"
+
+        self.blink_handler.stop_blinking()
+        songInfoDlg.run(self.wparent, mes)
+
     def songLyrics(self):
         if self.index >= 0:
-            lyric_song(self.tracks[self.index].artist, self.tracks[self.index].title, self.wparent)
+            from scrobbler import LyricsWorker
+            ls = LyricsWorker(self.tracks[self.index].artist, self.tracks[self.index].title)
+            ls.finished.connect(self._songLyrics)
+            ls.song_text()
+
+    def _songLyrics(self, txt):
+        from dialogs import lyricsDlg
+        lyricsDlg.run(self.wparent, txt)
 
     def set_play_icon(self, type):
         if type == MusicPlayerDlg.Mode_Play:
@@ -317,6 +341,8 @@ class MusicPlayerDlg(QDialog):
         self.mode = MusicPlayerDlg.Mode_None
         self.index = -1
         self.animation_pause()
+        if self.radio_info:
+            self.radio_info.stop()
 
     def skip(self, inc):
         self.mediaplayer.stop()
@@ -345,29 +371,13 @@ class MusicPlayerDlg(QDialog):
         if self.mode != MusicPlayerDlg.Mode_None:
             self.stop()
 
-        from music_brainz import CDinfo, CoverArtWorker
+        from music_brainz import CDinfo, CoverDownloader
         cdi = CDinfo(media_input)
         self.tracks, cov = cdi.cd_to_internal()
         if cov:
-            self.thread = QThread()
-            file = r"c:\tmp\cov.jpg"
-
-            # 2. Crea il Worker e sposta nel Thread
-            self.worker = CoverArtWorker(cov, file)
-            self.worker.moveToThread(self.thread)
-
-            # 3. Collega i segnali
-            self.thread.started.connect(self.worker.run)
-            self.worker.signals.finished.connect(self.show_cover)
-
-            # Collega la pulizia all'uscita del worker
-            self.worker.signals.finished.connect(self.thread.quit)
-            self.worker.signals.error.connect(self.thread.quit)
-            self.thread.finished.connect(self.thread.deleteLater)
-            self.worker.signals.finished.connect(self.worker.deleteLater)
-            self.worker.signals.error.connect(self.worker.deleteLater)
-            self.thread.start()
-
+            cdi = CoverDownloader()
+            cdi.cover_ready.connect(self.show_cover)
+            cdi.download_cover(id=cov)
         self.gestisci_visualizzazione_cover()
         self.index = 0
 
@@ -393,14 +403,14 @@ class MusicPlayerDlg(QDialog):
         self.cover.clear()
         self.update_ui()
 
-    def show_cover(self):
-        self.cover.reset()
-        file = r"c:\tmp\cov.jpg"
-        pixmap = QPixmap()
-        pixmap.load(file)
-
-        # Scala l'immagine mantenendo le proporzioni
-        self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+    def show_cover(self, mes, image_data):
+        if image_data:
+            pixmap = QPixmap()
+            if pixmap.loadFromData(image_data):
+                self.cover.reset()
+                self.cover.animation.stop()
+                # Scala l'immagine mantenendo le proporzioni
+                self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
     def on_track_end(self, event):
         if self.mode != MusicPlayerDlg.Mode_Cd:
@@ -428,6 +438,9 @@ class MusicPlayerDlg(QDialog):
             return False
         self.mode = MusicPlayerDlg.Mode_Radio
         self.timer.setInterval(5000)
+        self.radio_info = scrobbler.GetRadioInfo(self.url, 4000)
+        self.radio_info.radio_info_msg.connect(self.new_radio_msg)
+        self.radio_info.start()
 
         self.currentChanged(1)
 
@@ -438,7 +451,6 @@ class MusicPlayerDlg(QDialog):
             s2 = self.cover.size()
             if qp.loadFromData(pic):
                 s1 = qp.width(), qp.height()
-                #self.cover.setPixmap(qp.scaledToHeight(self.cover.height())) #, Qt.AspectRatioMode.KeepAspectRatio))
                 self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
         else:
             self.gestisci_visualizzazione_cover()
@@ -479,7 +491,7 @@ class MusicPlayerDlg(QDialog):
         # Carica il tuo vinile di default
         path_vinile = get_resource_file(__file__, 'icone', 'vinyl.png')
         pix = self.crea_vinile_personalizzato(path_vinile, "Euterpe")
-        self.cover.set_cover(pix) #QPixmap(path_vinile))
+        self.cover.set_cover(pix)
         self.cover.animation.start()
 
     def crea_vinile_personalizzato(self, percorso_png, nome_artista):
@@ -572,6 +584,9 @@ class MusicPlayerDlg(QDialog):
         self.note.setToolTip(txt)
         self.note.setCursorPosition(0)
 
+    def new_radio_msg(self, message):
+        self.add_note(message)
+
     def update_ui(self):
         # Updates the user interface
 
@@ -595,8 +610,8 @@ class MusicPlayerDlg(QDialog):
                 else:
                     self.stop()
                     self.next_song_signal.emit(1)
-        if self.mode == MusicPlayerDlg.Mode_Radio:
-            self.radio_metadata()
+        #if self.mode == MusicPlayerDlg.Mode_Radio:
+        #    self.radio_metadata()
         elif self.mode == MusicPlayerDlg.Mode_Music:
             tm = (self.tm * media_pos) / 1000
             self.rt_time.setText(get_tm(tm))

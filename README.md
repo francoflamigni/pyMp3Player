@@ -55,3 +55,6 @@ secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooK
 token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
 installata versione 3.2.0
 
+picovoice 
+https://github.com/francoflamigni?tab=repositories
+

@@ -10,7 +10,6 @@ eyed3
 pyradios
 soundcard
 soundfile
-sounddevice
 shazamio
 googletrans==3.1.0a0
 lyricsgenius
@@ -21,5 +20,6 @@ pywin32
 mutagen
 discid
 pillow
-gtts
 langdetect
+edge-tts
+win32-setctime

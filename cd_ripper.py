@@ -209,10 +209,6 @@ class CDRipperMainWindow(QDialog):
 
         self.setup_config_tab(main_layout)
 
-        # Pannello di controllo
-        #control_panel = self.create_control_panel()
-        #main_layout.addWidget(control_panel)
-
         # Barra di progresso e status
         self.progress_bar = QProgressBar()
         self.status_label = QLabel("Pronto")
@@ -294,7 +290,6 @@ class CDRipperMainWindow(QDialog):
         metadata_layout = QGridLayout()
 
         # Ricerca automatica
-        #wi = QWidget()
         search_layout = QVBoxLayout(metadata_group)
 
         self.artist_edit = QLineEdit()
@@ -305,7 +300,6 @@ class CDRipperMainWindow(QDialog):
         self.search_by_artist_button = QPushButton(self)
         self.search_by_artist_button.setText("Cerca")
         self.search_by_artist_button.clicked.connect(self.detect_tracks_byartist)
-
 
         self.cover = QLabel()
         self.cover.setStyleSheet("""
@@ -340,15 +334,8 @@ class CDRipperMainWindow(QDialog):
         search_layout.addWidget(self.search_by_artist_button)
         search_layout.addWidget(self.cover)
 
-
-        #wi.setLayout(search_layout)
-
-        #metadata_layout.addLayout(search_layout)
-        #metadata_layout.addLayout(metadata_layout)
         sp = QSplitter(Qt.Orientation.Horizontal)
         sp.addWidget(metadata_group)
-
-        #layout.addWidget(metadata_group)
 
         # Tabella tracce
         from utility import ACTableWidget
@@ -368,7 +355,7 @@ class CDRipperMainWindow(QDialog):
         sp.addWidget( self.tracks_table)
         sp.setSizes([200, 1100])
 
-        layout.addWidget(sp, stretch=1) #self.tracks_table)
+        layout.addWidget(sp, stretch=1)
 
     def play(self):
         sel = self.cd_drive_combo.currentText()
@@ -392,8 +379,6 @@ class CDRipperMainWindow(QDialog):
             self.clear_all()
             self.start_btn.setEnabled(False)
         self.cd_drive_combo.currentIndexChanged.connect(self.detect_tracks)
-        #self.detect_tracks()
-        #self.start_btn.setEnabled(True)
 
     def browse_output_dir(self):
         """Seleziona directory di output"""
@@ -441,9 +426,6 @@ class CDRipperMainWindow(QDialog):
             for row, track in enumerate(self.tracks_data['tracce']):
                 # Checkbox selezione
                 self._checkItem(row, checked=True)
-                #checkbox = QCheckBox()
-                #checkbox.setChecked(True)
-                #self.tracks_table.setCellWidget(row, 0, checkbox)
 
                 # Numero traccia
                 self.tracks_table.setItem(row, 1, QTableWidgetItem(str(track['traccia'])))
@@ -499,10 +481,6 @@ class CDRipperMainWindow(QDialog):
             track['anno'] = self.tracks_data['anno']
             track['genere'] = self.tracks_data['genere']
 
-    def search_by_artist(self):
-        dd = self.detect_tracks_byartist()
-        a = 0
-
     def on_cd_aperto(self):
         self.init_cd_drives()
 
@@ -519,7 +497,7 @@ class CDRipperMainWindow(QDialog):
         self.album_edit.setText("")
         self.anno_edit.setText("")
         self.genere_edit.setText("")
-        self.display_cover('')
+        self.display_cover("", b"")
 
     def start_ripping(self):
         """Avvia il processo di ripping"""
@@ -641,76 +619,32 @@ class CDRipperMainWindow(QDialog):
         self.monitor.start()
 
     def cover_download(self, id):
-        from music_brainz import CoverArtWorker
-        """Avvia la routine di download in un thread separato."""
-
-        # ⚠️ Esempio di dati che dovresti ottenere altrove (es. da musicbrainzngs)
-        test_release_id = id
-        temp_save_path = r"c:\tmp\cover1.jpg"
-
+        #QApplication.processEvents()
+        from music_brainz import CoverDownloader
+        cdi = CoverDownloader()
+        cdi.cover_ready.connect(self.display_cover)
+        self.cover.clear()
+        cdi.download_cover(id=id)
         self.status_label.setText("Download in corso...")
 
-        # 1. Crea il Thread
-        self.thread = QThread()
-
-        # 2. Crea il Worker e sposta nel Thread
-        self.worker = CoverArtWorker(test_release_id, temp_save_path)
-        self.worker.moveToThread(self.thread)
-
-        # 3. Collega i segnali
-        self.thread.started.connect(self.worker.run)
-        self.worker.signals.finished.connect(self.on_download_success)
-        self.worker.signals.error.connect(self.on_download_error)
-
-        # Collega la pulizia all'uscita del worker
-        self.worker.signals.finished.connect(self.thread.quit)
-        self.worker.signals.error.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.worker.signals.finished.connect(self.worker.deleteLater)
-        self.worker.signals.error.connect(self.worker.deleteLater)
-
-        # 4. Avvia il thread
-        self.thread.start()
-
-    def on_download_success(self, file_path):
-        """Gestisce il segnale di successo (nel thread principale)."""
-        self.status_label.setText("")
-        self.display_cover(file_path)
-        #self.download_button.setEnabled(True)
-
-        # A questo punto puoi chiamare il tuo processo FFmpeg con 'file_path'
-
-    def on_download_error(self, message):
-        """Gestisce il segnale di errore (nel thread principale)."""
-        self.status_label.setText("")
-        #self.download_button.setEnabled(True)
-
-        # Pulizia: rimuovi eventuali file parziali o temporanei
-        try:
-            os.remove(self.worker.save_path)
-            self.cover.setPixmap(QPixmap())
-        except:
-            pass
-
-    def display_cover(self, cover_file):
+    def display_cover(self, mes, data):
         """Mostra la copertina nell'area dedicata."""
-        if cover_file:
+        if data:
             try:
                 pixmap = QPixmap()
-                pixmap.load(cover_file)
+                pixmap.loadFromData(data)
 
                 # Scala l'immagine mantenendo le proporzioni
                 self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+                self.status_label.setText("Pronto")
                 self.cover.setText("")
-                #self.remove_cover_button.setEnabled(True)
 
             except Exception as e:
                 print(f"Errore visualizzazione copertina: {e}")
-                self.covel.setText("Errore caricamento copertina")
+                self.cover.setText("Errore caricamento copertina")
                 self.cover.setPixmap(QPixmap())
                 #self.remove_cover_button.setEnabled(False)
         else:
-            self.cover.setText("Nessuna copertina")
+            self.status_label.setText("Nessuna copertina")
             self.cover.setPixmap(QPixmap())
-            #self.remove_cover_button.setEnabled(False)
 

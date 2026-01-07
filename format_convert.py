@@ -463,9 +463,7 @@ class AudioConverter(QDialog):
 
         self.cover_label = QLabel("Nessuna copertina")
         self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        #self.cover_label.setStyleSheet("border: 2px dashed #ccc; padding: 20px;")
         self.cover_label.setFixedSize(200, 200)
-        #self.cover_label.setMaximumSize(250, 250)
 
         scroll_area.setWidget(self.cover_label)
         scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -531,7 +529,6 @@ class AudioConverter(QDialog):
     def save(self):
         self.output_folder = self.current_folder
         self.start_conversion()
-        a = 0
 
     def load_audio_files(self):
         """Carica file audio dalla cartella selezionata."""
@@ -688,10 +685,8 @@ class AudioConverter(QDialog):
         if file_path:
             try:
                 with open(file_path, 'rb') as f:
-                    cover_data = f.read()
-
-                #self.current_cover_data = cover_data
-                self._load_cover(cover_data)
+                    image_data = f.read()
+                self._load_cover(image_data)
 
             except Exception as e:
                 QMessageBox.warning(self, "Errore", f"Impossibile caricare la copertina: {e}")
@@ -715,7 +710,6 @@ class AudioConverter(QDialog):
 
             # Converte QPixmap in dati binari
             image_data = qpixmap_to_bytes(pixmap)
-
             self._load_cover(image_data)
 
         except Exception as e:
@@ -739,58 +733,15 @@ class AudioConverter(QDialog):
         QApplication.processEvents()
         from music_brainz import CoverDownloader
         cdi = CoverDownloader()
-        #info = cdi.download_album_info(artista, album, True)
-        image_data = cdi.download_cover(artista, album)
+        cdi.cover_ready.connect(self.on_download_success)
+        cdi.download_cover(artista, album)
+
+    def on_download_success(self, mes, image_data):
         if image_data:
             self.status_label.setText("Copertina caricata")
             self._load_cover(image_data)
         else:
             self.status_label.setText("Nessuna copertina")
-
-        return
-        res = cdi.search_musicbrainz_by_metadata(artista, album)
-        try:
-            id = res['releases'][0]['id']
-        except:
-            return
-        from music_brainz import CoverArtWorker, MusicInfo
-        """Avvia la routine di download in un thread separato."""
-        mi = MusicInfo("", "")
-        res = mi.get_cover_info(id)
-        self.display_cover(res)
-        return
-        qpixmap = QPixmap(res)
-
-        # ⚠️ Esempio di dati che dovresti ottenere altrove (es. da musicbrainzngs)
-        test_release_id = id
-        temp_save_path = r"c:\tmp\cover2.jpg"
-
-        #self.status_label.setText("Download in corso...")
-
-        # 1. Crea il Thread
-        self.thread = QThread()
-
-        # 2. Crea il Worker e sposta nel Thread
-        self.worker = CoverArtWorker(test_release_id, temp_save_path)
-        self.worker.moveToThread(self.thread)
-
-        # 3. Collega i segnali
-        self.thread.started.connect(self.worker.run)
-        self.worker.signals.finished.connect(self.on_download_success)
-        self.worker.signals.error.connect(self.on_download_error)
-
-        # Collega la pulizia all'uscita del worker
-        self.worker.signals.finished.connect(self.thread.quit)
-        self.worker.signals.error.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.worker.signals.finished.connect(self.worker.deleteLater)
-        self.worker.signals.error.connect(self.worker.deleteLater)
-
-        # 4. Avvia il thread
-        self.thread.start()
-
-    def on_download_success(self, file_path):
-        a = 0
 
     def on_download_error(self):
         a = 0

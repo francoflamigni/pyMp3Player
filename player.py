@@ -20,7 +20,7 @@ from dialogs import AppConfig
 from music_index import MusicIndexDlg
 from music_player import MusicPlayerDlg
 from music_radio import RadioDlg
-from utility import detect_cd_drives, close_splash
+from utility import detect_cd_drives, close_splash, Cache
 from mp3_tag import GENRE
 
 INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.5.1\n02 Novembre 2025'
@@ -41,7 +41,7 @@ class MyTitleBar(StandardTitleBar):
         self.closeBtn.setHoverColor(Qt.GlobalColor.red)
         self.closeBtn.setPressedColor(Qt.GlobalColor.red)
         self.closeBtn.setHoverBackgroundColor(QColor(0, 0, 0, 0))  #Qt.GlobalColor.white)  #QColor(232, 17, 35))
-        self.closeBtn.setPressedBackgroundColor(QColor(241, 112, 122))
+        self.closeBtn.setPressedBackgroundColor(QColor(0, 0, 0, 120))
 
         self.minBtn.clicked.disconnect()
         self.minBtn.clicked.connect(self.minimize_with_animation)
@@ -80,6 +80,8 @@ class Player(FramelessDialog):
         os.environ["PATH"] += os.pathsep + str(get_resource_path_pathlib(__file__, 'exe'))
 
         self.ini = iniConf(AppConfig, case_sensitive=True)
+        self.cache = Cache(self.ini)
+        self.cache.save(r"c:\tmp\cache", 10, 20)
 
         self.background_mode = False
         self.create_ui()
@@ -348,6 +350,7 @@ class Player(FramelessDialog):
     def get_track_pix(self, album, artist, cover):
         return self.dlg.get_track_pix(album, artist, cover)
 
+
     ''' Chiama Shazam per avere il titolo'''
     def songTitle(self):
         wd = self.tab.widget(0)
@@ -395,13 +398,17 @@ class Player(FramelessDialog):
             self.background(True) # forza l'uscita dal background mode
 
         import random
-        from scrobbler import leggi_stringa_offline
+        from scrobbler import Speaker
         if self.background_mode:
             mi = self.dlg.music.tracks.name
             key = random.choice(list(mi.keys()))
             mstr = mi[key]
-            leggi_stringa_offline([mstr.artist, mstr.album, mstr.title])
-            self.ply.open_file([mi[key]])
+            annuncio = Speaker().pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), '-70%')
+
+            import copy
+            ann = copy.deepcopy(mi[key])
+            ann.file = annuncio
+            self.ply.open_file([ann, mi[key]])
 
     def bluetooth(self):
         from bluetooth import BluetoothManager

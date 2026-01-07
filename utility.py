@@ -1,13 +1,22 @@
-import tempfile
-
+from PyQt6.QtGui import QPixmap, QCursor, QColor, QIcon
 from profiler import checkpoint
 import io
 import sys
 import os
 import base64
-from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent
-from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu, QApplication
+from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QRect, QPropertyAnimation, \
+    QEasingCurve
+from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget, QSizePolicy, \
+    QGraphicsColorizeEffect, QDialog, QVBoxLayout
 from enum import Enum
+from pyMyLib.utils import iniConf, get_resource_file
+from pyMyLib.qtUtils import center_in_parent
+
+
+def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
+    pixmap = QPixmap(png_path)
+    scaled_pixmap = pixmap.scaled(width, height)
+    return QCursor(scaled_pixmap, hotspot_x, hotspot_y)
 
 def close_splash():
     import importlib
@@ -119,55 +128,84 @@ class WorkerSignals(QObject):
 
 # --- Worker Modificato ---
 class WikipediaWorker(QRunnable):
-    def __init__(self, artist_name, cursor_pos, lang="it"):
+    def __init__(self, artist_name, cursor_pos, lang="it", cache=None):
         super().__init__()
         self.artist_name = artist_name
-        self.cursor_pos = cursor_pos
+        self.cursor_pos = cursor_pos + QPoint(150, 0)
         self.signals = WorkerSignals()
         self.setAutoDelete(True)
         self.lang = lang
+        self.cache = cache
+        self._is_cancelled = False
 
         self.USER_AGENT = "Euterpe/1.0 (contatto: tuaemail@esempio.it)"
+
+        # Definisci uno stile CSS interno per pulire il codice
+        self.style = """
+        <style>
+            .tooltip-container { font-family: sans-serif; width: 250px; padding: 10px; }
+            .title { display: block; text-align: center; font-size: 18px; font-weight: bold; margin-top: 15px; }
+            .img-wrapper { text-align: center; margin: 10px 0 0 0; }
+            .summary-container { margin-top: 5px; min-height: 80px; font-size: 14px; } /* min-height evita il salto */
+        </style>
+        """
+    def cancel(self):
+        self._is_cancelled = True
+
+    def assemble_html(self, img_tag, summary):
+
+        tooltip_html = f"{self.style}<div class='tooltip-container'>"
+        tooltip_html += f"<center><span class='title'>{self.artist_name}</span></center><hr>"
+        if img_tag:
+            tooltip_html += (f"""<div class='img-wrapper'>
+                             <img src="data:{self.content_type};base64,{img_tag}" class="artist-img">
+                             </div>""")
+
+        # Creiamo il contenitore per il summary (vuoto per ora)
+        if not summary:
+            tooltip_html += "<div class='summary-container'><i>Caricamento biografia...</i></div></div>"
+        else:
+            # STEP 2: Aggiungi il summary reale
+            clean_summary = textwrap(summary, width=50).replace("\n", "<br>")
+            tooltip_html += f"<div class='summary-container'>{clean_summary}</div></div>"
+        return tooltip_html
 
     def run(self):
         import wikipedia
         wikipedia.set_lang(self.lang)
-        cachedir = r"c:\tmp\cache"
-        os.makedirs(cachedir, exist_ok=True)
+        file_cache = f"{self.artist_name}.html"
 
         try:
-            # 1. OTTIENI URL IMMAGINE E RIASSUNTO (Codice precedente)
-            #summary = wikipedia.summary(self.artist_name, sentences=5)
-            #formatted_summary = textwrap(summary, width=50).replace("\n", "<br>")
-            #self.signals.result.emit(formatted_summary, self.cursor_pos)
-            file_cache = os.path.join(cachedir, f"{self.artist_name}.html")
-            if os.path.exists(file_cache):
-                with open(file_cache, "r", encoding="utf-8") as f:
-                    tooltip_html = f.read()
-                    self.signals.result.emit(tooltip_html, self.cursor_pos)
+            if self._is_cancelled: return
+            # 1. Controllo Cache Immediato
+            if self.cache:
+                txt = self.cache.get(file_cache)
+                if txt:
+                    self.signals.result.emit(txt, self.cursor_pos)
                     return
 
-
-            tooltip_html = f"<b>{self.artist_name}</b><br><hr>"
-
-            image_url = self._get_image_url()  # Metodo privato per l'URL immagine
-            # 2. SCARICA E CONVERTI L'IMMAGINE (NUOVO)
+            # 2. Raccolta Dati (senza emit intermedi)
+            image_url = self._get_image_url()
+            if self._is_cancelled: return
+            img_tag = ""
             if image_url:
-                base64_img_tag = self._get_base64_image_tag(image_url)
-                if base64_img_tag:
-                    tooltip_html += base64_img_tag + "<br>"
-                    self.signals.result.emit(tooltip_html, self.cursor_pos)
+                img_tag = self._get_base64_image_tag(image_url)
+            if self._is_cancelled: return
+            full_html = self.assemble_html(img_tag, None)
+            self.signals.result.emit(full_html, self.cursor_pos)
 
-            # 3. AGGIUNGI RIASSUNTO E FORMATTAZIONE
             summary = wikipedia.summary(self.artist_name, sentences=5)
-            formatted_summary = textwrap(summary, width=50).replace("\n", "<br>")
+            # Rimuovi textwrap se usi un div con larghezza fissa, il browser gestirà il wrap meglio
 
-            tooltip_html += formatted_summary
+            # 3. Costruzione HTML Finale
+            full_html = self.assemble_html(img_tag, summary)
 
-            self.signals.result.emit(tooltip_html, self.cursor_pos)
-            file_cache = os.path.join(cachedir, f"{self.artist_name}.html")
-            with open(file_cache, "w", encoding="utf-8") as f:
-                f.write(tooltip_html)
+            # 4. Singola Emissione
+            self.signals.result.emit(full_html, self.cursor_pos)
+
+            # 5. Salvataggio in Cache
+            if self.cache:
+                self.cache.set(file_cache, full_html)
 
         except Exception as e:
             self.signals.error.emit(f"Errore nella gestione del tooltip: {e}")
@@ -204,20 +242,21 @@ class WikipediaWorker(QRunnable):
 
     def _get_base64_image_tag(self, url):
         import requests
-        #import base64
         """Scarica l'immagine e la converte in un tag <img> Base64."""
         try:
             R = requests.get(url, headers={"User-Agent": self.USER_AGENT}, timeout=5)
             R.raise_for_status()
 
             # Tipo di immagine (presumiamo JPEG se l'URL non ha estensione)
-            content_type = R.headers.get('Content-Type', 'image/jpeg')
+            self.content_type = R.headers.get('Content-Type', 'image/jpeg')
 
             # Codifica il contenuto binario in Base64
             base64_encoded_data = base64.b64encode(R.content).decode('utf-8')
 
+            return base64_encoded_data
+
             # Crea il tag <img> con i dati incorporati
-            return f'<img src="data:{content_type};base64,{base64_encoded_data}" style="max-width:200px; max-height:200px; display:block; margin:auto;">'
+            return f'<img src="data:{self.content_type};base64,{base64_encoded_data}" style="max-width:200px; max-height:200px; display:block; margin:auto; p align="center">'
 
         except requests.exceptions.RequestException as e:
             return None  # Fallimento nel download dell'immagine
@@ -509,3 +548,330 @@ class IdleTimeout:
             #self.idle_timer.stop()
         except:
             pass
+
+class Cache:
+    def __init__(self, ini:iniConf):
+        self.ini = ini
+        ini.get("cache")
+        self.dir = ini.get("cache", "dir")
+        if self.dir and not os.path.exists(self.dir):
+            os.makedirs(self.dir, exist_ok=True)
+        try:
+            self.duration = int(ini.get("cache", "duration")) # giorni di validità della cacche
+            self.max_size = int(ini.get("cache", "max_size")) #massima dimensione cache in mb
+        except:
+            self.duration = 0
+            self.max_size = 0
+        self.limite_secondi = time.time() - (self.duration * 86400)
+        self.max_size_byte = self.max_size * 1024 * 1024
+
+    def save(self, dir, duration, max_size):
+        cs = {
+            "dir": dir,
+            "duration": str(duration),
+            "max_size": str(max_size)
+        }
+        self.ini.set_sez("cache", cs)
+        self.ini.save()
+
+    def get(self, filename):
+        txt = ''
+        if not self.dir:
+            return
+        filepath = os.path.join(self.dir, filename)
+        if not os.path.exists(filepath):
+            return txt
+        data_creazione = os.path.getctime(filepath)
+        if data_creazione < self.limite_secondi:
+            return txt
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return f.read()
+        return txt
+
+    def set(self, filename, data):
+        from win32_setctime import setctime
+        if not self.dir:
+            return
+        filepath = os.path.join(self.dir, filename)
+        self.ensure_space(len(data))
+        with open(filepath, "w", encoding="utf-8") as f:
+                f.write(data)
+        data_creazione = os.path.getctime(filepath)
+        setctime(filepath, time.time())
+        data_creazione2 = os.path.getctime(filepath)
+        a = 0
+
+    """ verifica che non sia superato il limite della cache, """
+    """ fa spazio rimuovendo i file con ultimo accesso più vecchio """
+    def ensure_space(self, sz):
+        lista, size = lista_file_per_ultimo_accesso(self.dir)
+        while size + sz > self.max_size_byte:
+            it = lista.pop(0)
+            os.remove(os.path.join(self.dir, it))
+            size -= it[2]
+            if size < 0:
+                size = 0
+
+import time
+def trova_file_creati_prima_di(cartella_root, giorni):
+    file_scaduti = []
+
+    # Calcoliamo il limite temporale: ora attuale meno (giorni * secondi in un giorno)
+    limite_secondi = time.time() - (giorni * 86400)
+
+    for root, dirs, files in os.walk(cartella_root):
+        for nome_file in files:
+            percorso_completo = os.path.join(root, nome_file)
+            try:
+                # st_ctime su Windows è la Creazione del file
+                data_creazione = os.path.getctime(percorso_completo)
+
+                if data_creazione < limite_secondi:
+                    file_scaduti.append(percorso_completo)
+            except OSError:
+                continue
+
+    return file_scaduti
+
+""" ritorna i files in una cartella ordinati per ultimo accesso, da più vecchio al più nuovo """
+def lista_file_per_ultimo_accesso(cartella_root):
+    lista_file = []
+    tot_size = 0
+    for root, dirs, files in os.walk(cartella_root):
+        for nome_file in files:
+            percorso_completo = os.path.join(root, nome_file)
+            try:
+                # Recuperiamo il timestamp dell'ultimo accesso (st_atime)
+                stat = os.stat(percorso_completo)
+
+                # Creiamo la tupla con: (timestamp, dimensione_byte, percorso)
+                dati_file = (
+                    stat.st_atime,  # [0] Ultimo accesso
+                    stat.st_size,  # [1] Dimensione in byte
+                    percorso_completo  # [2] Percorso
+                )
+                tot_size += stat.st_size
+                lista_file.append(dati_file)
+            except OSError:
+                # Ignora file bloccati o senza permessi
+                continue
+
+    # Ordiniamo la lista in base al primo elemento della tupla (il timestamp)
+    # L'ordinamento di default è crescente: dal numero più piccolo (data più vecchia)
+    lista_file.sort(key=lambda x: x[0])
+
+    return lista_file, tot_size
+
+
+class myList(QListWidget):
+    def __init__(self, parent, txt='', cursor=0):
+        super().__init__(parent)
+        self.wparent = parent
+        self.itc = None
+        if txt != '':
+            self.addItem(txt)
+        self.setMouseTracking(True)
+        self.cursor = cursor
+
+    def setSelCur(self, it):
+        if self.itc != it:
+            self.itc = it
+
+    def mouseMoveEvent(self, event):
+        if not self.cursor:
+
+            if self.hasFocus() is False:
+                self.setFocus()
+                self.unsetCursor()
+                super(QListWidget, self).mouseMoveEvent(event)
+                return
+
+            it = self.itemAt(event.pos())
+            x = event.pos().x()
+            #print(x)
+            if self.itc is not None:
+                if it != self.itc or x > 50:
+                    self.unsetCursor()
+                else:
+                    self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
+
+        super(QListWidget, self).mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            it = self.itemAt(event.pos())
+            if it is not None:
+                p = self.mapToGlobal(event.pos())
+                self.wparent.contextMenu(p, self, it)
+        elif not self.cursor and event.button() == Qt.MouseButton.LeftButton:
+            it = self.itemAt(event.pos())
+            x = event.pos().x()
+            if it == self.itc and x <= 50:
+                try:
+                    self.unsetCursor()
+                    self.wparent.play_item(self)
+                except:
+                    pass
+            elif it != self.itc and x <= 50:
+                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
+        super(QListWidget, self).mousePressEvent(event)
+
+
+class CustomToolTip(QLabel):
+    def __init__(self):
+        super().__init__(None)
+        self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setWordWrap(True)
+        self.setFixedWidth(400)
+        self.setStyleSheet("background-color: #333; color: white; border: 1px solid #555; padding: 10px;")
+
+        # L'animazione agirà sulla geometria (posizione e dimensione)
+        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation.setDuration(250)  # Millisecondi (un quarto di secondo)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+
+class MusicList(myList):
+    def __init__(self, parent, show_tip=None, hide_tip=None, label='', cursor=0):
+        super().__init__(parent, txt=label, cursor=cursor)
+        self.my_tip = CustomToolTip()
+        self.active_item = None  # Per sapere su quale riga siamo
+        self.show_tip = show_tip
+        self.hide_tip = hide_tip
+        self.screen_height = QApplication.primaryScreen().size().height()
+
+    def mouseMoveEvent(self, event):
+        p = event.pos()
+        if p.x() > 70:
+            self.unsetCursor()
+            self.nascondi_mio_tip()
+            super().mouseMoveEvent(event)
+            return
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        item = self.itemAt(event.pos())
+        # Se il mouse è ancora sulla stessa riga, NON fare nulla (niente flicker!)
+        if item == self.active_item:
+            super().mouseMoveEvent(event)
+            return
+
+        # Se cambiamo riga o usciamo
+        if item:
+            self.nascondi_mio_tip()
+            self.active_item = item
+            #QTimer.singleShot(100, lambda: self.mostra_mio_tip(event.globalPosition().toPoint()))
+            self.mostra_mio_tip(item.text(), event.globalPosition().toPoint())
+        else:
+            self.nascondi_mio_tip()
+
+        super().mouseMoveEvent(event)
+
+    def mostra_mio_tip(self, txt, global_pos):
+        # 1. Aggiorna contenuto (magari metti "Caricamento...")
+        #self.my_tip.setText(f"Artista: {item.text()}")
+        # 2. Posiziona vicino al mouse
+        self.my_tip.move(global_pos.x() + 30, global_pos.y() - 15)
+        self.show_tip(txt, global_pos)
+
+
+        # 3. Qui lanci il tuo WikipediaWorker.
+        # Quando il worker emette il segnale, chiamerai self.my_tip.setText(html_wikipedia)
+        # Il widget resterà visibile e il testo cambierà istantaneamente senza sparire!
+
+    def leaveEvent(self, event):
+        self.nascondi_mio_tip()
+        self.unsetCursor()
+        super().leaveEvent(event)
+
+    def nascondi_mio_tip(self):
+        self.active_item = None
+        self.my_tip.hide()
+        self.hide_tip()
+
+    def show_tooltip_result(self, txt):
+        # 1. Aggiorna il contenuto (ora con foto + testo)
+        self.my_tip.setText(txt)
+
+        # 2. Salva la posizione attuale del ToolTip (per non farlo saltare altrove)
+        posizione_attuale = self.my_tip.pos()
+
+        # 3. Chiedi a Qt di calcolare quanto spazio servirebbe ORA
+        # Usiamo sizeHint() per sapere la dimensione ideale senza cambiare subito il widget
+        dimensione_ideale = self.my_tip.sizeHint()
+
+        # 4. Opzione A: Scatto istantaneo
+        # self.my_tip.resize(dimensione_ideale)
+
+        y0 = posizione_attuale.y()
+        dy0 = dimensione_ideale.height()
+        dy = y0 + dy0
+        if dy > self.screen_height:
+            ddy = dy - self.screen_height
+            y0 -= ddy
+
+        # 5. Opzione B: Animazione di crescita fluida verso la nuova dimensione
+        self.my_tip.animation.stop()  # Ferma animazioni precedenti
+        self.my_tip.animation.setStartValue(self.my_tip.geometry())
+        self.my_tip.animation.setEndValue(QRect(
+            posizione_attuale.x(),
+           y0,
+            self.my_tip.width(),  # Larghezza fissa
+            dy0  # Nuova altezza calcolata
+        ))
+        self.my_tip.animation.start()
+
+
+
+        self.my_tip.setText(txt)
+        self.my_tip.show()
+
+class ShazamButtonHandler:
+    def __init__(self, button):
+        self.button = button
+
+        # Creiamo l'effetto colore
+        self.effect = QGraphicsColorizeEffect(self.button)
+        self.effect.setColor(QColor("red"))
+        self.effect.setStrength(0)  # Inizia invisibile (0 = colore originale)
+        self.button.setGraphicsEffect(self.effect)
+
+        # Timer per il lampeggio
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._toggle_blink)
+        self.is_red = False
+
+    def start_blinking(self):
+        self.timer.start(500)  # Lampeggia ogni 500ms
+
+    def stop_blinking(self):
+        self.timer.stop()
+        self.effect.setStrength(0)  # Torna all'icona nera originale
+        self.is_red = False
+
+    def _toggle_blink(self):
+        if self.is_red:
+            self.effect.setStrength(0)  # Torna nero
+        else:
+            self.effect.setStrength(1)  # Diventa rosso
+        self.is_red = not self.is_red
+
+class songInfoDlg(QDialog):
+    def __init__(self, parent, txt):
+        from dialogs import myPlainText
+        super().__init__(parent)
+        self.wparent = parent
+        self.txt = txt
+        center_in_parent(self, parent, 300, 100)
+        self.setWindowTitle('Shazam')
+        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
+
+        v = QVBoxLayout(self)
+        self.txt_box = myPlainText(self)
+
+        self.txt_box.setText(txt)
+        v.addWidget(self.txt_box)
+
+    @staticmethod
+    def run(parent, txt):
+        dlg = songInfoDlg(parent, txt)
+        dlg.exec()

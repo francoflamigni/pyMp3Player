@@ -18,66 +18,12 @@ https://github.com/andreztz/pyradios/tree/main/pyradios
 
 AppConfig = 'Euterpe'
 
-def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
-    pixmap = QPixmap(png_path)
-    scaled_pixmap = pixmap.scaled(width, height)
-    return QCursor(scaled_pixmap, hotspot_x, hotspot_y)
 
-class myList(QListWidget):
-    def __init__(self, parent, txt='', cursor=0):
-        super().__init__(parent)
-        self.wparent = parent
-        self.itc = None
-        if txt != '':
-            self.addItem(txt)
-        self.setMouseTracking(True)
-        self.cursor = cursor
-
-    def setSelCur(self, it):
-        if self.itc != it:
-            self.itc = it
-
-    def mouseMoveEvent(self, event):
-        if not self.cursor:
-
-            if self.hasFocus() is False:
-                self.setFocus()
-                self.unsetCursor()
-                super(QListWidget, self).mouseMoveEvent(event)
-                return
-
-            it = self.itemAt(event.pos())
-            x = event.pos().x()
-            #print(x)
-            if self.itc is not None:
-                if it != self.itc or x > 50:
-                    self.unsetCursor()
-                else:
-                    self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
-
-        super(QListWidget, self).mouseMoveEvent(event)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            it = self.itemAt(event.pos())
-            if it is not None:
-                p = self.mapToGlobal(event.pos())
-                self.wparent.contextMenu(p, self, it)
-        elif not self.cursor and event.button() == Qt.MouseButton.LeftButton:
-            it = self.itemAt(event.pos())
-            x = event.pos().x()
-            if it == self.itc and x <= 50:
-                try:
-                    self.unsetCursor()
-                    self.wparent.play_item(self)
-                except:
-                    pass
-            elif it != self.itc and x <= 50:
-                self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
-        super(QListWidget, self).mousePressEvent(event)
 
 def lyric_song(artist, track, parent=None):
-    txt = scrobbler.song_text(artist, track)
+    from scrobbler import LyricsWorker
+    ls = LyricsWorker(artist, track)
+    txt = ls.song_text2()
     if len(txt) > 0:
         lyricsDlg.run(parent, txt, track)
 

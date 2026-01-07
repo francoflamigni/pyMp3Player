@@ -2,19 +2,20 @@ from profiler import checkpoint
 import os
 
 import copy
-from PyQt6.QtCore import Qt, QEvent, QRect, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QCursor, QAction, QFont
+from PyQt6.QtCore import Qt, QRect, QThreadPool, pyqtSignal
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
-                             QApplication, QPushButton, QLineEdit, QListWidgetItem, QTabWidget,
-                             QAbstractItemView, QMenu, QToolTip, QFrame, QStackedWidget, QGraphicsOpacityEffect,
+                             QApplication, QPushButton, QLineEdit, QListWidgetItem,
+                             QAbstractItemView, QMenu, QToolTip, QGraphicsOpacityEffect,
                              QSizePolicy)
 
 from mp3_tag import Music
 
-from pyMyLib.qtUtils import waitCursor, center_in_parent, set_background, yesNoMessage
-from pyMyLib.utils import iniConf, get_resource_file
+from pyMyLib.qtUtils import set_background, yesNoMessage
+from pyMyLib.utils import get_resource_file
 
-from dialogs import myList, lyric_song, mySearch, myPlainText, AppConfig
+from dialogs import lyric_song, mySearch
+from utility import myList, MusicList
 
 
 def info_album(artist, album, parent=None):
@@ -29,29 +30,8 @@ def edit_album(artist, album, dir, parent=None):
     ac = AudioConverter(dir)
     ac.exec()
 
-class infoDlg(QDialog):
-    def __init__(self, parent, txt):
-        super(infoDlg, self).__init__(parent)
-        self.wparent = parent
-        self.txt = txt
-        center_in_parent(self, parent, 300, 100)
-        self.setWindowTitle('Shazam')
-        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
-
-        v = QVBoxLayout(self)
-        self.txt_box = myPlainText(self)
-
-        self.txt_box.setText(txt)
-        v.addWidget(self.txt_box)
-
-    @staticmethod
-    def run(parent, txt):
-        dlg = infoDlg(parent, txt)
-        dlg.exec()
-
-
 from PyQt6.QtWidgets import QStackedWidget
-from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup
+from PyQt6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup
 
 
 class SlidingStackedWidget(QStackedWidget):
@@ -215,7 +195,7 @@ class MusicIndexDlg(QDialog):
     def __init__(self, parent):
         super(MusicIndexDlg, self).__init__(parent)
         self.wparent = parent
-        self.shaz = False
+        #self.shaz = False
         self.play_cur = False
         self._current_worker = None
         self.artists_sav = None
@@ -257,10 +237,10 @@ class MusicIndexDlg(QDialog):
         h0.addSpacing(10)
         h0.addWidget(self.te)
 
-        self.artists = myList(self, 'artisti', cursor=1)
+        self.artists = MusicList(self, show_tip=self.show_tip, hide_tip=self.hide_tip, label='artisti', cursor=1) #myList(self, 'artisti', cursor=1)
         self.artists.setStyleSheet("""
             QListWidget::item:selected {
-                background-color: #FFFF77; /* Colore di sfondo della selezione */
+                backgMusicListround-color: #FFFF77; /* Colore di sfondo della selezione */
                 color: black;            /* Colore del testo della selezione */
             }
         """)
@@ -359,6 +339,28 @@ class MusicIndexDlg(QDialog):
 
         self.artists.installEventFilter(self)
 
+    def show_tip(self, txt, pos):
+        from utility import WikipediaWorker
+
+        #qp = QCursor.pos()  # Posizione globale del cursore
+        #p = self.artists.mapFromGlobal(qp)
+        #qi = self.artists.itemAt(p)
+        #if qi:
+        #txt = qi.text()
+        worker = WikipediaWorker(txt, pos, cache=self.wparent.cache)
+        worker.signals.result.connect(self.artists.show_tooltip_result)
+
+        self._current_worker = worker
+        self.threadpool.start(worker)
+
+    def hide_tip(self):
+        try:
+            self._current_worker.cancel()
+            self._current_worker = None
+        except:
+            pass
+
+    """
     def eventFilter(self, obj, event):
         from utility import WikipediaWorker
         if event.type() == QEvent.Type.ToolTip and obj == self.artists:
@@ -368,14 +370,20 @@ class MusicIndexDlg(QDialog):
 
             if qi is not None:
                 txt = qi.text()
+                print("entra tooltip")
 
                 # 1. Annulla il worker precedente, se presente
                 if self._current_worker is not None:
-                     self._current_worker = None  # Rimuovi il riferimento
+                    print(" ancora precedente")
+
+                    if self._current_worker.artist_name == txt:
+                        return super().eventFilter(obj, event)
+                    self._current_worker.cancel()
+                    self._current_worker = None  # Rimuovi il riferimento
 
                 # 2. Crea un nuovo worker per la richiesta attuale
-                worker = WikipediaWorker(txt, qp)
-
+                worker = WikipediaWorker(txt, qp, cache=self.wparent.cache)
+                print(f"  nuovo tooltip {txt}")
                 # 3. Connetti i segnali
                 worker.signals.result.connect(self.show_tooltip_result)
                 # Collega il segnale 'finished' per resettare il riferimento al worker
@@ -391,10 +399,11 @@ class MusicIndexDlg(QDialog):
 
                 # Per tutti gli altri eventi, usa il comportamento di default
         return super().eventFilter(obj, event)
+    """
 
     def show_tooltip_result(self, text, pos):
         """Slot chiamato quando il worker ha un risultato pronto."""
-
+        self._current_worker = None
         QToolTip.showText(pos, text, self, QRect(), 60000)
 
     def worker_finished(self):
@@ -612,42 +621,6 @@ class MusicIndexDlg(QDialog):
             item[0].setSelected(True)
             self.tracks.scrollToItem(item[0])
 
-    def find_song(self, time=5):
-        from myShazam import myShazam
-        if self.shaz:
-            return
-        self.shaz = True
-        ms = myShazam(time=time)
-        ms.found_song.connect(self._find_song)
-        waitCursor(True)
-        ms.guess()
-
-    def _find_song(self, out):
-        mes = ''
-        if isinstance(out, dict):
-            if 'track' in out.keys():
-                tr = out['track']
-                title = tr['title']
-                artist = tr['subtitle']
-                meta = tr['sections'][0]['metadata'][0]['text']
-                mes = 'Artista: ' + artist + '\n'
-                mes += 'Album: ' + meta + '\n'
-                mes += 'Titolo: ' + title + '\n'
-        elif isinstance(out, str):
-            mes = out
-
-        if len(mes) == 0:
-            t = out['retryms'] / 1000
-            if t < 10:
-                self.shaz = False
-                self.find_song(t)
-                return
-            mes = 'Non riconosciuta'
-
-        waitCursor()
-        infoDlg.run(self.wparent, mes)
-        self.shaz = False
-
     def filter(self, genere):
         self.music.artists = copy.deepcopy(self.artists_sav)
         if genere:
@@ -672,8 +645,10 @@ class MusicIndexDlg(QDialog):
             self.tracks.clear()
             t = items[0].text()
             albums = self.music.find_albums(t)
-            for a in albums:
-                self.albums.addItem(a.title)
+            albums = [d.title for d in sorted(albums, key=lambda x: x.year)]
+            self.albums.addItems(albums)
+            #for a in albums:
+            #    self.albums.addItem(a.title)
 
     def album_changed(self):
         items = self.albums.selectedItems()
