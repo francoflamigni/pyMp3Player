@@ -7,10 +7,11 @@ import base64
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QRect, QPropertyAnimation, \
     QEasingCurve
 from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget, QSizePolicy, \
-    QGraphicsColorizeEffect, QDialog, QVBoxLayout
+    QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file
 from pyMyLib.qtUtils import center_in_parent
+from tempfile import TemporaryDirectory
 
 
 def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
@@ -664,28 +665,32 @@ def lista_file_per_ultimo_accesso(cartella_root):
 
 
 class myList(QListWidget):
+    play_signal = pyqtSignal(QListWidget)
     def __init__(self, parent, txt='', cursor=0):
         super().__init__(parent)
-        self.wparent = parent
         self.itc = None
         if txt != '':
             self.addItem(txt)
         self.setMouseTracking(True)
         self.cursor = cursor
 
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(lambda p: parent.contextMenu(p, self, self.itemAt(p)))
+
     def setSelCur(self, it):
         if self.itc != it:
             self.itc = it
 
     def mouseMoveEvent(self, event):
+        #if not self.cursor:
+
+        if self.hasFocus() is False:
+            self.setFocus()
+            self.unsetCursor()
+            super(QListWidget, self).mouseMoveEvent(event)
+            return
+
         if not self.cursor:
-
-            if self.hasFocus() is False:
-                self.setFocus()
-                self.unsetCursor()
-                super(QListWidget, self).mouseMoveEvent(event)
-                return
-
             it = self.itemAt(event.pos())
             x = event.pos().x()
             #print(x)
@@ -698,18 +703,13 @@ class myList(QListWidget):
         super(QListWidget, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            it = self.itemAt(event.pos())
-            if it is not None:
-                p = self.mapToGlobal(event.pos())
-                self.wparent.contextMenu(p, self, it)
-        elif not self.cursor and event.button() == Qt.MouseButton.LeftButton:
+        if not self.cursor and event.button() == Qt.MouseButton.LeftButton:
             it = self.itemAt(event.pos())
             x = event.pos().x()
             if it == self.itc and x <= 50:
                 try:
                     self.unsetCursor()
-                    self.wparent.play_item(self)
+                    self.play_signal.emit(self)
                 except:
                     pass
             elif it != self.itc and x <= 50:
@@ -759,19 +759,23 @@ class MusicList(myList):
         if item:
             self.nascondi_mio_tip()
             self.active_item = item
-            #QTimer.singleShot(100, lambda: self.mostra_mio_tip(event.globalPosition().toPoint()))
-            self.mostra_mio_tip(item.text(), event.globalPosition().toPoint())
+            p = event.globalPosition().toPoint()
+            QTimer.singleShot(100, lambda: self.mostra_mio_tip(item.text(), p))
+            #self.mostra_mio_tip(item.text(), p)
         else:
             self.nascondi_mio_tip()
+
+    def mousePressEvent(self, event):
+        self.nascondi_mio_tip()
 
         super().mouseMoveEvent(event)
 
     def mostra_mio_tip(self, txt, global_pos):
-        # 1. Aggiorna contenuto (magari metti "Caricamento...")
-        #self.my_tip.setText(f"Artista: {item.text()}")
-        # 2. Posiziona vicino al mouse
-        self.my_tip.move(global_pos.x() + 30, global_pos.y() - 15)
-        self.show_tip(txt, global_pos)
+        cursor_pos = QCursor.pos()
+        item = self.itemAt(self.mapFromGlobal(cursor_pos))
+        if item is not None and item.text() == txt:
+            self.my_tip.move(global_pos.x() + 30, global_pos.y() - 15)
+            self.show_tip(txt, global_pos)
 
 
         # 3. Qui lanci il tuo WikipediaWorker.
@@ -827,9 +831,12 @@ class MusicList(myList):
 
 class ShazamButtonHandler:
     def __init__(self, button):
-        self.button = button
+        self.button = None
+        self.init(button)
 
-        # Creiamo l'effetto colore
+    def init(self, button):
+        #self.stop_blinking()
+        self.button = button
         self.effect = QGraphicsColorizeEffect(self.button)
         self.effect.setColor(QColor("red"))
         self.effect.setStrength(0)  # Inizia invisibile (0 = colore originale)
@@ -859,7 +866,6 @@ class songInfoDlg(QDialog):
     def __init__(self, parent, txt):
         from dialogs import myPlainText
         super().__init__(parent)
-        self.wparent = parent
         self.txt = txt
         center_in_parent(self, parent, 300, 100)
         self.setWindowTitle('Shazam')
@@ -875,3 +881,11 @@ class songInfoDlg(QDialog):
     def run(parent, txt):
         dlg = songInfoDlg(parent, txt)
         dlg.exec()
+
+class AppContext:
+    def __init__(self, config:iniConf, cache:Cache, tmpObj:TemporaryDirectory, mainW:QWidget=None) -> None:
+        self.config = config
+        self.cache = cache
+        self.temp_dir_obj = tmpObj()
+        self.tmpDir = str( self.temp_dir_obj.name)
+        self.mainWindow = mainW

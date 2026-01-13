@@ -9,15 +9,17 @@ vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc'))
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QThread
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QRect
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor, QFont
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect,
+                             QStyleOptionSlider)
 
 from pyMyLib.qtUtils import set_background, waitCursor
 from dialogs import lyric_song, AppConfig
 import scrobbler
-from utility import ShazamButtonHandler, songInfoDlg
+from utility import ShazamButtonHandler, songInfoDlg, AppContext
+
 
 def get_tm(secs):
     min = int(secs / 60)
@@ -33,9 +35,9 @@ class MusicPlayerDlg(QDialog):
     Mode_Play = 4
     Mode_Pause = 5
     next_song_signal = pyqtSignal(int)
-    def __init__(self, parent):
-        super(MusicPlayerDlg, self).__init__(parent)
-        self.wparent = parent
+    def __init__(self, appCtx: AppContext = None, parent=None):
+        super().__init__(parent)
+        self.appCtx = appCtx
 
         self.media = None
         self.is_paused = False
@@ -43,6 +45,7 @@ class MusicPlayerDlg(QDialog):
         self.index = -1
         self.listplayer = None
         self.radio_info = None
+        self.busy = False
 
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
@@ -137,7 +140,7 @@ class MusicPlayerDlg(QDialog):
         vol = self.volume_ui(ctrl_height)
 
         # equalizzatore
-        equalizer = Equalizer(parent.ini, self.mediaplayer, ctrl_height)
+        equalizer = Equalizer(self.appCtx.config, self.mediaplayer, ctrl_height)
 
         h2 = QHBoxLayout()
         h2.addWidget(equalizer)
@@ -253,6 +256,7 @@ class MusicPlayerDlg(QDialog):
         self.lyricbutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'lyric.png')))
         self.lyricbutton.setToolTip('testo brano')
         self.lyricbutton.clicked.connect(self.songLyrics)
+        self.blink_lyrics_handler = ShazamButtonHandler(self.lyricbutton)
 
         self.titlebutton = QPushButton(self)
         self.titlebutton.setMaximumWidth(30)
@@ -266,10 +270,17 @@ class MusicPlayerDlg(QDialog):
 
     def find_song(self):
         from myShazam import myShazam
-        ms = myShazam(time=3)
-        ms.found_song.connect(self._find_song)
-        self.blink_handler.start_blinking()
-        ms.guess()
+        if self.busy:
+            return
+
+        try:
+            self.busy = True
+            self.blink_handler.start_blinking()
+            ms = myShazam(time=3)
+            ms.found_song.connect(self._find_song)
+            ms.guess()
+        except:
+            self.busy = False
 
     def _find_song(self, out):
         mes = ''
@@ -282,18 +293,24 @@ class MusicPlayerDlg(QDialog):
             mes = f"Artista: {out['artist']}\nAlbum: {out['album']}\nTitolo: {out['title']}\n"
 
         self.blink_handler.stop_blinking()
-        songInfoDlg.run(self.wparent, mes)
+        self.busy = False
+
+        songInfoDlg.run(self.appCtx.mainWindow, mes)
 
     def songLyrics(self):
-        if self.index >= 0:
+        if self.index >= 0 and not self.busy:
             from scrobbler import LyricsWorker
             ls = LyricsWorker(self.tracks[self.index].artist, self.tracks[self.index].title)
             ls.finished.connect(self._songLyrics)
+            self.blink_lyrics_handler.start_blinking()
+            self.busy = True
             ls.song_text()
 
     def _songLyrics(self, txt):
+        self.blink_lyrics_handler.stop_blinking()
+        self.busy = False
         from dialogs import lyricsDlg
-        lyricsDlg.run(self.wparent, txt)
+        lyricsDlg.run(self.appCtx, txt)
 
     def set_play_icon(self, type):
         if type == MusicPlayerDlg.Mode_Play:
@@ -483,7 +500,7 @@ class MusicPlayerDlg(QDialog):
         self.add_note(tt)
 
         self.cover.reset()
-        is_cover = self.wparent.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
+        is_cover = self.appCtx.mainWindow.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
         if not is_cover:
             self.gestisci_visualizzazione_cover()
 
@@ -631,13 +648,12 @@ class MusicPlayerDlg(QDialog):
 class eqSlider(QSlider):
     def __init__(self, *args, band, **kwargs):
         super().__init__(*args, **kwargs)
-        self.wparent = args[1]
-        self.freq = self.wparent.freq[band]
+        parent = args[1]
+        self.freq = parent.freq[band]
         self.band = band
         self.setObjectName(f"eq{band}")
         self.setStyleSheet(eq_slider_style())
         self.setMaximumHeight(150)
-        #self.setMinimumHeight(120)
         self.setRange(-20, 20)
         self.setTickInterval(5)
         self.setTickPosition(QSlider.TickPosition.TicksBothSides)
@@ -661,15 +677,15 @@ class eqSlider(QSlider):
         qp.drawLine(sz.width(), y, sz.width() - len, y)
 
     def set_tip(self, val):
-        self.setToolTip(f"{self.freq} {val}db")
+        self.setToolTip(f"{val}db")
 
     def set_value(self, val):
         self.setValue(int(val))
-        self.setToolTip(f"{self.freq} {val}db")
+        self.setToolTip(f"{val}db")
 
     def get_value(self):
         v = self.value()
-        self.setToolTip(f"{self.freq} {v}db")
+        self.setToolTip(f"{v}db")
         return v, self.band
 
 
@@ -737,11 +753,21 @@ class Equalizer(QFrame):
         he = QHBoxLayout()
         he.setContentsMargins(5, 5, 5, 5)
         he.setSpacing(7)
+
+        font = QFont("Arial", 8)
+
         for i in range(nf):
+            vi = QVBoxLayout()
+            vi.setContentsMargins(0, 0, 0, 0)
+            vi.setSpacing(2)
+            lab = QLabel(f"{self.freq[i]}")
+            lab.setFont(font)
+            lab.setStyleSheet("background-color: transparent; border: none;")
+            vi.addWidget(lab)
             eq = self.add_slider(i)
-            #eq.setFixedHeight(180)
             self.eq.append(eq)
-            he.addWidget(eq)
+            vi.addWidget(eq)
+            he.addLayout(vi)
 
         he.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMaximumSize)
 
@@ -797,15 +823,12 @@ class Equalizer(QFrame):
     ''' richiamato quando si clicca o si muove uno slider '''
     def equal(self, wid):
         if isinstance(wid, QSlider) is True:
-            #o = wid.objectName()
-            #i = int(o[2:])
             v, band = wid.get_value()
             self.equalizer.set_amp_at_index(v, band)
             self.mediaplayer.set_equalizer(self.equalizer)
 
     ''' richiamato quando si finisce di spostare uno slider '''
     def equal_sav(self, wid):
-        #ini = iniConf(AppConfig)
         eq_sav = self.ini.get('EQUALIZER')
         if eq_sav is None:
             eq_sav = {}
@@ -822,7 +845,6 @@ class Equalizer(QFrame):
         self.ini.save()
 
     def equal_load(self):
-        #ini = iniConf(AppConfig)
         eq_sav = self.ini.get('EQUALIZER')
         if eq_sav is None:
             return
@@ -877,7 +899,7 @@ def slider_style():
         
         border: 1px solid #888;
         width: 20px;
-        height: 16px;
+        height: 12px;
         /* Margine negativo per uscire dai 12px del groove (20-12)/2 = 4 */
         margin: -3px 0px; 
         border-radius: 10px;
@@ -919,7 +941,7 @@ def eq_slider_style():
     QSlider::handle {
         background: qradialgradient(cx:0, cy:0, radius: 1.2, fx:0.35,
                                     fy:0.3, stop:0 #eef, stop:1 #002);
-        height: 4px;
+        height: 1px;
         width: 2px;
         border-radius: 2px;
     }

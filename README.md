@@ -58,3 +58,6 @@ installata versione 3.2.0
 picovoice 
 https://github.com/francoflamigni?tab=repositories
 
+MusicBrainz
+Franco59
+Av@lon91

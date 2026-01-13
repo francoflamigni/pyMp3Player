@@ -9,6 +9,7 @@ import scrobbler
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
 from pyMyLib.utils import iniConf, get_resource_file
+from utility import AppContext
 
 from threading import Thread
 
@@ -20,12 +21,12 @@ AppConfig = 'Euterpe'
 
 
 
-def lyric_song(artist, track, parent=None):
+def lyric_song(artist, track, ctx=None):
     from scrobbler import LyricsWorker
     ls = LyricsWorker(artist, track)
     txt = ls.song_text2()
     if len(txt) > 0:
-        lyricsDlg.run(parent, txt, track)
+        lyricsDlg.run(ctx, txt, track)
 
 class myPlainText(QPlainTextEdit):
     def __init__(self, parent=None):
@@ -92,12 +93,13 @@ class myPlainText(QPlainTextEdit):
         self.setTextCursor(cursor)
 
 class lyricsDlg(QDialog):
-    def __init__(self, parent, txt, track=''):
+    def __init__(self, appCtx, txt, track=''):
+        #if not appCtx:
+        #    a =0
+        super(lyricsDlg, self).__init__(appCtx.mainWindow)
         from googletrans import Translator
-        super(lyricsDlg, self).__init__(parent)
-        self.wparent = parent
         self.txt = txt.lstrip()
-        center_in_parent(self, parent, 600, 500)
+        center_in_parent(self, appCtx.mainWindow, 600, 500)
         self.setWindowTitle(track)
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'lyric.png')))
 
@@ -108,7 +110,7 @@ class lyricsDlg(QDialog):
         self.txt_box = myPlainText(self)
         self.tr = Translator()
         lang = self.tr.detect(txt).lang
-        self.app_lang = parent.ini.get('user', 'lang')
+        self.app_lang = appCtx.config.get('user', 'lang')
         self.tr_box = None
 
         self.txt_box.setText(self.txt)
@@ -162,17 +164,16 @@ class lyricsDlg(QDialog):
         self.txt_box.slave.setTextCursor(cursor)
 
     @staticmethod
-    def run(parent, txt, track=''):
-        dlg = lyricsDlg(parent, txt, track)
+    def run(ctx, txt, track=''):
+        dlg = lyricsDlg(ctx, txt, track)
         dlg.exec()
 
 class mySearch(QDialog):
-    def __init__(self, parent, music, txt):
-        super(mySearch, self).__init__(parent)
-        center_in_parent(self, parent, 600, 400)
+    def __init__(self, appCtx:AppContext, music, txt):
+        super().__init__(appCtx.mainWindow)
+        center_in_parent(self, appCtx.mainWindow, 600, 400)
         self.setWindowTitle('Cerca')
 
-        self.wparent = parent
         self.music = music
 
         self.ed = QLineEdit(self)

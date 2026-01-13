@@ -5,7 +5,7 @@ from PyQt6.QtGui import QPixmap, QIcon, QAction
 
 from pyMyLib.qtUtils import set_background, yesNoMessage, waitCursor
 from pyMyLib.utils import get_resource_file
-from utility import myList
+from utility import myList, AppContext
 
 '''
 https://streamurl.link/ per trovare stazioni radio
@@ -13,10 +13,9 @@ https://streamurl.link/ per trovare stazioni radio
 
 class RadioDlg(QDialog):
     radio_signal = pyqtSignal(str, str)
-    def __init__(self, parent):
-        super(RadioDlg, self).__init__(parent)
-        self.ini = parent.ini
-        self.wparent = parent
+    def __init__(self, appContext: AppContext):
+        super().__init__()
+        self.appContext = appContext
         self.x_aggiunta = False
         self.setObjectName("radio_widget")
         set_background(self)
@@ -121,7 +120,7 @@ class RadioDlg(QDialog):
         sp.addWidget(self.favorites)
         v.addWidget(sp)
 
-        rd = self.ini.get('radio')
+        rd = self.appContext.config.get('radio')
         if rd is not None:
             for key, val in rd.items():
                 item = QListWidgetItem(key)
@@ -272,11 +271,11 @@ class RadioDlg(QDialog):
             else:
                 return
 
-        rd = self.ini.get('radio')
+        rd = self.appContext.config.get('radio')
         if rd is None:
             rd = {}
         rd[nome] = r.url + '@' + r.favicon
-        self.ini.set_sez('radio', rd)
+        self.appContext.config.set_sez('radio', rd)
         self.ini.save()
         self.favorites.addItem(nome)
         a = 0
@@ -319,7 +318,7 @@ class RadioDlg(QDialog):
         self.radio_signal.emit(url, fav)
 
     def last_searches(self):
-        return self.ini.get('radio-searches', 'recent').split(',')
+        return self.appContext.config.get('radio-searches', 'recent').split(',')
 
     def update_last_searches(self):
         txt = self.ed.text()

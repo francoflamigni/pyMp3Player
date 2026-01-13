@@ -3,7 +3,7 @@ import asyncio
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
-
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 import time
 from datetime import datetime
 
@@ -22,8 +22,17 @@ def duration(s):
         pass
     return tm
 
-class MusicInfo:
+class AlbunInfo:
+    def __init__(self, artist_name='', album_title='', album_info=[]):
+        self.artist_name = artist_name
+        self.album_title = album_title
+        self.tracks_info = []
+
+class MusicInfo(QObject):
+    info_signal = pyqtSignal(int, AlbunInfo)
     def __init__(self, artist_name, album_title):
+        super().__init__()
+        self.album_info = AlbunInfo(artist_name, album_title)
         self.artist_name = artist_name
         self.album_title = album_title
         self.album = {}
@@ -32,6 +41,102 @@ class MusicInfo:
         self.errMes = ''
         self.finished = False
         self.setup_musicbrainz()
+
+    def album_details2(self):
+        from threading import Thread
+        Thread(target=self._album_details, daemon=True).start()
+
+    def _album_details(self):
+        try:
+            self.info_signal.emit(1, self.album_info)
+            #res = self.get_release(self.album_info.artist_name, self.album_info.album_title)
+            rg_search = musicbrainzngs.search_release_groups(
+                artist=self.album_info.artist_name,
+                release=self.album_info.album_title,
+                limit=1)
+
+            if not rg_search['release-group-list']:
+                self.info_signal.emit({})
+                return "Album non trovato."
+
+            # 1. Ottieni il Release Group ID (già fatto nel tuo codice)
+            rg_id = rg_search['release-group-list'][0]['id']
+
+            # 2. Invece di browse_releases, usa get_release_group_by_id con include=["releases"]
+            rg_details = musicbrainzngs.get_release_group_by_id(rg_id, includes=["releases"])
+
+            # 3. Filtra manualmente la lista delle release per trovare quella ufficiale/originale
+            releases = rg_details['release-group']['release-list']
+
+            # Filtriamo per status 'Official' e cerchiamo la più vecchia se possibile
+            official_releases = [r for r in releases if r.get('status') == 'Official']
+
+            if not official_releases:
+                # Se non ce ne sono di ufficiali, prendiamo la prima disponibile
+                release_id = releases[0]['id']
+            else:
+                # Opzionale: potresti voler ordinare per data per prendere la prima stampa
+                # Ma per ora prendiamo la prima della lista ufficiale
+                release_id = official_releases[0]['id']
+
+            # 4. Ora puoi procedere con la tua chiamata get_release_by_id
+            release = musicbrainzngs.get_release_by_id(release_id,
+                                                            includes=["recordings", "recording-level-rels",
+                                                                      "work-rels"])
+            tracks_info = self.album_info.tracks_info
+            # Iteriamo sui supporti (CD1, CD2, ecc.) e sulle tracce
+            for medium in release['release']['medium-list']:
+                for track in medium['track-list']:
+                    t = {
+                        'recording_id': track['recording']['id'],
+                        'title': track['recording']['title'],
+                        'duration': track['recording']['length']
+                    }
+                    tracks_info.append(t)
+                self.info_signal.emit(2, self.album_info)
+
+                for t in tracks_info:
+                    rec_details = musicbrainzngs.get_recording_by_id(t['recording_id'],
+                            includes=["work-rels", "artist-rels"])
+
+                    composers = []
+                    lyricists = []
+                    if 'work-relation-list' in rec_details['recording']:
+                        for work_rel in rec_details['recording']['work-relation-list']:
+                            work_id = work_rel['work']['id']
+
+                            # Chiamata per ottenere i crediti dell'opera
+                            work_data = musicbrainzngs.get_work_by_id(work_id, includes=["artist-rels"])
+
+                            if 'artist-relation-list' in work_data['work']:
+                                for artist_rel in work_data['work']['artist-relation-list']:
+                                    role = artist_rel['type']
+                                    name = artist_rel['artist']['name']
+
+                                    if role == 'composer':
+                                        composers.append(name)
+                                    elif role == 'lyricist':
+                                        lyricists.append(name)
+                        self.info_signal.emit(3, self.album_info)
+        except Exception as e:
+            self.info_signal.emit(0, self.album_info)
+
+        a = 0
+        return
+
+        releases = self.get_release(self.album_info.artist_name, self.album_info.album_title)
+        self.get_tracks2(releases[0]['id1'])
+        if not self.get_artist():
+            self.info_signal.emit({})
+            return
+        if not self.get_album():
+            self.info_signal.emit({})
+            return
+        self.info_signal.emit(self.album_info)
+        if not self.get_tracks():
+            self.info_signal.emit(self.album_info)
+        if not self.get_tracks_info():
+            self.info_signal.emit(self.album_info)
 
     @staticmethod
     def setup_musicbrainz():
@@ -81,17 +186,20 @@ class MusicInfo:
             pass
         return
 
-    def get_release(self):
+    def get_release(self, artist_name, album_title):
         try:
-            releases = musicbrainzngs.search_releases(
-                query=f'artist:"{self.artist_name}" AND release:"{self.album_title}"',
+            releases = musicbrainzngs.search_release_groups(
+                query=f'artist:"{artist_name}" AND releasegroup:"{album_title}"',
                 offset=0,
                 limit=5
             )
             return [{
                 'id': r['id'],
-                'title': r.get('title')
-            } for r in releases['release-list']]
+                'title': r.get('title'),
+                'date': r.get('first-release-date'),
+                'artist': r.get('artist-credit')[0]['name'],
+                'id1':  r.get('release-list')[0]['id'],
+            } for r in releases['release-group-list']]
         except Exception as e:
             return []
         a = 0
@@ -149,6 +257,25 @@ class MusicInfo:
                         a = 0
                 self.album['tracks'] = tracks
                 return True
+        except Exception as e:
+            self.errMes = e
+        return False
+
+    def get_tracks2(self, id):
+        try:
+            results = musicbrainzngs.get_release_by_id(id, includes=["recordings"],  # "artist-credits"],
+                                                   release_type="album", release_status="official")
+            tracks = {}
+            ml = results['release']['medium-list']
+            for m in ml:
+                m1 = m['track-list']
+                for m2 in m1:
+                    t = {}
+                    t['duration'] = duration(m2['length'])
+                    tracks[m2['recording']['title']] = t
+                    a = 0
+            self.album['tracks'] = tracks
+            return True
         except Exception as e:
             self.errMes = e
         return False
@@ -220,7 +347,7 @@ class MusicInfo:
         if self.finished:
             return False
 
-        releases = self.get_release()
+        #releases = self.get_release()
         if self.id_artist is None:
             if not self.get_artist():
                 return False
@@ -782,8 +909,13 @@ class AlbumInfoDlg(QDialog):
         dlg = AlbumInfoDlg(album, run)
         dlg.exec()
 
+def info_aa(info:AlbunInfo):
+    a = 0
+
 def brainz(artist, album):
     mi = MusicInfo(artist, album)
+    mi.info_signal.connect(info_aa)
+    mi.album_details2()
     t0 = time.monotonic()
     album_details = mi.get_album_detail_string()
     dt1 = time.monotonic() - t0
