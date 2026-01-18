@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import List, Dict
 
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QAction
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar, QTableWidgetItem,
     QGroupBox, QFileDialog, QDialog, QMessageBox, QHeaderView, QSizePolicy, QGridLayout, QSplitter, QWidget, QScrollArea
@@ -15,7 +15,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from music_brainz import CDinfo
 
 from pyMyLib.utils import get_resource_file
-from utility import CDMonitor
+from utility import CDMonitor, AppContext
 
 class FFmpegWorker(QThread):
     """Worker thread per le operazioni ffmpeg"""
@@ -28,7 +28,7 @@ class FFmpegWorker(QThread):
     error_occurred = pyqtSignal(str)
     ripping_finished = pyqtSignal()
 
-    def __init__(self, cd_drive: str, tracks: List[Dict], output_dir: str, quality: str):
+    def __init__(self, cd_drive: str, tracks: List[Dict], output_dir: str, quality: str, cover_path: str=''):
         super().__init__()
         self.cd_drive = cd_drive
         self.tracks = tracks
@@ -39,6 +39,7 @@ class FFmpegWorker(QThread):
         self.timer = QTimer()
         self.timer.timeout.connect(self.watch)
         self.last_time = 0
+        self.cover_path = cover_path
         self.timer.start(1000)
 
     def watch(self):
@@ -109,9 +110,23 @@ class FFmpegWorker(QThread):
                     '-ss', f'{offset}',
                     '-f', 'libcdio',
                     '-i', f'{self.cd_drive}:',
+                ]
+                if self.cover_path:
+                    cmd.extend(['-i', self.cover_path])
+                cmd.extend([
                     '-t', f'{durata}',
                     '-c:a', 'libmp3lame',
                     '-b:a', self.quality,
+                ])
+                # Mappa gli stream
+                if self.cover_path:
+                    cmd.extend([
+                        '-map', '0:a',  # Audio dal CD
+                        '-map', '1:v',  # Video (immagine) dal file
+                        '-c:v', 'mjpeg',  # Codec per l'immagine
+                        '-disposition:v', 'attached_pic',  # Segna come copertina allegata
+                    ])
+                cmd.extend([
                     '-metadata', f'title={title}',
                     '-metadata', f'artist={artist}',
                     '-metadata', f'album={album}',
@@ -119,7 +134,7 @@ class FFmpegWorker(QThread):
                     '-metadata', f'track={track_num}',
                     '-metadata', f'genre={genere}',
                     output_file
-                ]
+                ])
 
                 self.last_time = 0
 
@@ -183,10 +198,12 @@ class CDRipperMainWindow(QDialog):
     tracks_detected = pyqtSignal(list)
     play_signal = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, appCtx:AppContext):
         super().__init__()
+        self.appCtx = appCtx
         self.ffmpeg_worker = None
         self.tracks_data = []
+        self.cover_path = ''
 
         self.setWindowTitle("CD Ripper")
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'cd_ripper.png')))
@@ -225,6 +242,7 @@ class CDRipperMainWindow(QDialog):
     def setup_config_tab(self, layout):
         """Configura il tab delle impostazioni"""
         #layout = QVBoxLayout(tab)
+        hv = QHBoxLayout()
 
         # Gruppo CD Drive
         cd_group = QGroupBox("Drive CD")
@@ -242,25 +260,36 @@ class CDRipperMainWindow(QDialog):
         cd_layout.addWidget(self.refresh_drives_btn)
         cd_layout.addWidget(self.eject_btn)
 
-        layout.addWidget(cd_group)
+        #layout.addWidget(cd_group)
+        hv.addWidget(cd_group, stretch=1)
 
         # Gruppo Output
         output_group = QGroupBox("Output")
-        output_layout = QVBoxLayout(output_group)
+        output_layout = QHBoxLayout(output_group)
 
         # Directory output
-        dir_layout = QHBoxLayout()
+        #dir_layout = QHBoxLayout()
         self.output_dir_edit = QLineEdit()
         self.output_dir_edit.setText(str(Path.home() / "Music" / "Ripped CDs"))
-        self.browse_btn = QPushButton("Sfoglia...")
-        self.browse_btn.clicked.connect(self.browse_output_dir)
+        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_browse = QAction(icone_browse, "browse", self)
+        azione_browse.triggered.connect(self.browse_output_dir)
+        self.output_dir_edit.addAction(
+            azione_browse,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
 
-        dir_layout.addWidget(QLabel("Directory:"))
-        dir_layout.addWidget(self.output_dir_edit)
-        dir_layout.addWidget(self.browse_btn)
+        #self.browse_btn = QPushButton("Sfoglia...")
+        #self.browse_btn.clicked.connect(self.browse_output_dir)
+
+        output_layout.addWidget(QLabel("Directory:"))
+        output_layout.addWidget(self.output_dir_edit)
+        #output_layout.addWidget(self.browse_btn)
+        hv.addWidget(output_group, stretch=2)
 
         # Qualità
-        quality_layout = QHBoxLayout()
+        quality_group = QGroupBox("Quality")
+        quality_layout = QHBoxLayout(quality_group)
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["128k", "192k", "256k", "320k"])
         self.quality_combo.setCurrentText("192k")
@@ -279,18 +308,23 @@ class CDRipperMainWindow(QDialog):
         quality_layout.addWidget(self.start_btn)
         quality_layout.addWidget(self.stop_btn)
 
-        output_layout.addLayout(dir_layout)
-        output_layout.addLayout(quality_layout)
+        #output_layout.addLayout(dir_layout)
+       # output_layout.addLayout(quality_layout)
 
-        layout.addWidget(output_group)
+        #layout.addWidget(output_group)
+        hv.addWidget(quality_group, stretch=2)
+        layout.addLayout(hv)
 
         # Gruppo Metadata
         metadata_group = QGroupBox("Informazioni Album")
         #metadata_layout = QVBoxLayout(metadata_group)
         metadata_layout = QGridLayout()
+        metadata_layout.setHorizontalSpacing(5)
+        metadata_layout.setVerticalSpacing(25)
 
         # Ricerca automatica
         search_layout = QVBoxLayout(metadata_group)
+        search_layout.setSpacing(10)
 
         self.artist_edit = QLineEdit()
         self.album_edit = QLineEdit()
@@ -302,6 +336,9 @@ class CDRipperMainWindow(QDialog):
         self.search_by_artist_button.clicked.connect(self.detect_tracks_byartist)
 
         self.cover = QLabel()
+        self.cover.setMinimumWidth(250)
+        self.cover.setMaximumWidth(250)
+        self.cover.setMaximumHeight(250)
         self.cover.setStyleSheet("""
             QLabel {
                 /* Definisce il bordo: Spessore | Stile | Colore */
@@ -316,8 +353,9 @@ class CDRipperMainWindow(QDialog):
         """)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumWidth(250)
-        scroll_area.setMaximumWidth(250)
+        #scroll_area.setMinimumWidth(250)
+        #scroll_area.setMaximumWidth(250)
+        #scroll_area.setMaximumHeight(250)
         scroll_area.setWidget(self.cover)
         scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -332,7 +370,8 @@ class CDRipperMainWindow(QDialog):
 
         search_layout.addLayout(metadata_layout)
         search_layout.addWidget(self.search_by_artist_button)
-        search_layout.addWidget(self.cover)
+        search_layout.addWidget(self.cover, alignment=Qt.AlignmentFlag.AlignHCenter)
+        #search_layout.addStretch()
 
         sp = QSplitter(Qt.Orientation.Horizontal)
         sp.addWidget(metadata_group)
@@ -544,7 +583,8 @@ class CDRipperMainWindow(QDialog):
             self.cd_drive_combo.currentText(),
             selected_tracks,
             output_dir,
-            self.quality_combo.currentText()
+            self.quality_combo.currentText(),
+            self.cover_path
         )
 
         # Connetti segnali
@@ -629,21 +669,35 @@ class CDRipperMainWindow(QDialog):
 
     def display_cover(self, mes, data):
         """Mostra la copertina nell'area dedicata."""
+        self.cover_path = ''
         if data:
             try:
+                from utility import resize_image_data
+                # Ridimensiona l'immagine
+                resized_data = resize_image_data(
+                    data,
+                    target_size=(400, 400),
+                    quality=85
+                )
                 pixmap = QPixmap()
-                pixmap.loadFromData(data)
+                pixmap.loadFromData(resized_data)
+                if pixmap.isNull():
+                    self.status_label.setText("Immagine non valida o formato non supportato")
+                    self.cover.setPixmap(QPixmap())
+                    return
 
                 # Scala l'immagine mantenendo le proporzioni
                 self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
                 self.status_label.setText("Pronto")
                 self.cover.setText("")
+                self.cover_path = os.path.join(self.appCtx.tmpDir, "cover.png")
+                with open(self.cover_path, "wb") as f:
+                    f.write(resized_data)
 
             except Exception as e:
                 print(f"Errore visualizzazione copertina: {e}")
-                self.cover.setText("Errore caricamento copertina")
+                self.status_label.setText("Errore caricamento copertina")
                 self.cover.setPixmap(QPixmap())
-                #self.remove_cover_button.setEnabled(False)
         else:
             self.status_label.setText("Nessuna copertina")
             self.cover.setPixmap(QPixmap())

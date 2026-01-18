@@ -3,7 +3,7 @@ from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAct
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu, QLabel, QGroupBox, QComboBox, QFormLayout,
-                             QSpinBox)
+                             QSpinBox, QFileDialog)
 
 import scrobbler
 
@@ -117,7 +117,7 @@ class lyricsDlg(QDialog):
         self.h.addWidget(self.txt_box)
         v.addLayout(self.h)
 
-        if lang != self.app_lang:
+        if lang != self.app_lang.lower():
             self.bt = QPushButton(self)
             self.bt.setText('Traduci')
             self.bt.clicked.connect(self.traduci)
@@ -256,34 +256,125 @@ class ConfigBox(QDialog):
         center_in_parent(self, parent, 200, 160)
         vb = QVBoxLayout(self)
 
-        qf1 = QFormLayout(self)
-        qf1.addWidget(QLabel('Lingua preferita'))
+        # cache
+        cachebox = QGroupBox(self)
+        cachebox.setTitle('Cache')
+        vc = QVBoxLayout(cachebox)
+        hc = QHBoxLayout()
+        self.cache_dir = QLineEdit(self)
+        icona_cerca = QIcon(get_resource_file(__file__, 'icone', 'search.png'))
+        self.browse =  QAction(icona_cerca, 'Browse', self)
+        self.browse.triggered.connect(self.cachepath)
+        self.cache_dir.addAction(self.browse, QLineEdit.ActionPosition.TrailingPosition)
+        hc.addWidget(QLabel('Cartella'))
+        hc.addWidget(self.cache_dir)
+        vc.addLayout(hc)
+        hc = QHBoxLayout()
+        hc.addWidget(QLabel('Giorni di validità'))
+        self.cache_days = QLineEdit(self)
+        hc.addWidget(self.cache_days)
+        vc.addLayout(hc)
+        hc = QHBoxLayout()
+        hc.addWidget(QLabel('Dimensione massima MB'))
+        self.cache_size = QLineEdit(self)
+        hc.addWidget(self.cache_size)
+        vc.addLayout(hc)
+
+        vb.addWidget(cachebox)
+
+        lang_box = QGroupBox(self)
+        lang_box.setTitle('Lingua preferita')
+        qf1 = QFormLayout(lang_box)
+
         self.c1 = QComboBox()
         self.c1.addItems(['IT', 'FR', 'EN', 'SP'])
-        self.c1.setCurrentText(lang)
+
         qf1.addWidget(self.c1)
+
+        vb.addWidget(lang_box)
+
+        timeout_box = QGroupBox(self)
+        timeout_box.setTitle('Timeout background')
+        qf2 = QFormLayout(timeout_box)
+        self.maxidle = QSpinBox(self)
+        self.maxidle.setRange(0, 300)
+
+
+
+        qf2.addWidget(self.maxidle)
+        vb.addWidget(timeout_box)
+
+        speaker_box = QGroupBox(self)
+        speaker_box.setTitle('Annunciatore')
+        vs = QVBoxLayout(speaker_box)
+        hc = QHBoxLayout()
+        hc.addWidget(QLabel('Genere'))
+        self.c2 = QComboBox()
+        self.c2.addItems(['Uomo', 'Donna'])
+        hc.addWidget(self.c2)
+        vs.addLayout(hc)
+        hc = QHBoxLayout()
+        hc.addWidget(QLabel('Volume'))
+        self.speker_volume = QSpinBox(self)
+        self.speker_volume.setRange(-100, +0)
+        self.speker_volume.setSingleStep(10)
+        hc.addWidget(self.speker_volume)
+        vs.addLayout(hc)
+        vb.addWidget(speaker_box)
+
+        vb.addWidget(speaker_box)
+
+        vb.addLayout(exitBtn(self))
+
+        self.load_from_config()
+
+    def load_from_config(self):
+        lang = self.ini.get('user', 'lang')
+        self.c1.setCurrentText(lang)
+
         tmout = self.ini.get('user', 'tmout')
         try:
             tmout = int(tmout)
         except:
             tmout = 0
-        vb.addLayout(qf1)
-
-        qf2 = QFormLayout(self)
-        qf2.addWidget(QLabel('Timeout background'))
-        self.maxidle = QSpinBox(self)
-        self.maxidle.setRange(0, 300)
         self.maxidle.setValue(tmout)
-        qf2.addWidget(self.maxidle)
-        vb.addLayout(qf2)
 
-        vb.addLayout(exitBtn(self))
+        cache = self.ini.get('cache')
+        self.cache_dir.setText(cache['dir'])
+        self.cache_days.setText(cache['duration'])
+        self.cache_size.setText(cache['max_size'])
+
+        speaker = self.ini.get('speaker')
+        self.c2.setCurrentText(speaker['gender'])
+        vol = speaker['volume']
+        try:
+            vol = int(vol)
+        except:
+            vol = 0
+        self.speker_volume.setValue(vol)
+
+    def cachepath(self):
+        folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.cache_dir.text())
 
     def accept(self):
         lang = self.c1.currentText()
         self.ini.set('user', 'lang', lang)
         tmout = str(self.maxidle.value())
         self.ini.set('user', 'tmout', tmout)
+
+        cs = {
+            "dir": self.cache_dir.text(),
+            "duration": str(self.cache_days.text()),
+            "max_size": str(self.cache_size.text()),
+        }
+        self.ini.set_sez("cache", cs)
+
+        spk = {
+            "gender": self.c2.currentText(),
+            "volume": str(self.speker_volume.value())
+        }
+        self.ini.set_sez("speaker", spk)
+
         self.ini.save()
 
         self.done(1)

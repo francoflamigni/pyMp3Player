@@ -21,6 +21,8 @@ DefaultGroupName={#MyAppPublisher}\{#MyAppName}
 OutputDir={#MyBaseDir}\setup
 SourceDir={#MyBaseDir}
 OutputBaseFilename={#MyAppName}_{#MyAppVersion}.{#MyReleaseVersion}_setup
+ChangesAssociations=yes
+PrivilegesRequiredOverridesAllowed=dialog
 
 Compression=lzma
 SolidCompression=yes
@@ -46,23 +48,29 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "Spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
  
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 0,6.1
-
 [Files]
 Source: "{#MyBaseDir}\installer\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "assoc_mp3"; Description: "Registra Euterpe per aprire file .mp3"; GroupDescription: "Associazioni file:"; Flags: unchecked
+
 [Registry]
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: String; ValueName: "{app}\{#MyAppName}\{#MyAppExeName}"; ValueData: "RUNASADMIN"; Flags: uninsdeletekeyifempty uninsdeletevalue;
+Root: HKCR; Subkey: ".mp3\OpenWithProgids"; ValueType: string; ValueName: "Euterpe.AssocFile.MP3"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoc_mp3
+Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "Euterpe.AssocFile.MP3"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoc_mp3
+Root: HKCR; Subkey: "Euterpe.AssocFile.MP3"; ValueType: string; ValueName: ""; ValueData: "File Audio MP3"; Flags: uninsdeletekey; Tasks: assoc_mp3
+Root: HKCR; Subkey: "Euterpe.AssocFile.MP3\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppName}\{#MyAppExeName},0"; Tasks: assoc_mp3
+Root: HKCR; Subkey: "Euterpe.AssocFile.MP3\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppName}\{#MyAppExeName}"" ""%1"""; Tasks: assoc_mp3
+Root: HKCR; Subkey: "Euterpe.AssocFile.MP3"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Euterpe Music Player"; Tasks: assoc_mp3
+
+[Run]
+; Apri le impostazioni di Windows per completare l'associazione
+Filename: "ms-settings:defaultapps"; Description: "Apri impostazioni per impostare Euterpe come app predefinita"; Flags: postinstall nowait skipifsilent runasoriginaluser; Tasks: assoc_mp3
+Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; IconIndex: 0
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; IconIndex: 0
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; Tasks: desktopicon; IconIndex: 0
 
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; IconIndex: 0; Tasks: quicklaunchicon
-
-[Run]
-Filename: "{app}\{#MyAppName}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 

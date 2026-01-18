@@ -1,3 +1,5 @@
+import os.path
+
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QApplication
 
@@ -343,8 +345,10 @@ class LyricsWorker(QObject):
 import edge_tts
 import asyncio
 class Speaker:
-    def __init__(self, voce=''):
-        self.voce = voce
+    def __init__(self, gender, tmp_dir):
+        self.gender = 'Male' if gender.lower() == 'uomo' else 'Female'
+        self.voce = ''
+        self.tmp_dir = tmp_dir
         self.slang = {'it': 'IT',
                  'fr': 'FR',
                  'es': 'ES',
@@ -357,7 +361,7 @@ class Speaker:
 
         try:
             # Filtra per la lingua desiderata (es. "it" per italiano)
-            voci_filtrate = voci.find(Locale=self.codice_lingua, Gender=gender)
+            voci_filtrate = voci.find(Locale=self.codice_lingua, Gender=self.gender)
             self.voce = voci_filtrate[0]['ShortName']
         except:
             self.voce = "it-IT-IsabellaNeural"
@@ -374,10 +378,11 @@ class Speaker:
         except:
             self.codice_lingua = 'it-IT'
 
-    def pronuncia(self, frase, volume="-50%"):
-        return asyncio.run(self._pronuncia(frase, volume))
+    def pronuncia(self, frase, volume="50"):
+        vol = f"{int(volume):+}%"
+        return asyncio.run(self._pronuncia(frase, vol))
 
-    async def _pronuncia(self, frase, volume="-30%"):
+    async def _pronuncia(self, frase, volume):
         if not self.voce:
             self.detect_lingua(frase)
             await self.select_voce()
@@ -391,8 +396,8 @@ class Speaker:
                 audio_data += chunk["data"]
 
         # Salva su disco
-        file_out = "Euterpe_output.mp3"
-        with open("Euterpe_output.mp3", "wb") as f:
+        file_out = os.path.join(self.tmp_dir, "Euterpe_output.mp3")
+        with open(file_out, "wb") as f:
             f.write(audio_data)
         return file_out
 

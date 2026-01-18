@@ -16,7 +16,7 @@ from pyMyLib.utils import get_resource_file
 from sync_folders import get_folder_size
 
 from dialogs import lyric_song, mySearch
-from utility import myList, MusicList, AppContext
+from utility import myList, MusicList, AppContext, human_size
 
 
 def info_album(artist, album, parent=None):
@@ -43,13 +43,6 @@ class HoverLineEdit(QLineEdit):
         self.setFocus()
         super().enterEvent(event)
 
-"""
-class SlidingStackedWidget(QStackedWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.duration = 400  # Millisecondi della transizione
-        self.curve = QEasingCurve.Type.OutQuint  # Movimento fluido e naturale
-"""
 
 class SlidingStackedWidget(QStackedWidget):
     def __init__(self, parent=None):
@@ -220,16 +213,30 @@ class MusicIndexDlg(QDialog):
         self.music = Music(ini)
         v = QVBoxLayout(self)
         v.setContentsMargins(1, 1, 1, 1)
-        self.prog = QLabel('')
-        self.prog.setMinimumWidth(250)
+        v.setSpacing(0)
 
+        self.prog = QLineEdit() #QLabel('')
+        self.prog.setReadOnly(True)
+        #self.prog.setFixedWidth(350) # setMinimumWidth(400)
+        #self.prog.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        icone_folder = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_folder = QAction(icone_folder, "browse", self)
+        azione_folder.triggered.connect(self.index2)
+        self.prog.addAction(
+            azione_folder,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
+
+        """
         self.b1 = QPushButton(self)
         self.b1.setIcon(QIcon(get_resource_file(__file__, 'icone', 'folder_open.png')))
         self.b1.setMaximumWidth(30)
         self.b1.clicked.connect(self.index2)
+        """
 
         self.te = HoverLineEdit() #QLineEdit()
-        self.te.setMinimumWidth(200)
+        #self.te.setMinimumWidth(200)
         self.te.textChanged.connect(self.list_search)
         self.te.returnPressed.connect(self.search)
 
@@ -238,14 +245,29 @@ class MusicIndexDlg(QDialog):
         azione_cerca.triggered.connect(self.search)
         self.te.addAction(
             azione_cerca,
-            QLineEdit.ActionPosition.TrailingPosition  # Posizione a destra (Trailing)
+            QLineEdit.ActionPosition.LeadingPosition #.TrailingPosition  # Posizione a destra (Trailing)
         )
+        self.te.setClearButtonEnabled(True)
+        stile_comune = """
+            QLineEdit {
+                height: 18px;       /* Forza un'altezza specifica */
+                padding: 2px 5px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            QLineEdit:read-only {
+                background-color: #e0e0e0; /* Grigio chiaro per il read-only */
+            }
+        """
+        self.prog.setStyleSheet(stile_comune)
+        self.te.setStyleSheet(stile_comune)
 
         h0 = QHBoxLayout()
-        h0.addWidget(self.b1)
-        h0.addWidget(self.prog)
+        #h0.addWidget(self.b1)
+        h0.addWidget(self.prog, stretch=1)
         h0.addSpacing(10)
-        h0.addWidget(self.te)
+        h0.addWidget(self.te, stretch=2)
+        h0.addStretch()
 
         self.artists = MusicList(self, show_tip=self.show_tip, hide_tip=self.hide_tip, label='artisti', cursor=1)
         self.artists.setStyleSheet("""
@@ -341,20 +363,23 @@ class MusicIndexDlg(QDialog):
 
         v.addLayout(h0)
         v.addWidget(splitter2)
+        '''
         self.res = self.music.init(self.last_folder)
         if self.res == self.music.INDEX_LOADED:
-            sz = int(get_folder_size(self.last_folder) / (1024*1024))
+            sz = int(get_folder_size(self.last_folder))
             self.stat = f"""
                     {len(self.music.artists.name)} Artisti\n
                     {len(self.music.albums.title)} Album\n 
                     {len(self.music.tracks.name)} Tracce\n
-                    {sz}MB su disco"""
+                    {human_size(sz)} Su disco"""
             self.prog.setToolTip(self.stat)
             self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
         elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
             self.print('La cartella indicata non esiste o non contiene file')
         self.print(self.last_folder)
+        '''
+        self.print(f"Loading {self.last_folder}")
 
         self.artists.installEventFilter(self)
 
@@ -557,9 +582,24 @@ class MusicIndexDlg(QDialog):
             self.plst.addItem(qi)
 
     def process(self):
-        if self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
+        self.res = self.music.init(self.last_folder)
+        if self.res == self.music.INDEX_LOADED:
+            sz = int(get_folder_size(self.last_folder))
+            self.stat = f"""
+                    {len(self.music.artists.name)} Artisti\n
+                    {len(self.music.albums.title)} Album\n 
+                    {len(self.music.tracks.name)} Tracce\n
+                    {human_size(sz)} Su disco"""
+            self.prog.setToolTip(self.stat)
+            self.artists_sav = copy.deepcopy(self.music.artists)
+            self.set_artists()
+        elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
+            self.print('La cartella indicata non esiste o non contiene file')
+        #self.print(self.last_folder)
+        elif self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
             if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
                 self.index(self.last_folder)
+        self.print(self.last_folder)
 
     ''' Cerca canzone artista album'''
     def search(self):

@@ -889,3 +889,11 @@ class AppContext:
         self.temp_dir_obj = tmpObj()
         self.tmpDir = str( self.temp_dir_obj.name)
         self.mainWindow = mainW
+
+def human_size(n: int) -> str:
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    i = 0
+    while n >= 1024 and i < len(units)-1:
+        n /= 1024
+        i += 1
+    return f"{n:3.1f} {units[i]}"

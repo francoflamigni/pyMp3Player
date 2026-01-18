@@ -42,18 +42,20 @@ class RadioDlg(QDialog):
 
         # 2. Azione Cancella (Inizialmente nascosta)
         icona_cancella = QIcon(get_resource_file(__file__, 'icone', 'delete.png'))  # Usa la tua icona X
-        self.azione_cancella = QAction(icona_cancella, "Cancella", self)
-        self.azione_cancella.setVisible(False)
-        self.azione_cancella.triggered.connect(lambda: self.ed.clear())
+        #self.azione_cancella = QAction(icona_cancella, "Cancella", self)
+        #self.azione_cancella.setVisible(False)
+        #self.azione_cancella.triggered.connect(lambda: self.ed.clear())
 
         # Aggiunta alla QLineEdit (L'ordine di aggiunta determina la posizione)
-        self.ed.addAction(self.azione_cerca, QLineEdit.ActionPosition.TrailingPosition)
+        self.ed.addAction(self.azione_cerca, QLineEdit.ActionPosition.LeadingPosition)
         #self.ed.addAction(self.azione_cancella, QLineEdit.ActionPosition.TrailingPosition)
-        self.azione_cancella.setVisible(False)
+        #self.azione_cancella.setVisible(False)
 
         # Collegamento per gestire la visibilità
-        self.ed.textChanged.connect(self.gestisci_pulsante_clear)
-        self.gestisci_pulsante_clear(self.ed.text())
+        #self.ed.textChanged.connect(self.gestisci_pulsante_clear)
+        #self.gestisci_pulsante_clear(self.ed.text())
+
+        self.ed.setClearButtonEnabled(True)
 
         # Nel setup della tua UI
         self.ultime_ricerche = self.last_searches()  # Carica queste stringhe dal tuo ConfigParser
@@ -132,8 +134,9 @@ class RadioDlg(QDialog):
                 except:
                     pass
 
-        QTimer.singleShot(0, lambda: self.azione_cancella.setVisible(bool(self.ed.text())))
+        #QTimer.singleShot(0, lambda: self.azione_cancella.setVisible(bool(self.ed.text())))
 
+    '''
     def gestisci_pulsante_clear(self, testo):
         if testo:
             # La aggiungiamo solo quando serve
@@ -145,6 +148,7 @@ class RadioDlg(QDialog):
             self.azione_cancella.setVisible(True)
         elif not testo and self.x_aggiunta:
             self.azione_cancella.setVisible(False)
+    '''
 
     def search(self):
         from pyradios import RadioBrowser
@@ -331,8 +335,8 @@ class RadioDlg(QDialog):
         self.completer.setModel(self.completer_model)
 
         slist = ",".join(self.ultime_ricerche)
-        self.ini.set('radio-searches', 'recent', slist)
-        self.ini.save()
+        self.appContext.config.set('radio-searches', 'recent', slist)
+        self.appContext.config.save()
 
 
 

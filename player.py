@@ -78,7 +78,7 @@ class MyTitleBar(StandardTitleBar):
         self.anim.start()
 
 class Player(FramelessDialog):
-    def __init__(self, master=None):
+    def __init__(self, file_da_riprodurre=None):
         from tempfile import TemporaryDirectory
         super().__init__()
 
@@ -89,8 +89,9 @@ class Player(FramelessDialog):
 
         ini = iniConf(AppConfig, case_sensitive=True)
         cache = Cache(ini)
-        cache.save(r"c:\tmp\cache", 10, 20)
+        #cache.save(r"c:\tmp\cache", 10, 20)
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
+        self.file_da_riprodurre = file_da_riprodurre
 
         self.background_mode = False
         self.create_ui()
@@ -169,9 +170,12 @@ class Player(FramelessDialog):
         self.setWindowState(
             self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         QApplication.processEvents()
-        sz = self.dlg.prog.size()
-        sz.setWidth(100)
-        self.dlg.prog.setFixedSize(sz)
+        #sz = self.dlg.prog.size()
+        #sz.setWidth(100)
+        #self.dlg.prog.setFixedSize(sz)
+        if self.file_da_riprodurre:
+            from mp3_tag import track
+            self.open_file([track(file=self.file_da_riprodurre)])
 
         self.dlg.process()
 
@@ -442,10 +446,13 @@ class Player(FramelessDialog):
         import random
         from scrobbler import Speaker
         if self.background_mode:
+            spk = self.appCtx.config.get('speaker')
+            gender = spk['gender']
+            volume = spk['volume']
             mi = self.dlg.music.tracks.name
             key = random.choice(list(mi.keys()))
             mstr = mi[key]
-            annuncio = Speaker().pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), '-70%')
+            annuncio = Speaker(gender, self.appCtx.tmpDir).pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), volume)
 
             import copy
             ann = copy.deepcopy(mi[key])
@@ -467,7 +474,7 @@ class Player(FramelessDialog):
 
     def cd_ripper(self):
         from cd_ripper import CDRipperMainWindow
-        cr = CDRipperMainWindow()
+        cr = CDRipperMainWindow(self.appCtx)
         cr.play_signal.connect(self.ply.open_cd)
         cr.exec()
 
@@ -478,7 +485,7 @@ class Player(FramelessDialog):
 
     def preference(self):
         from dialogs import ConfigBox
-        if ConfigBox.run(self, self.ini) == 1:
+        if ConfigBox.run(self, self.appCtx.config) == 1:
             self.Install_idle_fun()
 
     def create_playlist(self):
@@ -515,12 +522,17 @@ class Player(FramelessDialog):
         for t in musica.tracks.name.values():
             if t.genre:
                 art_gen[t.artist].add(t.genre)
-            a = 0
-        b = 0
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     set_application_icon(app, f'Mysoft.{AppConfig}.v1', get_resource_file(__file__, 'icone', 'player.ico'))
-    player = Player()
+
+    file_da_riprodurre = None
+    if len(sys.argv) > 1:
+        percorso_file = sys.argv[1]
+        if os.path.exists(percorso_file) and percorso_file.lower().endswith(".mp3"):
+            file_da_riprodurre = percorso_file
+
+    player = Player(file_da_riprodurre)
     sys.exit(app.exec())

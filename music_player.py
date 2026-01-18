@@ -48,7 +48,7 @@ class MusicPlayerDlg(QDialog):
         self.busy = False
 
         type = 'spectrum'
-        args = ['--gain=40.0', '--no-video-title-show', '--audio-visual=visual']
+        args = ['--gain=40.0', '--no-video-title-show', '--quiet', '--audio-visual=visual']
         if type == 'spectrum':
             args.extend(['--effect-list=spectrum', '--visual-peaks'])
         elif type == 'vumeter':
@@ -214,6 +214,7 @@ class MusicPlayerDlg(QDialog):
 
         v = QVBoxLayout()
         v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(4)
         v.addWidget(self.note)
         v.addLayout(hs)
         v.addLayout(hbt)
@@ -222,29 +223,68 @@ class MusicPlayerDlg(QDialog):
         wdd.setLayout(v)
         return wdd
 
+    def _round_button_style(self, btn, sz):
+        btn.setFixedSize(sz, sz)
+        dimensione = btn.width()
+        btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #e0e0e0, 
+                            stop:0.2 #f5f5f5, 
+                            stop:0.4 #bcbcbc, 
+                            stop:0.6 #ffffff, 
+                            stop:0.8 #9a9a9a, 
+                            stop:1 #cccccc);
+                        color: white;
+                        border-radius: {dimensione // 2}px;
+                        border: 1px solid #2980b9;
+                        font-size: 16px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #e0e0e0, 
+                            stop:0.2 #f5f5f5, 
+                            stop:0.4 #bcbcbc, 
+                            stop:0.6 #ffffff, 
+                            stop:0.8 #9a9a9a, 
+                            stop:1 #cccccc);
+                        border: 1px solid red;
+                    }}
+                    QPushButton:pressed {{
+                        background-color: #8080ff;
+                    }}
+                """)
+
     def play_stop_ui(self):
+        sz = 25
         self.playbutton = QPushButton(self)
-        self.playbutton.setMaximumWidth(30)
+        #self.playbutton.setFixedSize(30, 30) #♦setMaximumWidth(80)
+        self._round_button_style(self.playbutton, sz)
         self.playbutton.clicked.connect(self.play_pause)
 
         stopbutton = QPushButton(self)
-        stopbutton.setMaximumWidth(30)
+        #stopbutton.setMaximumWidth(30)
+        self._round_button_style(stopbutton, sz)
         stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
         stopbutton.clicked.connect(self.stopB)
 
         self.skipBackwardbutton = QPushButton()
-        self.skipBackwardbutton.setMaximumWidth(30)
+        #self.skipBackwardbutton.setMaximumWidth(30)
+        self._round_button_style(self.skipBackwardbutton, sz)
         self.skipBackwardbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaSkipBackward')))
         self.skipBackwardbutton.clicked.connect(lambda: self.skip(-1))
 
         self.skipFarwardbutton = QPushButton()
-        self.skipFarwardbutton.setMaximumWidth(30)
+        #self.skipFarwardbutton.setMaximumWidth(30)
+        self._round_button_style(self.skipFarwardbutton, sz)
         self.skipFarwardbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaSkipForward')))
         self.skipFarwardbutton.clicked.connect(lambda: self.skip(1))
 
         hbt = QHBoxLayout()
         hbt.addStretch()
-        hbt.setContentsMargins(1, 1, 1, 1)
+        hbt.addSpacing(90)
+        hbt.setContentsMargins(1, 0, 5, 5)
+        hbt.setSpacing(20)
         hbt.addWidget(self.skipBackwardbutton)
         hbt.addWidget(self.playbutton)
         hbt.addWidget(stopbutton)
@@ -252,14 +292,16 @@ class MusicPlayerDlg(QDialog):
         hbt.addStretch()
 
         self.lyricbutton = QPushButton(self)
-        self.lyricbutton.setMaximumWidth(30)
+        #self.lyricbutton.setMaximumWidth(30)
+        self._round_button_style(self.lyricbutton, sz)
         self.lyricbutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'lyric.png')))
         self.lyricbutton.setToolTip('testo brano')
         self.lyricbutton.clicked.connect(self.songLyrics)
         self.blink_lyrics_handler = ShazamButtonHandler(self.lyricbutton)
 
         self.titlebutton = QPushButton(self)
-        self.titlebutton.setMaximumWidth(30)
+        #self.titlebutton.setMaximumWidth(30)
+        self._round_button_style(self.titlebutton, sz)
         self.titlebutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
         self.titlebutton.setToolTip('riconosce brano')
         self.titlebutton.clicked.connect(self.find_song)
@@ -301,16 +343,16 @@ class MusicPlayerDlg(QDialog):
         if self.index >= 0 and not self.busy:
             from scrobbler import LyricsWorker
             ls = LyricsWorker(self.tracks[self.index].artist, self.tracks[self.index].title)
-            ls.finished.connect(self._songLyrics)
+            ls.finished.connect(lambda tx, track=self.tracks[self.index].title: self._songLyrics(tx, track))
             self.blink_lyrics_handler.start_blinking()
             self.busy = True
             ls.song_text()
 
-    def _songLyrics(self, txt):
+    def _songLyrics(self, txt, track):
         self.blink_lyrics_handler.stop_blinking()
         self.busy = False
         from dialogs import lyricsDlg
-        lyricsDlg.run(self.appCtx, txt)
+        lyricsDlg.run(self.appCtx, txt, track)
 
     def set_play_icon(self, type):
         if type == MusicPlayerDlg.Mode_Play:
@@ -366,7 +408,7 @@ class MusicPlayerDlg(QDialog):
         if self.mode == MusicPlayerDlg.Mode_Music:
             self.inc_track_index(inc)
             self.play_song()
-        else:
+        elif self.listplayer:
             self.inc_track_index(inc)
             if inc > 0:
                 self.listplayer.next()
