@@ -31,6 +31,17 @@ def edit_album(artist, album, dir, parent=None):
     ac = AudioConverter(dir)
     ac.exec()
 
+def printable_duration(duration):
+    h = int(duration / 3600)
+    m = int((duration - h * 3600) / 60)
+    s = int(duration - h * 3600 - m * 60)
+    tm = ''
+    if h != 0:
+        tm += str(h) + 'h '
+    tm += str(m) + 'm ' + str(s) + 's'
+    return tm
+
+
 from PyQt6.QtWidgets import QStackedWidget
 from PyQt6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup
 
@@ -434,6 +445,24 @@ class MusicIndexDlg(QDialog):
             items[0].setSelected(True)
             self.artists.scrollToItem(items[0])
 
+    def setPlaylist(self, songs_list):
+        self.clear_playlist()
+        for t in songs_list:
+            self.add_playlist(*t)
+
+        stat = {}
+        for t in songs_list:
+            if t[0] in stat.keys():
+                n = stat[t[0]]
+                stat[t[0]] = n + 1
+            else:
+                stat[t[0]] = 1
+        lines = [f"{key}:\t{value}" for key, value in stat.items()]
+        tip = f"{self.playlist_info()}\n{'\n'.join(lines)}"
+        self.playPlaylist.setToolTip(tip)
+
+        self.switch_to_page(1)
+
     def play_playlist(self, index):
         if index == 0:
             return
@@ -531,34 +560,25 @@ class MusicIndexDlg(QDialog):
             trks = self.music.find_tracks(album, artist)
             vi = [self.music.tracks.name[trk + '@' + album] for trk in trks if trk]
 
-        tot_time = 0
+        #tot_time = 0
         for p in vi:
             qi = QListWidgetItem(p.title)
             qi.setData(Qt.ItemDataRole.UserRole, p)
             qi.setToolTip(f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}")
             self.plst.addItem(qi)
-            tot_time += p.tm_sec
+            #tot_time += p.tm_sec
 
-        '''
-        for r in range(self.plst.count()):
-            qi = self.plst.item(r)
-            p = qi.data(Qt.ItemDataRole.UserRole)
-            mes = f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}"
-            qi.setToolTip(mes)
-            tot_time += p.tm_sec
-        '''
-
-        h = int(tot_time / 3600)
-        m = int((tot_time - h * 3600) / 60)
-        s = int(tot_time - h * 3600 - m * 60)
-        tm = ''
-        if h != 0:
-            tm += str(h) + 'h '
-        tm += str(m) + 'm ' + str(s) + 's'
-
-        mes = 'playlist brani: ' + str(self.plst.count()) + ' durata: ' + tm
-        self.playPlaylist.setToolTip( mes)
+        #mes = f"Playlist\nBrani: {self.plst.count()}\nDurata: {printable_duration(tot_time)}"
+        self.playPlaylist.setToolTip(self.playlist_info())
         self.switch_to_page(1)
+
+    def playlist_info(self):
+        tot_time = 0
+        for t in range(self.plst.count()):
+            dat = self.plst.item(t).data(Qt.ItemDataRole.UserRole)
+            tot_time += dat.tm_sec
+
+        return f"\n\nPlaylist\n\nBrani: {self.plst.count()}\nDurata: {printable_duration(tot_time)}"
 
     def remove_playlist(self, type):
         if type == 'all':

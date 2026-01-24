@@ -6,10 +6,9 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QWidget, QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QSplashScreen, QPushButton, QToolBar, QMenu, QComboBox,
-                             QGraphicsOpacityEffect)
+                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox)
 from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QRect, QSize, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -24,6 +23,7 @@ from music_player import MusicPlayerDlg
 from music_radio import RadioDlg
 from utility import detect_cd_drives, close_splash, Cache
 from mp3_tag import GENRE
+from contextlib import contextmanager
 
 INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.5.1\n02 Novembre 2025'
 
@@ -89,7 +89,6 @@ class Player(FramelessDialog):
 
         ini = iniConf(AppConfig, case_sensitive=True)
         cache = Cache(ini)
-        #cache.save(r"c:\tmp\cache", 10, 20)
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
         self.file_da_riprodurre = file_da_riprodurre
 
@@ -100,7 +99,6 @@ class Player(FramelessDialog):
 
         self.Install_idle_fun()
         self.show()
-
 
     def set_windows_animations(self, enabled=True):
         import ctypes
@@ -117,9 +115,10 @@ class Player(FramelessDialog):
             ctypes.sizeof(value)
         )
 
+    '''
     def changeEvent(self, event):
         super().changeEvent(event)
-        return
+        #return
         if event.type() == event.Type.WindowStateChange:
             # Se la finestra sta per essere ripristinata
             if not self.isMinimized():
@@ -151,17 +150,21 @@ class Player(FramelessDialog):
                 self.restore_anim.start()
                 return
         super().changeEvent(event)
+    '''
 
     def Install_idle_fun(self):
         from utility import IdleTimeout
         self.idle_timer = None
         idle_time = self.appCtx.config.get('user', 'tmout')
+        clic_exit = self.appCtx.config.get('user', 'clic_exit')
+        clic_exit = False  if clic_exit == '' or clic_exit != '1' else True
+
         try:
             idle_time = int(idle_time)
         except:
             idle_time = 0
         if idle_time != 0:
-            self.idle_timer = IdleTimeout(self, idle_time, self.idle_background)
+            self.idle_timer = IdleTimeout(self, idle_time, self.idle_background, clic_exit)
 
     def show(self):
         QMainWindow.show(self)
@@ -255,35 +258,10 @@ class Player(FramelessDialog):
             
             QTabBar::tab:hover:!selected {
                 background: #f8f8f8;
+                border-bottom: 2px solid #0000FF;
+                border-top: 2px solid #0000FF;
             }        
         """)
-
-        '''
-        self.tb.setStyleSheet("""
-            QTabBar::tab {
-                /* Aggiunge il bordo intorno alla scheda */
-                border: 1px solid gray; 
-
-                /* Spazio interno al testo della scheda */
-                padding: 3px 3px; 
-
-                /* Raggio per angoli arrotondati (solo in alto) */
-                border-top-left-radius: 3px; 
-                border-top-right-radius: 3px;
-            }
-
-            /* Rimuovi il bordo inferiore per creare l'illusione di connessione con il QTabWidget */
-            QTabBar::tab:!selected {
-                border-bottom-color: #C2C7CB; /* Stesso colore dello sfondo del QTabWidget/barra */
-            }
-
-            /* Stile della scheda selezionata */
-            QTabBar::tab:selected {
-                border-color: blue;
-                border-bottom-color: white; /* Per far sembrare che sia attaccata alla pagina sottostante */
-            }
-        """)
-        '''
 
         tool.addWidget(self.tb)
         spacer_fixed2 = QLabel()
@@ -396,7 +374,6 @@ class Player(FramelessDialog):
     def get_track_pix(self, album, artist, cover):
         return self.dlg.get_track_pix(album, artist, cover)
 
-
     ''' Chiama Shazam per avere il titolo'''
     def songTitle(self):
         wd = self.tab.widget(0)
@@ -421,7 +398,10 @@ class Player(FramelessDialog):
     def _open_cd(self, drive):
         QTimer.singleShot(100, lambda: self.open_cd(drive))
 
-    def idle_background(self):
+    def idle_background(self, t_mode):
+        if t_mode:
+            self.background(True)
+            return
         if not self.background_mode and self.ply.mode == self.ply.Mode_None :
             self.background()
 
@@ -429,13 +409,16 @@ class Player(FramelessDialog):
         if self.background_mode or reset:
             self.background_mode = False
             self.titleBar.setTitle("Euterpe")
+            self.setWindowOpacity(1.)
             try:
                 self.ply.next_song_signal.disconnect(self._background)
+                self.ply.stop()
             except:
                 pass
         else:
             self.background_mode = True
             self.titleBar.setTitle("Euterpe\U0001F535")
+            self.setWindowOpacity(0.7)
             self.ply.next_song_signal.connect(self._background)
             self._background(1)
 
@@ -459,44 +442,66 @@ class Player(FramelessDialog):
             ann.file = annuncio
             self.ply.open_file([ann, mi[key]])
 
+    @contextmanager
+    def suspend_background_mode(self):
+        # ===== PARTE 1: Eseguita quando ENTRA nel 'with' =====
+
+        if self.background_mode:
+            self.background(True) #se background lo disabilita
+        self.idle_timer.stop_idle_timer() # Ferma l'idle timer'
+
+        try:
+            yield  # ← PAUSA QUI: esegue il codice nel 'with'
+
+        finally:
+            # ===== PARTE 2: Eseguita quando ESCE dal 'with' =====
+            self.idle_timer.restart_idle_timer()
+
     def bluetooth(self):
         from bluetooth import BluetoothManager
-        bt = BluetoothManager()
-        bt.exec()
+        with self.suspend_background_mode():
+            bt = BluetoothManager()
+            bt.exec()
 
     def info(self):
         informMessage(INFO_MES, 'Εὐτέρπη', 15, True, get_resource_file(__file__, 'icone', 'pentagram.png'))
 
     def convert(self):
         from format_convert import AudioConverter
-        ac = AudioConverter()
-        ac.exec()
+        with self.suspend_background_mode():
+            ac = AudioConverter()
+            ac.exec()
 
     def cd_ripper(self):
         from cd_ripper import CDRipperMainWindow
-        cr = CDRipperMainWindow(self.appCtx)
-        cr.play_signal.connect(self.ply.open_cd)
-        cr.exec()
+        with self.suspend_background_mode():
+            cr = CDRipperMainWindow(self.appCtx)
+            cr.play_signal.connect(self.ply.open_cd)
+            cr.exec()
 
     def sync_folder(self):
         from sync_folders import SyncApp
-        msg = SyncApp(self, self.dlg.last_folder)
-        msg.exec()
+        with self.suspend_background_mode():
+            msg = SyncApp(self, self.dlg.last_folder)
+            msg.exec()
 
     def preference(self):
         from dialogs import ConfigBox
-        if ConfigBox.run(self, self.appCtx.config) == 1:
-            self.Install_idle_fun()
+        with self.suspend_background_mode():
+            if ConfigBox.run(self, self.appCtx.config) == 1:
+                self.Install_idle_fun()
 
     def create_playlist(self):
-        #self.get_generi()
         index = self.dlg.music
 
         from playlist import PlayListDlg
-        plldlg = PlayListDlg(self, index)
-        ret = plldlg.exec()
-        if ret:
-            lst = plldlg.get_playlist()
+        with self.suspend_background_mode():
+            ret, lst = PlayListDlg.run(self, index)
+            #ret = plldlg.exec()
+            if ret and lst:
+                self.dlg.setPlaylist(lst)
+            '''
+            #lst = plldlg.get_playlist()
             self.dlg.clear_playlist()
             for t in lst:
                 self.dlg.add_playlist(*t)
@@ -514,6 +519,7 @@ class Player(FramelessDialog):
             self.dlg.playPlaylist.setToolTip(tip)
 
             self.dlg.switch_to_page(1)
+            '''
 
     def get_generi(self):
         from collections import defaultdict

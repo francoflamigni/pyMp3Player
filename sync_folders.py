@@ -3,8 +3,9 @@ import shutil
 import hashlib
 import psutil
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget, QProgressDialog,
-                             QTreeWidgetItem, QLabel, QMessageBox, QFileDialog, QDialog, QStyledItemDelegate)
-from PyQt6.QtGui import QPixmap, QIcon, QColor, QBrush, QPainter, QFontMetrics
+                             QTreeWidgetItem, QLabel, QMessageBox, QFileDialog, QDialog, QStyledItemDelegate, QGroupBox,
+                             QLineEdit)
+from PyQt6.QtGui import QPixmap, QIcon, QColor, QBrush, QPainter, QFontMetrics, QAction
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRect
 
 from pyMyLib.utils import get_resource_file
@@ -222,33 +223,53 @@ class SyncApp(QDialog):
         self.icon_yellow = QIcon(pixmap_yellow)
 
     def _setup_ui(self):
-        #central_widget = QWidget()
-        #.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(self)
 
+        folders_groupBox = QGroupBox(self)
+        folders_groupBox.setTitle("Cartelle da sincronizzare")
         # Selezione Cartelle
         path_layout = QHBoxLayout()
-        self.label_A = QLabel("Riferimento: Non selezionata")
+        folders_groupBox.setLayout(path_layout)
+        self.label_A = QLineEdit() #QLabel("Riferimento: Non selezionata")
+        self.label_A.setReadOnly(True)
         self.label_A.setMinimumWidth(400)
         if self.root_A:
             elide_path_center(self.label_A, self.root_A)
-            #self.label_A.setText(f"Riferimento: {self.root_A}")
-        self.label_B = QLabel("Destinazione: Non selezionata")
+        else:
+            self.label_A.setPlaceholderText("Riferimento: Non selezionato")
+        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_browse1 = QAction(icone_browse, "browse", self)
+        azione_browse1.triggered.connect(lambda: self.select_folder('A'))
+        self.label_A.addAction(
+            azione_browse1,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
+
+        self.label_B = QLineEdit() #QLabel("Destinazione: Non selezionata")
+        self.label_B.setReadOnly(True)
         self.label_B.setMinimumWidth(400)
-        btn_select_A = QPushButton("...")
-        btn_select_A.setMaximumWidth(40)
-        btn_select_B = QPushButton("...")
-        btn_select_B.setMaximumWidth(40)
+        self.label_B.setPlaceholderText("Destinazione: Non selezionata")
+        azione_browse2 = QAction(icone_browse, "browse", self)
+        azione_browse2.triggered.connect(lambda: self.select_folder('B'))
+        self.label_B.addAction(
+            azione_browse2,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
+
+        #btn_select_A = QPushButton("...")
+        #btn_select_A.setMaximumWidth(40)
+        #btn_select_B = QPushButton("...")
+        #btn_select_B.setMaximumWidth(40)
         btn_load = QPushButton("Aggiorna")
 
         path_layout.addWidget(self.label_A)
-        path_layout.addWidget(btn_select_A)
+        #path_layout.addWidget(btn_select_A)
         path_layout.addSpacing(20)
         path_layout.addWidget(self.label_B)
-        path_layout.addWidget(btn_select_B)
+        #path_layout.addWidget(btn_select_B)
         path_layout.addStretch()
         path_layout.addWidget(btn_load)
-        main_layout.addLayout(path_layout)
+        main_layout.addWidget(folders_groupBox)
 
         # Tree Widget
         self.tree_widget = QTreeWidget()
@@ -264,8 +285,8 @@ class SyncApp(QDialog):
         self.tree_widget.setItemDelegateForColumn(0, self.state_delegate)
 
         # Connessioni
-        btn_select_A.clicked.connect(lambda: self.select_folder('A'))
-        btn_select_B.clicked.connect(lambda: self.select_folder('B'))
+        #btn_select_A.clicked.connect(lambda: self.select_folder('A'))
+        #btn_select_B.clicked.connect(lambda: self.select_folder('B'))
         btn_load.clicked.connect(self.load_initial_structure)
         self.tree_widget.itemDoubleClicked.connect(self.handle_item_double_click)
         self.tree_widget.itemExpanded.connect(self.handle_item_expanded)

@@ -9,13 +9,15 @@ from typing import List, Dict
 from PyQt6.QtGui import QIcon, QPixmap, QAction
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QProgressBar, QTableWidgetItem,
-    QGroupBox, QFileDialog, QDialog, QMessageBox, QHeaderView, QSizePolicy, QGridLayout, QSplitter, QWidget, QScrollArea
+    QGroupBox, QFileDialog, QDialog, QMessageBox, QHeaderView, QSizePolicy, QGridLayout, QSplitter, QWidget,
+    QScrollArea, QApplication
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from music_brainz import CDinfo
 
 from pyMyLib.utils import get_resource_file
 from utility import CDMonitor, AppContext
+from mp3_tag import GENRE
 
 class FFmpegWorker(QThread):
     """Worker thread per le operazioni ffmpeg"""
@@ -329,7 +331,16 @@ class CDRipperMainWindow(QDialog):
         self.artist_edit = QLineEdit()
         self.album_edit = QLineEdit()
         self.anno_edit = QLineEdit()
-        self.genere_edit = QLineEdit()
+        #self.genere_edit = QLineEdit()
+        self.genere_edit = QComboBox()
+        self.genere_edit.setStyleSheet("""
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #FFFF00; /* Colore di sfondo della selezione */
+                color: black;            /* Colore del testo della selezione */
+            }
+        """)
+        self.genere_edit.setEditable(True)
+        self.genere_edit.addItems(GENRE)
 
         self.search_by_artist_button = QPushButton(self)
         self.search_by_artist_button.setText("Cerca")
@@ -371,7 +382,11 @@ class CDRipperMainWindow(QDialog):
         search_layout.addLayout(metadata_layout)
         search_layout.addWidget(self.search_by_artist_button)
         search_layout.addWidget(self.cover, alignment=Qt.AlignmentFlag.AlignHCenter)
-        #search_layout.addStretch()
+        clipboard_bt = QPushButton()
+        clipboard_bt.setText('Da Clipboard')
+        clipboard_bt.pressed.connect(self.from_clipboard)
+        search_layout.addWidget(clipboard_bt)
+
 
         sp = QSplitter(Qt.Orientation.Horizontal)
         sp.addWidget(metadata_group)
@@ -457,7 +472,7 @@ class CDRipperMainWindow(QDialog):
         self.artist_edit.setText(self.tracks_data.get("artisti", ""))
         self.album_edit.setText(self.tracks_data.get("album", ""))
         self.anno_edit.setText(self.tracks_data.get("anno", ""))
-        self.genere_edit.setText(self.tracks_data.get("genere", ""))
+        self.genere_edit.setCurrentText(self.tracks_data.get("genere", ""))
 
         if 'tracce' in self.tracks_data.keys():
             self.tracks_table.setRowCount(len(self.tracks_data['tracce']))
@@ -508,7 +523,7 @@ class CDRipperMainWindow(QDialog):
         self.tracks_data['artisti'] = self.artist_edit.text()
         self.tracks_data['album'] = self.album_edit.text()
         self.tracks_data['anno'] = self.anno_edit.text()
-        self.tracks_data['genere'] = self.genere_edit.text()
+        self.tracks_data['genere'] = self.genere_edit.currentText()
 
         for row in range(self.tracks_table.rowCount()):
             track = self.tracks_data['tracce'][row]
@@ -535,7 +550,7 @@ class CDRipperMainWindow(QDialog):
         self.artist_edit.setText("")
         self.album_edit.setText("")
         self.anno_edit.setText("")
-        self.genere_edit.setText("")
+        self.genere_edit.setCurrentText("")
         self.display_cover("", b"")
 
     def start_ripping(self):
@@ -666,6 +681,28 @@ class CDRipperMainWindow(QDialog):
         self.cover.clear()
         cdi.download_cover(id=id)
         self.status_label.setText("Download in corso...")
+
+    def from_clipboard(self):
+        from utility import qpixmap_to_bytes
+        try:
+            clipboard = QApplication.clipboard()
+
+            # Controlla se c'è un'immagine nel clipboard
+            if not clipboard.mimeData().hasImage():
+                QMessageBox.information(self, "Info", "Nessuna immagine trovata nel clipboard")
+                return
+
+            # Ottieni l'immagine dal clipboard
+            pixmap = clipboard.pixmap()
+            if pixmap.isNull():
+                QMessageBox.warning(self, "Errore", "Impossibile ottenere l'immagine dal clipboard")
+                return
+
+            # Converte QPixmap in dati binari
+            image_data = qpixmap_to_bytes(pixmap)
+            self.display_cover('', image_data)
+        except Exception as e:
+            pass
 
     def display_cover(self, mes, data):
         """Mostra la copertina nell'area dedicata."""

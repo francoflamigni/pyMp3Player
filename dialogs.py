@@ -3,7 +3,7 @@ from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAct
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle,
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu, QLabel, QGroupBox, QComboBox, QFormLayout,
-                             QSpinBox, QFileDialog)
+                             QSpinBox, QFileDialog, QCheckBox, QGridLayout)
 
 import scrobbler
 
@@ -294,14 +294,16 @@ class ConfigBox(QDialog):
         vb.addWidget(lang_box)
 
         timeout_box = QGroupBox(self)
-        timeout_box.setTitle('Timeout background')
-        qf2 = QFormLayout(timeout_box)
+        timeout_box.setTitle('Background')
+        qf2 = QGridLayout(timeout_box)
         self.maxidle = QSpinBox(self)
         self.maxidle.setRange(0, 300)
+        qf2.addWidget(QLabel("Timeout (sec.)"), 0, 0)
+        qf2.addWidget(self.maxidle, 0, 1)
+        self.clic_exit = QCheckBox(self)
+        qf2.addWidget(QLabel("Esce con un clic)"), 1, 0)
+        qf2.addWidget(self.clic_exit, 1, 1)
 
-
-
-        qf2.addWidget(self.maxidle)
         vb.addWidget(timeout_box)
 
         speaker_box = QGroupBox(self)
@@ -339,6 +341,10 @@ class ConfigBox(QDialog):
             tmout = 0
         self.maxidle.setValue(tmout)
 
+        clic_exit = self.ini.get('user', 'clic_exit')
+        ck = Qt.CheckState.Unchecked if clic_exit == '' or clic_exit == '0' else Qt.CheckState.Checked
+        self.clic_exit.setCheckState(ck)
+
         cache = self.ini.get('cache')
         self.cache_dir.setText(cache['dir'])
         self.cache_days.setText(cache['duration'])
@@ -361,6 +367,8 @@ class ConfigBox(QDialog):
         self.ini.set('user', 'lang', lang)
         tmout = str(self.maxidle.value())
         self.ini.set('user', 'tmout', tmout)
+        clic_exit = 1 if self.clic_exit.isChecked() else 0
+        self.ini.set('user', 'clic_exit', str(clic_exit))
 
         cs = {
             "dir": self.cache_dir.text(),

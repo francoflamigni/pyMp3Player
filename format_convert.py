@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QGroupBox, QGridLayout, QHeaderView, QComboBox, QDialog,
                              QSplitter, QScrollArea, QSizePolicy)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
-from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtGui import QPixmap, QIcon, QAction
 from utility import get_windows_flag
 
 from mp3_tag import GENRE
@@ -401,15 +401,25 @@ class AudioConverter(QDialog):
         folder_layout = QHBoxLayout(folder_group)
         folder_layout.setContentsMargins(5, 5, 5, 5)
 
-        self.folder_label = QLabel("Nessuna cartella selezionata")
-        self.folder_button = QPushButton("Scegli Cartella")
-        self.folder_button.clicked.connect(self.select_folder)
+        self.folder_label = QLineEdit() #QLabel("Nessuna cartella selezionata")
+        self.folder_label.setReadOnly(True)
+        self.folder_label.setPlaceholderText("Nessuna cartella selezionata")
+        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_browse = QAction(icone_browse, "browse", self)
+        azione_browse.triggered.connect(self.select_folder)
+        self.folder_label.addAction(
+            azione_browse,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
+
+        #self.folder_button = QPushButton("Scegli Cartella")
+        #self.folder_button.clicked.connect(self.select_folder)
 
         self.save_button = QPushButton("Salva")
         self.save_button.clicked.connect(self.save)
 
         folder_layout.addWidget(self.folder_label)
-        folder_layout.addWidget(self.folder_button)
+        #folder_layout.addWidget(self.folder_button)
         folder_layout.addWidget(self.save_button)
 
         folder_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
@@ -464,13 +474,27 @@ class AudioConverter(QDialog):
         self.cover_label = QLabel("Nessuna copertina")
         self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.cover_label.setFixedSize(200, 200)
+        self.cover_label.setStyleSheet("""
+            QLabel {
+                /* Definisce il bordo: Spessore | Stile | Colore */
+                border: 2px solid blue; 
+
+                /* Arrotonda gli angoli (opzionale) */
+                border-radius: 5px; 
+
+                /* Aggiunge del padding interno per separare il testo dal bordo (opzionale) */
+                padding: 5px;
+            }
+        """)
 
         scroll_area.setWidget(self.cover_label)
         scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        cover_layout.addWidget(scroll_area)
+        cover_layout.addWidget(scroll_area, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Bottoni per gestire copertina
         cover_buttons_layout = QHBoxLayout()
+        cover_buttons_layout.setSpacing(2)
+        cover_buttons_layout.setContentsMargins(1, 1, 1, 1)
 
         self.load_cover_file_button = QPushButton("Da file")
         self.load_cover_file_button.clicked.connect(self.load_cover_from_file)
@@ -484,12 +508,15 @@ class AudioConverter(QDialog):
         self.load_cover_online_button.clicked.connect(self.load_cover_online)
         cover_buttons_layout.addWidget(self.load_cover_online_button)
 
+        vl = QVBoxLayout()
+        vl.addLayout(cover_buttons_layout)
+
         self.remove_cover_button = QPushButton("Rimuovi")
         self.remove_cover_button.clicked.connect(self.remove_cover)
         self.remove_cover_button.setEnabled(False)
-        cover_buttons_layout.addWidget(self.remove_cover_button)
+        vl.addWidget(self.remove_cover_button)
 
-        cover_layout.addLayout(cover_buttons_layout)
+        cover_layout.addLayout(vl) #cover_buttons_layout)
 
         cover_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
                                    QSizePolicy.Policy.Maximum  # verticale - altezza minima
@@ -555,12 +582,18 @@ class AudioConverter(QDialog):
         if count == len(self.audio_files):
             self.mode = Mode.TAG_EDIT
             self.save_button.setVisible(True)
-            self.folder_button.setVisible(False)
+            azioni = self.folder_label.actions()
+            if azioni:
+                azioni[0].setVisible(False)
+            #self.folder_button.setVisible(False)
 
         else:
             self.mode = Mode.FORMAT_CONVERT
             self.save_button.setVisible(False)
-            self.folder_button.setVisible(True)
+            azioni = self.folder_label.actions()
+            if azioni:
+                azioni[0].setVisible(True)
+            #self.folder_button.setVisible(True)
 
         self.hide_conversion()
 

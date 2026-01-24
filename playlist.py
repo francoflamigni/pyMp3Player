@@ -304,7 +304,6 @@ class PlayListDlg(QDialog):
 
         vlayout.addWidget(bt_crea)
         self.setup_geometry()
-        #self.layout().setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
 
     def setup_geometry(self):
         # 1. Adattiamo le colonne al contenuto
@@ -327,7 +326,6 @@ class PlayListDlg(QDialog):
         self.layout().setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
 
     def handle_cell_clicked(self, row, column):
-
         # Rimuovi l'editor precedente prima di crearne uno nuovo
         self.remove_current_editor()
 
@@ -410,15 +408,14 @@ class PlayListDlg(QDialog):
         a = 0
         self.list = Create_playlist(self.index, preferences, duration)
         if self.list:
-            stat = {}
-            for t in self.list:
-                if t[0] in stat.keys():
-                    n = stat[t[0]]
-                    stat[t[0]] = n + 1
-                else:
-                    stat[t[0]] = 1
-
             self.done(1)
+
+    @staticmethod
+    def run(parent, index):
+        dlg = PlayListDlg(parent, index)
+        if dlg.exec() == 1:
+            return 1, dlg.list
+        return 0, []
 
     def get_playlist(self):
         return self.list

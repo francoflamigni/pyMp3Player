@@ -296,7 +296,7 @@ class BluetoothManager(QDialog):
         bluetooth_layout = QVBoxLayout()
 
         self.bluetooth_list = QListWidget()
-        self.bluetooth_list.itemClicked.connect(self.on_bluetooth_device_selected)
+        #self.bluetooth_list.itemClicked.connect(self.on_bluetooth_device_selected)
         bluetooth_layout.addWidget(self.bluetooth_list)
 
         ''''
@@ -322,7 +322,7 @@ class BluetoothManager(QDialog):
         audio_layout = QVBoxLayout()
 
         self.audio_list = QListWidget()
-        self.audio_list.itemClicked.connect(self.on_audio_device_selected)
+        #self.audio_list.itemClicked.connect(self.on_audio_device_selected)
         audio_layout.addWidget(self.audio_list)
 
         #self.btn_set_default = QPushButton("⭐ Imposta come Predefinito")
@@ -417,6 +417,7 @@ class BluetoothManager(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, device)
             self.audio_list.addItem(item)
 
+    '''
     def on_bluetooth_device_selected(self, item):
         """Gestisce la selezione di un dispositivo Bluetooth"""
         device = item.data(Qt.ItemDataRole.UserRole)
@@ -424,13 +425,16 @@ class BluetoothManager(QDialog):
             is_connected = device['Connected']
             self.btn_connect.setEnabled(not is_connected)
             self.btn_disconnect.setEnabled(is_connected)
+    '''
 
+    '''
     def on_audio_device_selected(self, item):
         """Gestisce la selezione di un dispositivo audio"""
         device = item.data(Qt.ItemDataRole.UserRole)
         if device:
             is_default = device.get('Default', False)
             self.btn_set_default.setEnabled(not is_default)
+    '''
 
     '''
     def connect_device(self):

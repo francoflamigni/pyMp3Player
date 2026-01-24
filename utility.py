@@ -177,7 +177,8 @@ class WikipediaWorker(QRunnable):
         file_cache = f"{self.artist_name}.html"
 
         try:
-            if self._is_cancelled: return
+            if self._is_cancelled:
+                return
             # 1. Controllo Cache Immediato
             if self.cache:
                 txt = self.cache.get(file_cache)
@@ -187,11 +188,13 @@ class WikipediaWorker(QRunnable):
 
             # 2. Raccolta Dati (senza emit intermedi)
             image_url = self._get_image_url()
-            if self._is_cancelled: return
+            if self._is_cancelled:
+                return
             img_tag = ""
             if image_url:
                 img_tag = self._get_base64_image_tag(image_url)
-            if self._is_cancelled: return
+            if self._is_cancelled:
+                return
             full_html = self.assemble_html(img_tag, None)
             self.signals.result.emit(full_html, self.cursor_pos)
 
@@ -500,23 +503,25 @@ class CDMonitor(QObject):
 class GlobalInputEventFilter(QObject):
     from PyQt6.QtCore import pyqtSignal
     # Segnale personalizzato per il movimento del mouse
-    mouse_moved = pyqtSignal()
+    mouse_moved = pyqtSignal(int)
 
     def eventFilter(self, obj, event):
         # Cattura solo gli eventi di movimento del mouse
-        if event.type() == QEvent.Type.MouseMove or event.type() == QEvent.Type.KeyPress:
-            self.mouse_moved.emit()
-            #print("Input event")
+        if event.type() == QEvent.Type.MouseMove:
+            self.mouse_moved.emit(0)
+        elif event.type() == QEvent.Type.KeyPress or event.type() == QEvent.Type.MouseButtonPress:
+            self.mouse_moved.emit(1)
 
         # Restituisci False per non interferire con l'evento
         return False
 
 class IdleTimeout:
-    def __init__(self, parent, idle_time, timeout_fun):
+    def __init__(self, parent, idle_time, timeout_fun, exit_on_press=True):
         self.stop_idle_timer()
         self.idle_timer = None
         self.idle_timeout = None
         self.timeout_fun = timeout_fun
+        self.exit_on_press = exit_on_press
         if idle_time != 0:
             self.idle_timer = QTimer()
             self.idle_timer.timeout.connect(self.timeout)
@@ -529,16 +534,18 @@ class IdleTimeout:
             self.idle_timeout = idle_time * 60000 # trasforma minuti im msec
 
             # Avvia il timer
-            self.start_idle_timer()
+            self.start_idle_timer(0)
 
     def __del__(self):
         self.stop_idle_timer()
 
     def timeout(self):
         #self.stop_idle_timer()
-        self.timeout_fun()
+        self.timeout_fun(0)
 
-    def start_idle_timer(self):
+    def start_idle_timer(self, tipo_evento):
+        if self.exit_on_press and tipo_evento == 1:
+            self.timeout_fun(1)
         if self.idle_timeout != 0:
             """Avvia/Resetta il timer"""
             self.idle_timer.start(self.idle_timeout)
@@ -549,6 +556,10 @@ class IdleTimeout:
             #self.idle_timer.stop()
         except:
             pass
+
+    def restart_idle_timer(self):
+        if self.idle_timeout:
+            self.idle_timer.timeout.connect(self.timeout)
 
 class Cache:
     def __init__(self, ini:iniConf):
