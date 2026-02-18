@@ -239,13 +239,6 @@ class MusicIndexDlg(QDialog):
             QLineEdit.ActionPosition.LeadingPosition
         )
 
-        """
-        self.b1 = QPushButton(self)
-        self.b1.setIcon(QIcon(get_resource_file(__file__, 'icone', 'folder_open.png')))
-        self.b1.setMaximumWidth(30)
-        self.b1.clicked.connect(self.index2)
-        """
-
         self.te = HoverLineEdit() #QLineEdit()
         #self.te.setMinimumWidth(200)
         self.te.textChanged.connect(self.list_search)
@@ -274,7 +267,6 @@ class MusicIndexDlg(QDialog):
         self.te.setStyleSheet(stile_comune)
 
         h0 = QHBoxLayout()
-        #h0.addWidget(self.b1)
         h0.addWidget(self.prog, stretch=1)
         h0.addSpacing(10)
         h0.addWidget(self.te, stretch=2)

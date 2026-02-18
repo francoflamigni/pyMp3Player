@@ -173,9 +173,6 @@ class Player(FramelessDialog):
         self.setWindowState(
             self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         QApplication.processEvents()
-        #sz = self.dlg.prog.size()
-        #sz.setWidth(100)
-        #self.dlg.prog.setFixedSize(sz)
         if self.file_da_riprodurre:
             from mp3_tag import track
             self.open_file([track(file=self.file_da_riprodurre)])
@@ -381,17 +378,18 @@ class Player(FramelessDialog):
 
     def open_radio(self, url='', fav=''):
         if self.ply.open_radio(url, fav):
-            self.tab.setCurrentIndex(2)
-            self.tb.setCurrentIndex(2)
+            self._set_player_mode()
 
     def open_file(self, tracks=None):
         self.background(True)
         self.ply.open_file(tracks)
-        self.tab.setCurrentIndex(2)
-        self.tb.setCurrentIndex(2)
+        self._set_player_mode()
 
     def open_cd(self, drive):
         self.ply.open_cd(drive)
+        self._set_player_mode()
+
+    def _set_player_mode(self):
         self.tab.setCurrentIndex(2)
         self.tb.setCurrentIndex(2)
 
@@ -421,6 +419,7 @@ class Player(FramelessDialog):
             self.setWindowOpacity(0.7)
             self.ply.next_song_signal.connect(self._background)
             self._background(1)
+            self._set_player_mode()
 
     def _background(self, index):
         if index == 0:
@@ -437,10 +436,14 @@ class Player(FramelessDialog):
             mstr = mi[key]
             annuncio = Speaker(gender, self.appCtx.tmpDir).pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), volume)
 
-            import copy
-            ann = copy.deepcopy(mi[key])
-            ann.file = annuncio
-            self.ply.open_file([ann, mi[key]])
+            v = []
+            if annuncio:
+                import copy
+                ann = copy.deepcopy(mi[key])
+                ann.file = annuncio
+                v.append(ann)
+            v.append(mi[key])
+            self.ply.open_file(v)
 
     @contextmanager
     def suspend_background_mode(self):
@@ -500,26 +503,9 @@ class Player(FramelessDialog):
             #ret = plldlg.exec()
             if ret and lst:
                 self.dlg.setPlaylist(lst)
-            '''
-            #lst = plldlg.get_playlist()
-            self.dlg.clear_playlist()
-            for t in lst:
-                self.dlg.add_playlist(*t)
 
-            tip = self.dlg.playPlaylist.toolTip()
-            stat = {}
-            for t in lst:
-                if t[0] in stat.keys():
-                    n = stat[t[0]]
-                    stat[t[0]] = n + 1
-                else:
-                    stat[t[0]] = 1
-            lines = [f"{key}: {value}" for key, value in stat.items()]
-            tip = f"{tip}\n {'\n'.join(lines)}"
-            self.dlg.playPlaylist.setToolTip(tip)
-
-            self.dlg.switch_to_page(1)
-            '''
+    def on_close(self):
+        self.appCtx.temp_dir_obj.cleanup()
 
     def get_generi(self):
         from collections import defaultdict

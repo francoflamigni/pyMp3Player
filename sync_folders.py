@@ -13,7 +13,7 @@ from pyMyLib.utils import get_resource_file
 class CopyWorker(QThread):
     """Worker thread per l'operazione di copia asincrona."""
     # Segnale: (byte_copiati, byte_totali)
-    progress_updated = pyqtSignal(int, int)
+    progress_updated = pyqtSignal('qlonglong', 'qlonglong')
     # Segnale: (successo_bool, messaggio_errore_str)
     finished = pyqtSignal(bool, str)
 
@@ -304,6 +304,9 @@ class SyncApp(QDialog):
                 elide_path_center(self.label_B, f"Riferimento: {directory}")
                 #self.label_B.setText(f"Destinazione: {directory}")
             if self.root_A and self.root_B:
+                if self.root_A == self.root_B:
+                    QMessageBox.warning(self, "Attenzione", "Le cartelle sorgente e destinazione devono essere diverse")
+                    return
                 self.load_initial_structure()
 
 
@@ -539,6 +542,7 @@ class SyncApp(QDialog):
         target_path = item.data(0, Qt.ItemDataRole.UserRole + 2)
 
         size_needed = get_folder_size(source_path)
+        #size_needed = round(size_needed /(1024 ** 2))  #dimensione in MB
 
         basedir = os.path.dirname(target_path)
         if  os.path.exists(basedir) is False:
@@ -568,7 +572,7 @@ class SyncApp(QDialog):
             # 3. Visualizza la Progress Dialog
             self.progress_dialog = QProgressDialog(
                 f"Copia in corso: {item.text(0)}",
-                "Annulla", 0, size_needed, self)
+                "Annulla", 0, 1000, self)
             self.progress_dialog.setWindowTitle("Copia File")
             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             self.progress_dialog.show()
@@ -628,10 +632,14 @@ class SyncApp(QDialog):
     def update_progress_bar(self, bytes_copied, total_size):
         """Aggiorna la progress bar dal segnale del worker."""
         if self.progress_dialog:
-            self.progress_dialog.setValue(bytes_copied)
-            # Puoi anche aggiornare il testo descrittivo
-            self.progress_dialog.setLabelText(
-                f"Copiati {bytes_copied / 1024 ** 2:.2f} MB di {total_size / 1024 ** 2:.2f} MB")
+            if bytes_copied > 0:
+                # Calcoliamo la proporzione su scala 1000
+                valore_barra = int((bytes_copied / total_size) * 1000)
+                self.progress_dialog.setValue(valore_barra)
+                #self.progress_dialog.setValue(bytes_copied)
+                # Puoi anche aggiornare il testo descrittivo
+                self.progress_dialog.setLabelText(
+                    f"Copiati {bytes_copied / 1024 ** 2:.2f} MB di {total_size / 1024 ** 2:.2f} MB")
 
     def copy_finished(self, success, error_message):
         """Gestisce il risultato finale dell'operazione di copia."""

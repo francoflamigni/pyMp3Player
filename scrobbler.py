@@ -1,7 +1,7 @@
 import os.path
 
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-from PyQt6.QtWidgets import QApplication
+
 
 from profiler import checkpoint
 
@@ -13,7 +13,7 @@ import urllib.request
 import re
 import struct
 import time
-#from lyricsgenius import Genius
+
 logger = logging.getLogger(__package__)
 
 formatter = logging.Formatter(
@@ -255,40 +255,7 @@ class GetRadioInfo(QObject):
             # Attesa intelligente: si interrompe subito se chiami stop_event.set()
             self.stop_event.wait(timeout=self.timeout / 1000.0)
 
-    """
-    def get_title(self):
-        while not self.stop_event.is_set():
-            title = ''
-            request = urllib.request.Request(self.url, headers={'Icy-MetaData': 1})  # request metadata
-            try:
-                response = urllib.request.urlopen(request)
-            except:
-                self.radio_info_msg.emit(title)
-                continue
 
-            metas = response.headers.get('icy-metaint', '')
-            if not metas:
-                self.radio_info_msg.emit(title)
-                continue
-
-            metaint = int(metas)
-            for _ in range(10):  # # title may be empty initially, try several times
-                response.read(metaint)  # skip to metadata
-                metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte
-                metadata = response.read(metadata_length).rstrip(b'\0')
-                # extract title from the metadata
-                m = re.search(br"StreamTitle='([^']*)';", metadata)
-                if m:
-                    title = m.group(1)
-                    if title:
-                        break
-
-            if isinstance(title, str) is False:
-                encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
-                title = title.decode(encoding, errors='replace')
-            self.radio_info_msg.emit(title)
-            self.stop_event.wait(timeout=self.timeout / 1000.)
-    """
 class LyricsWorker(QObject):
     finished = pyqtSignal(str)
     def __init__(self, artist, song):
@@ -383,98 +350,23 @@ class Speaker:
         return asyncio.run(self._pronuncia(frase, vol))
 
     async def _pronuncia(self, frase, volume):
-        if not self.voce:
-            self.detect_lingua(frase)
-            await self.select_voce()
+        try:
+            if not self.voce:
+                self.detect_lingua(frase)
+                await self.select_voce()
 
-        communicate = edge_tts.Communicate(frase.title(), self.voce, volume=volume)
-        audio_data = b""
+            communicate = edge_tts.Communicate(frase.title(), self.voce, volume=volume)
+            audio_data = b""
 
-        # 1. Recupero i dati binari (MP3) in memoria
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
+            # 1. Recupero i dati binari (MP3) in memoria
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
 
-        # Salva su disco
-        file_out = os.path.join(self.tmp_dir, "Euterpe_output.mp3")
-        with open(file_out, "wb") as f:
-            f.write(audio_data)
-        return file_out
-
-"""
-def leggi_stringa_offline2(testo: list):
-    import pyttsx3
-    from langdetect import detect  # Manteniamo langdetect
-    try:
-        lingua_rilevata = detect(testo[2])
-        engine = pyttsx3.init(driverName='sapi5')
-
-        # --- Selezione Intelligente della Voce ---
-        voci = engine.getProperty('voices')
-        voce_selezionata = None
-
-        # Cerca una voce che corrisponda alla lingua rilevata
-        for voce in voci:
-            if voce.languages and lingua_rilevata.lower() in [l.split('-')[0].lower() for l in voce.languages]:
-                voce_selezionata = voce
-                break
-
-        engine.setProperty('rate', 180)
-
-        if voce_selezionata:
-            print(f"Voce selezionata ({lingua_rilevata.upper()}): {voce_selezionata.name}")
-            engine.setProperty('voice', voce_selezionata.id)
-        else:
-            print(f"Nessuna voce locale adatta trovata per la lingua {lingua_rilevata.upper()}.")
-
-        # Sintesi e Riproduzione
-        t = '.'.join(testo)
-        engine.say(t)
-        engine.runAndWait()
-        engine.stop()
-
-    except Exception as e:
-        print(f"Errore: {e}")
-"""
-"""
-def leggi_stringa_offline(testo: list):
-    from gtts import gTTS
-    from langdetect import detect
-    import soundfile as sf
-    import sounddevice as sd
-    import os
-
-    try:
-        #lingua_rilevata = detect(testo[2])
-        lingua_rilevata = detect(' '.join(testo))
-
-        # Mappa codici lingua per gTTS
-        mappa_lingue = {
-            'en': 'en', 'it': 'it', 'es': 'es', 'fr': 'fr',
-            'de': 'de', 'pt': 'pt', 'ru': 'ru', 'ja': 'ja',
-            'zh-cn': 'zh-CN', 'ar': 'ar', 'hi': 'hi', 'ko': 'ko'
-        }
-
-        lingua_gtts = mappa_lingue.get(lingua_rilevata.lower(), 'en')
-        #print(f"Lingua rilevata: {lingua_rilevata.upper()} -> gTTS: {lingua_gtts}")
-
-        # Pronuncia ogni frase con pausa di 10ms
-        for i, frase in enumerate(testo):
-            QApplication.processEvents()
-            filename = f"temp_audio_{i}.mp3"
-
-            # Genera l'audio
-            tts = gTTS(text=frase, lang=lingua_gtts, slow=False)
-            tts.save(filename)
-
-            # Leggi e riproduci l'audio
-            data, samplerate = sf.read(filename)
-            sd.play(data, samplerate)
-            sd.wait()  # Aspetta che finisca la riproduzione
-
-            # Rimuovi il file temporaneo
-            os.remove(filename)
-
-    except Exception as e:
-        print(f"Errore: {e}")
-"""
+            # Salva su disco
+            file_out = os.path.join(self.tmp_dir, "Euterpe_output.mp3")
+            with open(file_out, "wb") as f:
+                f.write(audio_data)
+            return file_out
+        except Exception as e:
+            return ''
