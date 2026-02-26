@@ -1,12 +1,12 @@
-from profiler import checkpoint
 import os
 
 import copy
-from PyQt6.QtCore import Qt, QRect, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent
+from PyQt6.QtCore import (Qt, QRect, QThreadPool, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty,
+                          QEasingCurve, QPoint, QParallelAnimationGroup)
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen, QBrush
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
-                             QApplication, QPushButton, QLineEdit, QListWidgetItem,
-                             QAbstractItemView, QMenu, QToolTip, QGraphicsOpacityEffect,
+                             QApplication, QPushButton, QLineEdit, QListWidgetItem, QAbstractButton,
+                             QAbstractItemView, QMenu, QToolTip, QGraphicsOpacityEffect, QStackedWidget,
                              QSizePolicy)
 
 from mp3_tag import Music
@@ -40,10 +40,6 @@ def printable_duration(duration):
         tm += str(h) + 'h '
     tm += str(m) + 'm ' + str(s) + 's'
     return tm
-
-
-from PyQt6.QtWidgets import QStackedWidget
-from PyQt6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup
 
 class HoverLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -117,16 +113,6 @@ class SlidingStackedWidget(QStackedWidget):
 
         self.group.finished.connect(cleanup)
         self.group.start()
-
-
-from PyQt6.QtWidgets import QAbstractButton
-from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush
-from PyQt6.QtCore import Qt, QRectF, QPropertyAnimation, pyqtProperty
-
-from PyQt6.QtWidgets import QAbstractButton
-from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush
-from PyQt6.QtCore import Qt, QRectF, QPropertyAnimation, pyqtProperty
-
 
 class HiFiToggle(QAbstractButton):
     def __init__(self, parent=None):
@@ -617,7 +603,7 @@ class MusicIndexDlg(QDialog):
     def search(self):
         txt = self.te.text()
 
-        sel = mySearch.run(self.appctx, self.music, txt)
+        sel, pls = mySearch.run(self.appctx, self.music, txt)
         if sel:
             if 'artista' in sel:
                 a = sel.split(':')[1].strip()
@@ -638,6 +624,9 @@ class MusicIndexDlg(QDialog):
                 self._select_album(album)
                 track = a2[2].strip()
                 self._select_track(track)
+        elif pls:
+            for p in pls:
+                self.add_playlist(p[0], p[1], p[2])
 
     def _select_artist(self, name):
         item = self.artists.findItems(name, Qt.MatchFlag.MatchContains)

@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu, QLabel, QGroupBox, QComboBox, QFormLayout,
                              QSpinBox, QFileDialog, QCheckBox, QGridLayout)
-
 import scrobbler
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
@@ -191,12 +190,28 @@ class mySearch(QDialog):
         h.addWidget(self.ed)
 
         self.list = QListWidget(self)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+        # Applica lo stile: Grigio per la selezione, Bianco per il testo
+        self.list.setStyleSheet("""
+            QListWidget::item:selected {
+                background-color: #808080;  /* Grigio */
+                color: white;               /* Scritta bianca */
+            }
+            QListWidget::item:selected:active {
+                background-color: #696969;  /* Grigio leggermente più scuro quando attivo */
+                outline: none;
+            }
+        """)
         self.list.doubleClicked.connect(self.selection)
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self.show_context_menu)
 
         v = QVBoxLayout(self)
         v.addLayout(h)
         v.addWidget(self.list)
         self.selected = None
+        self.pls = None
         if txt:
             self.search()
 
@@ -231,6 +246,39 @@ class mySearch(QDialog):
         self.list.addItems(mes)
         waitCursor()
 
+    def show_context_menu(self, position):
+        # Ottieni gli item selezionati
+        selected_items = self.list.selectedItems()
+        if not selected_items:
+            return
+
+        menu = QMenu()
+
+        # Esempio di azione con l'icona che abbiamo visto prima
+        playlist_icon = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
+        playlist_action = menu.addAction(playlist_icon, f"Aggiunge alla Play list")
+
+        # Esegui il menu e ottieni l'azione scelta
+        action = menu.exec(self.list.mapToGlobal(position))
+
+        if action == playlist_action:
+            self.pls = []
+            for item in selected_items:
+                t = item.text()
+                risultato = t.split(':', 1)[1].strip()
+                if 'artista' in t.lower():
+                    continue
+                else:
+                    r = risultato.split(';')
+                    artista = r[0].strip()
+                    album = r[1].strip()
+                    traccia = ''
+                    if 'traccia' in t:
+                        traccia = r[2].strip()
+
+                    self.pls.append((artista, album, traccia))
+            self.done(1)
+
     def selection(self):
         s = self.list.selectedItems()
         if len(s) > 0:
@@ -241,7 +289,7 @@ class mySearch(QDialog):
     def run(parent, music, txt=''):
         dlg = mySearch(parent, music, txt)
         if dlg.exec() == 1:
-            return dlg.selected
+            return dlg.selected, dlg.pls
         return None
 
 ''' finestra principale per le opzioni e la configurazione'''
