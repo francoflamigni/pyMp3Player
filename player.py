@@ -99,7 +99,7 @@ class Player(FramelessDialog):
 
         self.Install_idle_fun()
         self.show()
-        close_splash()
+        #close_splash()
 
     def set_windows_animations(self, enabled=True):
         import ctypes
@@ -137,6 +137,7 @@ class Player(FramelessDialog):
         self.setWindowState(
             self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         QApplication.processEvents()
+        close_splash()
         if self.file_da_riprodurre:
             from mp3_tag import track
             self.open_file([track(file=self.file_da_riprodurre)])

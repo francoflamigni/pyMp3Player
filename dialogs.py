@@ -1,3 +1,5 @@
+import os.path
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QTextCursor, QIcon, QCursor, QFontMetrics, QAction
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QStyle,
@@ -7,7 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
 import scrobbler
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
-from pyMyLib.utils import iniConf, get_resource_file
+from pyMyLib.utils import iniConf, get_resource_file, ConfDir
 from utility import AppContext
 
 from threading import Thread
@@ -394,11 +396,16 @@ class ConfigBox(QDialog):
         self.clic_exit.setCheckState(ck)
 
         cache = self.ini.get('cache')
+        if not cache:
+            cachedir = os.path.join(ConfDir(AppConfig), 'cache')
+            cache = {'dir': cachedir, 'max_size': 100, 'duration': 90}
         self.cache_dir.setText(cache['dir'])
-        self.cache_days.setText(cache['duration'])
-        self.cache_size.setText(cache['max_size'])
+        self.cache_days.setText(str(cache['duration']))
+        self.cache_size.setText(str(cache['max_size']))
 
         speaker = self.ini.get('speaker')
+        if not speaker:
+            speaker = {'gender': 'Donna', 'volume': '0'}
         self.c2.setCurrentText(speaker['gender'])
         vol = speaker['volume']
         try:
