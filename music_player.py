@@ -351,8 +351,9 @@ class MusicPlayerDlg(QDialog):
     def _songLyrics(self, txt, track):
         self.blink_lyrics_handler.stop_blinking()
         self.busy = False
-        from dialogs import lyricsDlg
-        lyricsDlg.run(self.appCtx, txt, track)
+        if txt:
+            from dialogs import lyricsDlg
+            lyricsDlg.run(self.appCtx, txt, track)
 
     def set_play_icon(self, type):
         if type == MusicPlayerDlg.Mode_Play:

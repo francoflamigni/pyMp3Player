@@ -95,10 +95,11 @@ class Player(FramelessDialog):
         self.background_mode = False
         self.create_ui()
 
-        close_splash()
+        #close_splash()
 
         self.Install_idle_fun()
         self.show()
+        close_splash()
 
     def set_windows_animations(self, enabled=True):
         import ctypes
@@ -114,43 +115,6 @@ class Player(FramelessDialog):
             ctypes.byref(value),
             ctypes.sizeof(value)
         )
-
-    '''
-    def changeEvent(self, event):
-        super().changeEvent(event)
-        #return
-        if event.type() == event.Type.WindowStateChange:
-            # Se la finestra sta per essere ripristinata
-            if not self.isMinimized():
-                win = self.window()
-
-                win.setWindowOpacity(0.0)
-                super().changeEvent(event)
-                # 1. Disabilita l'animazione di Windows "salita dalla taskbar"
-                self.set_windows_animations(False)
-
-                # 2. Rendi la finestra invisibile istantaneamente
-
-                win.hide()
-                win.show()
-                win.setUpdatesEnabled(True)
-
-                # 3. Avvia il tuo fading
-                self.restore_anim = QPropertyAnimation(win, b"windowOpacity")
-                self.restore_anim.setDuration(500)
-                self.restore_anim.setStartValue(0.0)
-                self.restore_anim.setEndValue(1.0)
-                self.restore_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-                def cleanup():
-                    # 4. Riabilita le animazioni standard per il futuro
-                    self.set_windows_animations(True)
-
-                #self.restore_anim.finished.connect(cleanup)
-                self.restore_anim.start()
-                return
-        super().changeEvent(event)
-    '''
 
     def Install_idle_fun(self):
         from utility import IdleTimeout
@@ -451,14 +415,16 @@ class Player(FramelessDialog):
 
         if self.background_mode:
             self.background(True) #se background lo disabilita
-        self.idle_timer.stop_idle_timer() # Ferma l'idle timer'
+        if self.idle_timer:
+            self.idle_timer.stop_idle_timer() # Ferma l'idle timer'
 
         try:
             yield  # ← PAUSA QUI: esegue il codice nel 'with'
 
         finally:
-            # ===== PARTE 2: Eseguita quando ESCE dal 'with' =====
-            self.idle_timer.restart_idle_timer()
+            if self.idle_timer:
+                # ===== PARTE 2: Eseguita quando ESCE dal 'with' =====
+                self.idle_timer.restart_idle_timer()
 
     def bluetooth(self):
         from bluetooth import BluetoothManager
@@ -523,7 +489,7 @@ if __name__ == "__main__":
     file_da_riprodurre = None
     if len(sys.argv) > 1:
         percorso_file = sys.argv[1]
-        if os.path.exists(percorso_file) and percorso_file.lower().endswith(".mp3"):
+        if os.path.exists(percorso_file) and (percorso_file.lower().endswith(".mp3") or percorso_file.lower().endswith(".flac")):
             file_da_riprodurre = percorso_file
 
     player = Player(file_da_riprodurre)

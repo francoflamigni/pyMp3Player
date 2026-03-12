@@ -7,6 +7,8 @@ from pathlib import Path
 from mutagen import File
 from mutagen.id3 import ID3NoHeaderError, ID3, TIT2, TPE1, TALB, TDRC, TCON, TRCK, TPE2, APIC
 from mutagen.mp3 import MP3
+from mutagen.flac import FLAC, Picture
+
 import shutil
 from pyMyLib.utils import get_resource_file
 
@@ -42,7 +44,7 @@ class AudioFile:
         self.track = ""
         self.duration = ""
         self.format_info = ""
-        self.is_mp3 = False
+        self.supported = False
         self.album_art = None  # Byte data della copertina
 
         self._extract_info()
@@ -53,9 +55,10 @@ class AudioFile:
         """Estrae informazioni dal file."""
         try:
             # Controlla se è già MP3
-            self.is_mp3 = self.file_path.suffix.lower() == '.mp3'
+            #self.is_mp3 = self.file_path.suffix.lower() == '.mp3'
 
-            if self.is_mp3:
+            if self.file_path.suffix.lower() == '.mp3':
+                self.supported = True
                 # Per MP3, usa mutagen per info di base
                 mp3_file = MP3(str(self.file_path))
                 self.duration = f"{mp3_file.info.length:.1f}"
@@ -63,6 +66,14 @@ class AudioFile:
                 if bitrate > 1000:
                     bitrate = bitrate // 1000
                 self.format_info = f"MP3 - {bitrate:.0f} kbps"
+            elif self.file_path.suffix.lower() == '.flac':
+                self.supported = True
+                flac_file = FLAC(str(self.file_path))
+                self.duration = f"{flac_file.info.length:.1f}"
+                bitrate = float(flac_file.info.bitrate)
+                if bitrate > 1000:
+                    bitrate = bitrate // 1000
+                self.format_info = f"FLAC - {bitrate:.0f} kbps"
             else:
                 # Per altri formati, usa soundfile
                 info = sf.info(str(self.file_path))
@@ -129,8 +140,12 @@ class AudioFile:
                             break
 
                 # Estrai copertina album (per MP3)
-                if self.is_mp3:
-                    self._extract_album_art(tags)
+                if self.supported:
+                    if str(self.file_path).endswith('.flac'):
+                        if audio_file.pictures:
+                            self.album_art = audio_file.pictures[0].data
+                    else:
+                        self._extract_album_art(tags)
 
                 # Estrai numero traccia dal filename se non presente nei tag
                 if not self.track:
@@ -171,7 +186,7 @@ class ConversionWorker(QThread):
 
         for i, audio_file in enumerate(self.audio_files):
             try:
-                if audio_file.is_mp3:
+                if audio_file.supported:
                     # Per MP3, copia e aggiorna solo i tag
                     success = self._update_mp3_tags(audio_file)
                 else:
@@ -194,7 +209,7 @@ class ConversionWorker(QThread):
         """Aggiorna solo i tag di un file MP3 esistente."""
         try:
             # Copia il file MP3 nella cartella di output
-            output_file = self.output_folder / f"{audio_file.file_path.stem}.mp3"
+            output_file = self.output_folder / f"{audio_file.file_path.stem}{audio_file.file_path.suffix}"
             if output_file != audio_file.file_path:
                 shutil.copy2(str(audio_file.file_path), str(output_file))
 
@@ -231,6 +246,7 @@ class ConversionWorker(QThread):
         except Exception as e:
             return False
 
+    '''
     def _add_tags(self, audio_file, mp3_file):
         """Aggiunge tag ID3 al file MP3."""
         try:
@@ -285,6 +301,81 @@ class ConversionWorker(QThread):
 
         except Exception as e:
             print(f"Errore aggiunta tag: {e}")
+    '''
+
+    def _add_tags(self, audio_file, file_path):
+        """Aggiunge tag al file audio (supporta MP3 e FLAC)."""
+        file_path_str = str(file_path)
+        title = audio_file.original_title or audio_file.generated_title
+        track = audio_file.track or audio_file.generated_track
+
+        try:
+            if file_path_str.lower().endswith('.flac'):
+                # --- GESTIONE FLAC (Vorbis Comments) ---
+                audio = FLAC(file_path_str)
+
+                if title: audio["title"] = title
+                if audio_file.artist: audio["artist"] = audio_file.artist
+                if audio_file.album: audio["album"] = audio_file.album
+                if audio_file.year: audio["date"] = audio_file.year
+                if audio_file.genre: audio["genre"] = audio_file.genre
+                if track: audio["tracknumber"] = track
+
+                # Gestione Copertina per FLAC
+                if audio_file.album_art:
+                    audio.clear_pictures()  # Rimuove vecchie copertine
+                    picture = Picture()
+                    picture.data = audio_file.album_art
+                    picture.type = 3  # Front cover
+
+                    # Determina MIME type
+                    if audio_file.album_art.startswith(b'\x89PNG'):
+                        picture.mime = u"image/png"
+                    else:
+                        picture.mime = u"image/jpeg"
+
+                    audio.add_picture(picture)
+
+                audio.save()
+
+            else:
+                # --- GESTIONE MP3 (ID3) ---
+                try:
+                    id3_tags = ID3(file_path_str)
+                except ID3NoHeaderError:
+                    id3_tags = ID3()
+
+                if title:
+                    id3_tags.add(TIT2(encoding=3, text=title))
+                if audio_file.artist:
+                    id3_tags.add(TPE1(encoding=3, text=audio_file.artist))
+                if audio_file.album:
+                    id3_tags.add(TALB(encoding=3, text=audio_file.album))
+                if audio_file.year:
+                    id3_tags.add(TDRC(encoding=3, text=audio_file.year))
+                if audio_file.genre:
+                    id3_tags.add(TCON(encoding=3, text=audio_file.genre))
+                if track:
+                    id3_tags.add(TRCK(encoding=3, text=track))
+
+                # Rimuovi e aggiungi copertina ID3
+                keys_to_remove = [k for k in id3_tags.keys() if k.startswith('APIC')]
+                for k in keys_to_remove: del id3_tags[k]
+
+                if audio_file.album_art:
+                    mime_type = 'image/jpeg'
+                    if audio_file.album_art.startswith(b'\x89PNG'):
+                        mime_type = 'image/png'
+
+                    id3_tags.add(APIC(
+                        encoding=3, mime=mime_type, type=3,
+                        desc=u'Cover', data=audio_file.album_art
+                    ))
+
+                id3_tags.save(file_path_str)
+
+        except Exception as e:
+            print(f"Errore aggiunta tag su {file_path_str}: {e}")
 
 
 class AudioConverter(QDialog):
@@ -297,6 +388,8 @@ class AudioConverter(QDialog):
         self.init_ui()
         if folder:
             self.select_folder(folder)
+        else:
+            self.save_button.setVisible(False)
 
     def init_ui(self):
         """Inizializza l'interfaccia utente."""
@@ -577,7 +670,7 @@ class AudioConverter(QDialog):
 
         count = 0
         for audio_file in self.audio_files:
-            if audio_file.is_mp3:
+            if audio_file:
                 count += 1
         if count == len(self.audio_files):
             self.mode = Mode.TAG_EDIT
@@ -667,7 +760,7 @@ class AudioConverter(QDialog):
             self.table.setItem(row, off + 8, format_item)
 
             # Tipo (MP3 o da convertire)
-            tipo_item = QTableWidgetItem("MP3 (solo tag)" if audio_file.is_mp3 else "Da convertire")
+            tipo_item = QTableWidgetItem("(solo tag)" if audio_file.supported else "Da convertire")
             tipo_item.setFlags(tipo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
         if self.audio_files:

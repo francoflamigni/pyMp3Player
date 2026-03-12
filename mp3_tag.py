@@ -1,5 +1,7 @@
 import eyed3
 from eyed3.id3 import genres
+from mutagen.flac import FLAC
+
 import os
 from threading import Thread, Lock
 from queue import Empty, Queue
@@ -22,7 +24,8 @@ GENRE = [
 
 
 def find_last(path):
-    f = os.path.join(path, '**')
+    percorso_sicuro = glob.escape(path)
+    f = os.path.join(percorso_sicuro, '**')
     list_of_files = glob.glob(f, recursive=True)
     if not list_of_files:
         return {}
@@ -90,7 +93,9 @@ class Music:
         return Music.INDEX_LOADED  # non ci sono state modifiche si può caricare l'indice
 
     def index(self, print, folder):
-        if self.init(folder) is True:
+        print('Attendi...')
+        if self.init(folder) == Music.INDEX_LOADED:
+            print(folder)
             return
         if folder == '':
             return
@@ -143,11 +148,12 @@ class Music:
                     break
                 path = os.path.join(t[0], t[1])
                 try:
-                    brano = eyed3.load(path)
-                    # qq = brano.info.time_secs
+                    brano = self._load_tag(path) #eyed3.load(path)
                 except:
-                    self._anomalie.put(path + ' eye3d error')
+                    self._anomalie.put(path + ' tag error')
                     continue
+
+                '''
                 if brano is not None and brano.tag is not None:
                     if brano.tag.title is None:
                         self._anomalie.put(path + ' no title')
@@ -173,9 +179,50 @@ class Music:
 
                     self.add_track(brano.tag, path, brano.info.time_secs)
                     count += 1
+                '''
+                self.add_track2(brano, path)
+                count += 1
             except Empty:
                 continue
         a = 0
+    def _load_tag(self, path):
+        if path.endswith('.flac'):
+            b = FLAC(path)
+            brano = {
+                'artista': b.get('artist', ['Unknown'])[0],
+                'album': b.get('album', ['Unknown'])[0],
+                'titolo': b.get('title', ['Unknown'])[0],
+                'anno': b.get('date')[0][:4],
+                'genere': b.get('genre', ['Unknown'])[0],
+                'numero': b.get('tracknumber', ['0'])[0].split('/')[0],
+                'durata_sec': b.info.length,
+                'filename': path,
+            }
+            a = 0
+        else:
+            b = eyed3.load(path)
+            brano = {
+                'artista': b.tag.artist if b.tag.artist else '',
+                'album': b.tag.album if b.tag.album else '',
+                'titolo': b.tag.title or os.path.splitext(os.path.basename(path))[0],
+                'anno': b.tag.recording_date.year if b.tag.recording_date else (b.tag.release_date.year if b.tag.release_date else 0),
+                'genere': b.tag.genre.name if b.tag.genre else '',
+                'numero': b.tag.track_num.count if b.tag.track_num else '',
+                'durata_sec': b.info.time_secs,
+                'filename': b.tag.file_info.name
+            }
+        if not brano['artista']:
+            self._anomalie.put(path + ' no artist')
+        if not brano['album']:
+            self._anomalie.put(path + ' no album')
+        if not brano['titolo']:
+            self._anomalie.put(path + ' no title')
+        if not brano['anno']:
+            self._anomalie.put(path + ' no year')
+        if not brano['numero']:
+            self._anomalie.put(path + ' no num')
+        a = 0
+        return brano
     def get_mp3(self, path):
         for root, dirs, files in os.walk(path):
             self.print(os.path.basename(root))
@@ -188,6 +235,14 @@ class Music:
             id_album = self.albums.add(tag, path)
             self.album_artist.add(id_album, id_artist)
             id_track = self.tracks.add(tag, time_secs)
+            self.album_track.add(id_album, id_track)
+
+    def add_track2(self, tags, path):
+        with self.lock:
+            id_artist = self.artists.add(tags['artista'])
+            id_album = self.albums.add2(tags, path)
+            self.album_artist.add(id_album, id_artist)
+            id_track = self.tracks.add2(tags)
             self.album_track.add(id_album, id_track)
 
     def get_artists(self):
@@ -224,9 +279,15 @@ class Music:
         alb_art = album + '@' + art
         if alb_art in self.albums.title.keys():
             alb = self.albums.title[alb_art]
-            brano = eyed3.load(alb.path)
-            if len(brano.tag.images) > 0:
-                return brano.tag.images[0].image_data
+            if alb.path.endswith('.mp3'):
+                brano = eyed3.load(alb.path)
+                if len(brano.tag.images) > 0:
+                    return brano.tag.images[0].image_data
+            elif alb.path.endswith('.flac'):
+                audio = FLAC(alb.path)
+                if audio.pictures:
+                    img_data = audio.pictures[0].data
+                    return img_data
         return None
 
     def save(self, path):
@@ -328,6 +389,20 @@ class tracks:
         self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs, genre)
         return self.id
 
+    def add2(self, tags):
+        nome = tags['titolo'] + '@' + tags['album']
+        if nome in self.name.keys():
+            return self.name[nome].id
+
+        self.id += 1
+        genre = ''
+        if tags['genere']:
+            # L'attributo .name decodifica automaticamente il codice numerico
+            # (es. 12 -> 'Other') o restituisce la stringa se non è numerico.
+            genre = tags['genere']
+        self.name[nome] = track(tags['titolo'], tags['album'], tags['artista'], self.id, tags['filename'], tags['numero'], tags['durata_sec'], genre)
+        return self.id
+
     ''' Ritorna una lista di tracce dati i loro id '''
     def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
@@ -385,6 +460,15 @@ class albums:
             year = tag.release_date.year
 
         self.title[title] = album(tag.album, year, self.id, path)
+        return self.id
+
+    def add2(self, tags, path):
+        title = tags['album'] + '@' + tags['artista']
+        if title in self.title.keys():
+            return self.title[title].id
+        self.id += 1
+
+        self.title[title] = album(tags['album'], tags['anno'], self.id, path)
         return self.id
 
     ''' Ritorna un elenco di album dato un elenco di id di album '''

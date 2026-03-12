@@ -30,12 +30,13 @@ class FFmpegWorker(QThread):
     error_occurred = pyqtSignal(str)
     ripping_finished = pyqtSignal()
 
-    def __init__(self, cd_drive: str, tracks: List[Dict], output_dir: str, quality: str, cover_path: str=''):
+    def __init__(self, cd_drive: str, tracks: List[Dict], output_dir: str, quality: str, format: str, cover_path: str=''):
         super().__init__()
         self.cd_drive = cd_drive
         self.tracks = tracks
         self.output_dir = output_dir
         self.quality = quality
+        self.format = format
         self.is_running = True
         self.current_process  = None
         self.timer = QTimer()
@@ -99,7 +100,7 @@ class FFmpegWorker(QThread):
 
                 # Sanitizza il nome del file
                 safe_title = self.sanitize_filename(f"{track_num:02d} - {title}")
-                output_file = os.path.join(self.output_dir, f"{safe_title}.mp3")
+                output_file = os.path.join(self.output_dir, f"{safe_title}.{self.format}")
 
                 self.status_updated.emit(f"Estraendo traccia {track_num}: {title}")
 
@@ -115,11 +116,29 @@ class FFmpegWorker(QThread):
                 ]
                 if self.cover_path:
                     cmd.extend(['-i', self.cover_path])
+
+                cmd.extend(['-t', f'{durata}'])
+
+                '''
                 cmd.extend([
                     '-t', f'{durata}',
                     '-c:a', 'libmp3lame',
                     '-b:a', self.quality,
                 ])
+                '''
+                if self.format == "flac":
+                    # Parametri specifici per FLAC
+                    cmd.extend([
+                        '-c:a', 'flac',
+                        '-compression_level', '8',  # Un buon compromesso velocità/dimensione
+                    ])
+                else:
+                    # Parametri per MP3 (originali)
+                    cmd.extend([
+                        '-c:a', 'libmp3lame',
+                        '-b:a', self.quality,
+                    ])
+
                 # Mappa gli stream
                 if self.cover_path:
                     cmd.extend([
@@ -289,32 +308,45 @@ class CDRipperMainWindow(QDialog):
         #output_layout.addWidget(self.browse_btn)
         hv.addWidget(output_group, stretch=2)
 
-        # Qualità
-        quality_group = QGroupBox("Quality")
-        quality_layout = QHBoxLayout(quality_group)
+        #Formato di uscita
+        formatGroup = QGroupBox("Formato")
+        formaty_layout = QHBoxLayout(formatGroup)
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["mp3", "flac"])
+        self.format_combo.setCurrentText("mp3")
+        self.format_combo.currentIndexChanged.connect(self.change_format)
+        formaty_layout.addWidget(QLabel('Formato'))
+        formaty_layout.addWidget(self.format_combo)
+        formaty_layout.addStretch()
+
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["128k", "192k", "256k", "320k"])
         self.quality_combo.setCurrentText("192k")
 
+        self.ql = QLabel("Qualità MP3:")
+        formaty_layout.addWidget(self.ql)
+        formaty_layout.addWidget(self.quality_combo)
+
+        formaty_layout.addStretch()
+
+        # Command group
+        command_group = QGroupBox("")
+        command_layout = QHBoxLayout(command_group)
         self.start_btn = QPushButton("Avvia Ripping")
         self.start_btn.clicked.connect(self.start_ripping)
 
         self.stop_btn = QPushButton("Ferma")
         self.stop_btn.clicked.connect(self.stop_ripping)
         self.stop_btn.setEnabled(False)
-
-
-        quality_layout.addWidget(QLabel("Qualità MP3:"))
-        quality_layout.addWidget(self.quality_combo)
-        quality_layout.addStretch()
-        quality_layout.addWidget(self.start_btn)
-        quality_layout.addWidget(self.stop_btn)
+        command_layout.addWidget(self.start_btn)
+        command_layout.addWidget(self.stop_btn)
 
         #output_layout.addLayout(dir_layout)
        # output_layout.addLayout(quality_layout)
 
         #layout.addWidget(output_group)
-        hv.addWidget(quality_group, stretch=2)
+        hv.addWidget(formatGroup, stretch=2)
+        hv.addWidget(command_group, stretch=2)
         layout.addLayout(hv)
 
         # Gruppo Metadata
@@ -410,6 +442,16 @@ class CDRipperMainWindow(QDialog):
         sp.setSizes([200, 1100])
 
         layout.addWidget(sp, stretch=1)
+
+    def change_format(self):
+        if self.format_combo.currentIndex() == 0:
+            self.format = 'mp3'
+            self.quality_combo.setVisible(True)
+            self.ql.setVisible(True)
+        else:
+            self.format = 'flac'
+            self.quality_combo.setVisible(False)
+            self.ql.setVisible(False)
 
     def play(self):
         sel = self.cd_drive_combo.currentText()
@@ -599,6 +641,7 @@ class CDRipperMainWindow(QDialog):
             selected_tracks,
             output_dir,
             self.quality_combo.currentText(),
+            self.format_combo.currentText(),
             self.cover_path
         )
 

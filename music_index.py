@@ -710,7 +710,7 @@ class MusicIndexDlg(QDialog):
 
     def index2(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder,
-                                                  options=QFileDialog.Option.DontUseNativeDialog)
+                                                  options=QFileDialog.Option.ShowDirsOnly) #.DontUseNativeDialog)
         self.index(folder)
 
     def index(self, folder=''):
