@@ -2,10 +2,6 @@ import os.path
 
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
-
-from profiler import checkpoint
-
-# -*- coding: utf-8 -*-
 import logging
 import urllib.error
 import urllib.parse

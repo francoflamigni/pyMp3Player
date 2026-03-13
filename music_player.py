@@ -1,22 +1,19 @@
-from profiler import checkpoint
-
 import os
 import math
 import time
-from pyMyLib.utils import iniConf, get_resource_path_pathlib, get_resource_file
+from pyMyLib.utils import get_resource_path_pathlib, get_resource_file
 
 vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc'))
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QRect
-from PyQt6.QtGui import QPixmap, QIcon, QPainter, QPen, QLinearGradient, QBrush, QColor, QFont
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect,
-                             QStyleOptionSlider)
+from PyQt6.QtCore import QSize, QTimer, pyqtSignal, QRectF
+from PyQt6.QtGui import QIcon, QPen, QLinearGradient, QBrush, QColor, QFont
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QStyle, QPushButton, QLineEdit, QComboBox,
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
 
 from pyMyLib.qtUtils import set_background, waitCursor
-from dialogs import lyric_song, AppConfig
+
 import scrobbler
 from utility import ShazamButtonHandler, songInfoDlg, AppContext
 
@@ -174,8 +171,6 @@ class MusicPlayerDlg(QDialog):
         return hs
 
     def set_position(self):
-        # Set the movie position according to the position slider.
-
         self.timer.stop()
         pos = self.positionslider.value()
         self.mediaplayer.set_position(pos / 1000.0)
@@ -209,6 +204,9 @@ class MusicPlayerDlg(QDialog):
                 border-radius: 8px;
                 margin-bottom: 0px;
                 padding: 0px;
+                /* Un leggero bordo interno per dare tridimensionalità */
+                border-top: 1px solid #ffffff;
+                border-left: 1px solid #ffffff;                
             }
         """)
 
@@ -258,24 +256,21 @@ class MusicPlayerDlg(QDialog):
     def play_stop_ui(self):
         sz = 25
         self.playbutton = QPushButton(self)
-        #self.playbutton.setFixedSize(30, 30) #♦setMaximumWidth(80)
         self._round_button_style(self.playbutton, sz)
+        self.playbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaPlay')))
         self.playbutton.clicked.connect(self.play_pause)
 
         stopbutton = QPushButton(self)
-        #stopbutton.setMaximumWidth(30)
         self._round_button_style(stopbutton, sz)
         stopbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaStop')))
         stopbutton.clicked.connect(self.stopB)
 
         self.skipBackwardbutton = QPushButton()
-        #self.skipBackwardbutton.setMaximumWidth(30)
         self._round_button_style(self.skipBackwardbutton, sz)
         self.skipBackwardbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaSkipBackward')))
         self.skipBackwardbutton.clicked.connect(lambda: self.skip(-1))
 
         self.skipFarwardbutton = QPushButton()
-        #self.skipFarwardbutton.setMaximumWidth(30)
         self._round_button_style(self.skipFarwardbutton, sz)
         self.skipFarwardbutton.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap, 'SP_MediaSkipForward')))
         self.skipFarwardbutton.clicked.connect(lambda: self.skip(1))
@@ -292,7 +287,6 @@ class MusicPlayerDlg(QDialog):
         hbt.addStretch()
 
         self.lyricbutton = QPushButton(self)
-        #self.lyricbutton.setMaximumWidth(30)
         self._round_button_style(self.lyricbutton, sz)
         self.lyricbutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'lyric.png')))
         self.lyricbutton.setToolTip('testo brano')
@@ -300,7 +294,6 @@ class MusicPlayerDlg(QDialog):
         self.blink_lyrics_handler = ShazamButtonHandler(self.lyricbutton)
 
         self.titlebutton = QPushButton(self)
-        #self.titlebutton.setMaximumWidth(30)
         self._round_button_style(self.titlebutton, sz)
         self.titlebutton.setIcon(QIcon(get_resource_file(__file__, 'icone', 'shazam.png')))
         self.titlebutton.setToolTip('riconosce brano')
@@ -1052,6 +1045,9 @@ class VolumeControl(QFrame):
                 border-radius: 8px;
                 margin-bottom: 0px;
                 padding: 0px;
+                /* Un leggero bordo interno per dare tridimensionalità */
+                border-top: 1px solid #ffffff;
+                border-left: 1px solid #ffffff;
             }
         """)
         self.update_text(vol)

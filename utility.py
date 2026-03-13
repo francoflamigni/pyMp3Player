@@ -1,13 +1,12 @@
 from PyQt6.QtGui import QPixmap, QCursor, QColor, QIcon
-from profiler import checkpoint
 import io
 import sys
 import os
 import base64
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QRect, QPropertyAnimation, \
     QEasingCurve
-from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget, QSizePolicy, \
-    QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget,
+    QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget)
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file
 from pyMyLib.qtUtils import center_in_parent

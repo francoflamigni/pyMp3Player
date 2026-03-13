@@ -223,6 +223,7 @@ class Music:
             self._anomalie.put(path + ' no num')
         a = 0
         return brano
+
     def get_mp3(self, path):
         for root, dirs, files in os.walk(path):
             self.print(os.path.basename(root))
@@ -475,7 +476,10 @@ class albums:
     def find(self, ids):
         albums = [v for v in self.title.values() if v.id in ids]
         #if albums[0].year is not None:
-        albums.sort(key=lambda x: x.year)
+        try:
+            albums.sort(key=lambda x: int(x.year))
+        except:
+            pass
         return albums
 
     def save(self):

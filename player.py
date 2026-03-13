@@ -1,14 +1,10 @@
-import time
-
-from profiler import checkpoint
-
 import os
 import sys
 
-from PyQt6.QtWidgets import (QWidget, QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
+from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
                              QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox)
-from PyQt6.QtGui import QIcon, QPixmap, QCursor, QAction, QColor, QPainter, QFont
-from PyQt6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve, QPropertyAnimation
+from PyQt6.QtGui import QIcon, QCursor, QAction, QColor
+from PyQt6.QtCore import Qt, QTimer, QEasingCurve, QPropertyAnimation
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -91,6 +87,15 @@ class Player(FramelessDialog):
         cache = Cache(ini)
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
         self.file_da_riprodurre = file_da_riprodurre
+
+        # Imposta lo sfondo nero e, opzionalmente, il testo bianco per leggibilità
+        self.setObjectName("MainFrame")
+        self.setStyleSheet("""
+            #MainFrame {
+                background-color: white;
+                border: 1px black;
+            }
+        """)
 
         self.background_mode = False
         self.create_ui()
