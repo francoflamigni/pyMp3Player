@@ -150,7 +150,9 @@ class Music:
                 try:
                     brano = self._load_tag(path) #eyed3.load(path)
                 except:
-                    self._anomalie.put(path + ' tag error')
+                    ext = os.path.splitext(path)[1].lower()
+                    if ext == '.mp3' or ext == '.flac':
+                        self._anomalie.put(path + ' tag error')
                     continue
 
                 '''
@@ -189,11 +191,11 @@ class Music:
         if path.endswith('.flac'):
             b = FLAC(path)
             brano = {
-                'artista': b.get('artist', ['Unknown'])[0],
-                'album': b.get('album', ['Unknown'])[0],
-                'titolo': b.get('title', ['Unknown'])[0],
+                'artista': b.get('artist', [''])[0],
+                'album': b.get('album', [''])[0],
+                'titolo': b.get('title', [''])[0],
                 'anno': b.get('date')[0][:4],
-                'genere': b.get('genre', ['Unknown'])[0],
+                'genere': b.get('genre', [''])[0],
                 'numero': b.get('tracknumber', ['0'])[0].split('/')[0],
                 'durata_sec': b.info.length,
                 'filename': path,
@@ -209,7 +211,7 @@ class Music:
                 'genere': b.tag.genre.name if b.tag.genre else '',
                 'numero': b.tag.track_num.count if b.tag.track_num else '',
                 'durata_sec': b.info.time_secs,
-                'filename': b.tag.file_info.name
+                'filename': path
             }
         if not brano['artista']:
             self._anomalie.put(path + ' no artist')

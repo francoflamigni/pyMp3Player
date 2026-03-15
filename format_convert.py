@@ -174,11 +174,12 @@ class ConversionWorker(QThread):
     file_converted = pyqtSignal(str, bool)
     finished = pyqtSignal()
 
-    def __init__(self, audio_files, output_folder, bitrate):
+    def __init__(self, operation, audio_files, output_folder, bitrate):
         super().__init__()
         self.audio_files = audio_files
         self.output_folder = Path(output_folder)
         self.bitrate = bitrate
+        self.operation = operation
 
     def run(self):
         """Esegue la conversione dei file."""
@@ -186,7 +187,7 @@ class ConversionWorker(QThread):
 
         for i, audio_file in enumerate(self.audio_files):
             try:
-                if audio_file.supported:
+                if self.operation == Mode.TAG_EDIT: #audio_file.supported:
                     # Per MP3, copia e aggiorna solo i tag
                     success = self._update_mp3_tags(audio_file)
                 else:
@@ -389,6 +390,7 @@ class AudioConverter(QDialog):
         if folder:
             self.select_folder(folder)
         else:
+            self.mode = Mode.FORMAT_CONVERT
             self.save_button.setVisible(False)
 
     def init_ui(self):
@@ -668,25 +670,25 @@ class AudioConverter(QDialog):
                 if audio.format_info != '':
                     self.audio_files.append(audio)
 
-        count = 0
-        for audio_file in self.audio_files:
-            if audio_file:
-                count += 1
-        if count == len(self.audio_files):
-            self.mode = Mode.TAG_EDIT
-            self.save_button.setVisible(True)
-            azioni = self.folder_label.actions()
-            if azioni:
-                azioni[0].setVisible(False)
-            #self.folder_button.setVisible(False)
+        if self.mode == Mode.FORMAT_CONVERT:
+            count = 0
+            for audio_file in self.audio_files:
+                if audio_file and 'mp3' in audio_file.format_info.lower():
+                    count += 1
+            if count == len(self.audio_files):
+                self.mode = Mode.TAG_EDIT
+                self.save_button.setVisible(True)
+                azioni = self.folder_label.actions()
+                if azioni:
+                    azioni[0].setVisible(False)
 
-        else:
-            self.mode = Mode.FORMAT_CONVERT
-            self.save_button.setVisible(False)
-            azioni = self.folder_label.actions()
-            if azioni:
-                azioni[0].setVisible(True)
-            #self.folder_button.setVisible(True)
+            else:
+                self.mode = Mode.FORMAT_CONVERT
+                self.save_button.setVisible(False)
+                azioni = self.folder_label.actions()
+                if azioni:
+                    azioni[0].setVisible(True)
+                #self.folder_button.setVisible(True)
 
         self.hide_conversion()
 
@@ -1016,6 +1018,7 @@ class AudioConverter(QDialog):
 
         # Avvia worker thread
         self.worker = ConversionWorker(
+            self.mode,
             self.audio_toconvert,
             self.output_folder,
             self.bitrate_combo.currentText()

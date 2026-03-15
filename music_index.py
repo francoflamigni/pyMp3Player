@@ -490,7 +490,7 @@ class MusicIndexDlg(QDialog):
                         v = self.music.tracks.name[trk + '@' + album]
                         dir = os.path.dirname(v.file)
                         ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
-                        (ctx.addAction(ico, "Edit tag").
+                        (ctx.addAction(ico, "Edit tags").
                          triggered.connect(lambda checked=False, ar=artist, al=album, d=dir: edit_album(ar, al, d, self)))
                     except:
                         pass
