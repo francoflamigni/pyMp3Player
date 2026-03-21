@@ -292,7 +292,7 @@ class mySearch(QDialog):
         dlg = mySearch(parent, music, txt)
         if dlg.exec() == 1:
             return dlg.selected, dlg.pls
-        return None
+        return None, None
 
 ''' finestra principale per le opzioni e la configurazione'''
 class ConfigBox(QDialog):

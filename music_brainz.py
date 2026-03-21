@@ -1,11 +1,13 @@
-import asyncio
-
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
+from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon
+
 import time
 from datetime import datetime
+import requests
 
 def similar(a, b, threshold=0.85):
     from difflib import SequenceMatcher
@@ -14,7 +16,9 @@ def similar(a, b, threshold=0.85):
 def duration(s):
     tm = '0'
     try:
-        t = int(s) / 1000
+        t = int(s)
+        if t > 1000:
+            t = int(s) / 1000
         m = int(t / 60)
         s = t % (m * 60)
         tm = f"{m}' {s:.1f}''"
@@ -22,121 +26,17 @@ def duration(s):
         pass
     return tm
 
-class AlbunInfo:
-    def __init__(self, artist_name='', album_title='', album_info=[]):
-        self.artist_name = artist_name
-        self.album_title = album_title
-        self.tracks_info = []
-
 class MusicInfo(QObject):
-    info_signal = pyqtSignal(int, AlbunInfo)
+    info_signal = pyqtSignal(object)
     def __init__(self, artist_name, album_title):
         super().__init__()
-        self.album_info = AlbunInfo(artist_name, album_title)
         self.artist_name = artist_name
         self.album_title = album_title
         self.album = {}
         self.id_artist = None
         self.id_album = None
         self.errMes = ''
-        self.finished = False
         self.setup_musicbrainz()
-
-    def album_details2(self):
-        from threading import Thread
-        Thread(target=self._album_details, daemon=True).start()
-
-    def _album_details(self):
-        try:
-            self.info_signal.emit(1, self.album_info)
-            #res = self.get_release(self.album_info.artist_name, self.album_info.album_title)
-            rg_search = musicbrainzngs.search_release_groups(
-                artist=self.album_info.artist_name,
-                release=self.album_info.album_title,
-                limit=1)
-
-            if not rg_search['release-group-list']:
-                self.info_signal.emit({})
-                return "Album non trovato."
-
-            # 1. Ottieni il Release Group ID (già fatto nel tuo codice)
-            rg_id = rg_search['release-group-list'][0]['id']
-
-            # 2. Invece di browse_releases, usa get_release_group_by_id con include=["releases"]
-            rg_details = musicbrainzngs.get_release_group_by_id(rg_id, includes=["releases"])
-
-            # 3. Filtra manualmente la lista delle release per trovare quella ufficiale/originale
-            releases = rg_details['release-group']['release-list']
-
-            # Filtriamo per status 'Official' e cerchiamo la più vecchia se possibile
-            official_releases = [r for r in releases if r.get('status') == 'Official']
-
-            if not official_releases:
-                # Se non ce ne sono di ufficiali, prendiamo la prima disponibile
-                release_id = releases[0]['id']
-            else:
-                # Opzionale: potresti voler ordinare per data per prendere la prima stampa
-                # Ma per ora prendiamo la prima della lista ufficiale
-                release_id = official_releases[0]['id']
-
-            # 4. Ora puoi procedere con la tua chiamata get_release_by_id
-            release = musicbrainzngs.get_release_by_id(release_id,
-                                                            includes=["recordings", "recording-level-rels",
-                                                                      "work-rels"])
-            tracks_info = self.album_info.tracks_info
-            # Iteriamo sui supporti (CD1, CD2, ecc.) e sulle tracce
-            for medium in release['release']['medium-list']:
-                for track in medium['track-list']:
-                    t = {
-                        'recording_id': track['recording']['id'],
-                        'title': track['recording']['title'],
-                        'duration': track['recording']['length']
-                    }
-                    tracks_info.append(t)
-                self.info_signal.emit(2, self.album_info)
-
-                for t in tracks_info:
-                    rec_details = musicbrainzngs.get_recording_by_id(t['recording_id'],
-                            includes=["work-rels", "artist-rels"])
-
-                    composers = []
-                    lyricists = []
-                    if 'work-relation-list' in rec_details['recording']:
-                        for work_rel in rec_details['recording']['work-relation-list']:
-                            work_id = work_rel['work']['id']
-
-                            # Chiamata per ottenere i crediti dell'opera
-                            work_data = musicbrainzngs.get_work_by_id(work_id, includes=["artist-rels"])
-
-                            if 'artist-relation-list' in work_data['work']:
-                                for artist_rel in work_data['work']['artist-relation-list']:
-                                    role = artist_rel['type']
-                                    name = artist_rel['artist']['name']
-
-                                    if role == 'composer':
-                                        composers.append(name)
-                                    elif role == 'lyricist':
-                                        lyricists.append(name)
-                        self.info_signal.emit(3, self.album_info)
-        except Exception as e:
-            self.info_signal.emit(0, self.album_info)
-
-        a = 0
-        return
-
-        releases = self.get_release(self.album_info.artist_name, self.album_info.album_title)
-        self.get_tracks2(releases[0]['id1'])
-        if not self.get_artist():
-            self.info_signal.emit({})
-            return
-        if not self.get_album():
-            self.info_signal.emit({})
-            return
-        self.info_signal.emit(self.album_info)
-        if not self.get_tracks():
-            self.info_signal.emit(self.album_info)
-        if not self.get_tracks_info():
-            self.info_signal.emit(self.album_info)
 
     @staticmethod
     def setup_musicbrainz():
@@ -147,9 +47,7 @@ class MusicInfo(QObject):
             "tuaemail@example.com"
         )
 
-    '''
-    Ricerca artista dato il nome
-    '''
+    ''' Ricerca artista dato il nome '''
     def get_artist(self):
         offset = 0
         limit = 100
@@ -162,14 +60,14 @@ class MusicInfo(QObject):
             for artist in artists['artist-list']:
                 if similar(artist['name'], self.artist_name):
                     self.album['artist'] = artist['name']
-                    self.fill_artist(artist)
+                    self._fill_artist(artist)
                     self.id_artist = artist['id']
                     return True
         except Exception as e:
             self.errMes = e
         return False
 
-    def fill_artist(self, artist):
+    def _fill_artist(self, artist):
         try:
             if artist['type'] == 'Group':
                 if artist['life-span']['end']:
@@ -185,24 +83,6 @@ class MusicInfo(QObject):
         except:
             pass
         return
-
-    def get_release(self, artist_name, album_title):
-        try:
-            releases = musicbrainzngs.search_release_groups(
-                query=f'artist:"{artist_name}" AND releasegroup:"{album_title}"',
-                offset=0,
-                limit=5
-            )
-            return [{
-                'id': r['id'],
-                'title': r.get('title'),
-                'date': r.get('first-release-date'),
-                'artist': r.get('artist-credit')[0]['name'],
-                'id1':  r.get('release-list')[0]['id'],
-            } for r in releases['release-group-list']]
-        except Exception as e:
-            return []
-        a = 0
 
     ''' ricerca gli album dato l'id di un artista '''
     def get_album(self):
@@ -230,6 +110,26 @@ class MusicInfo(QObject):
             self.errMes = e
 
         return False
+
+
+    def get_release(self, artist_name, album_title):
+        try:
+            releases = musicbrainzngs.search_release_groups(
+                query=f'artist:"{artist_name}" AND releasegroup:"{album_title}"',
+                offset=0,
+                limit=5
+            )
+            return [{
+                'id': r['id'],
+                'title': r.get('title'),
+                'date': r.get('first-release-date'),
+                'artist': r.get('artist-credit')[0]['name'],
+                'id1':  r.get('release-list')[0]['id'],
+            } for r in releases['release-group-list']]
+        except Exception as e:
+            return []
+        a = 0
+
 
     ''' ritorna l'elenco delle tracce dato l'id di un album '''
     def get_tracks(self):
@@ -261,25 +161,6 @@ class MusicInfo(QObject):
             self.errMes = e
         return False
 
-    def get_tracks2(self, id):
-        try:
-            results = musicbrainzngs.get_release_by_id(id, includes=["recordings"],  # "artist-credits"],
-                                                   release_type="album", release_status="official")
-            tracks = {}
-            ml = results['release']['medium-list']
-            for m in ml:
-                m1 = m['track-list']
-                for m2 in m1:
-                    t = {}
-                    t['duration'] = duration(m2['length'])
-                    tracks[m2['recording']['title']] = t
-                    a = 0
-            self.album['tracks'] = tracks
-            return True
-        except Exception as e:
-            self.errMes = e
-        return False
-
     def find(self, work, t):
         n1 = 0
         n2 = len(work) -1
@@ -301,7 +182,6 @@ class MusicInfo(QObject):
         limit = 100
         offset = 0
         works = []
-        self.finished = True
 
         trk = self.album['tracks']
         #query = f"arid:{self.id_artist} AND work:'{self.album['title']}'"
@@ -312,7 +192,6 @@ class MusicInfo(QObject):
                 result = musicbrainzngs.browse_works(
                     artist=self.id_artist,
                     includes=["release-rels", "artist-rels", "recording-rels"],
-                    #includes=["artist-rels"],
                     offset=offset,
                     limit=limit
                 )
@@ -344,98 +223,49 @@ class MusicInfo(QObject):
         return True
 
     def get_album_details(self):
-        if self.finished:
-            return False
+        if not self.get_artist():
+            return
+        self.album_info_html()
 
-        #releases = self.get_release()
-        if self.id_artist is None:
-            if not self.get_artist():
-                return False
-            if not self.get_album():
-                return False
-        elif 'tracks' not in self.album.keys():
-            if not self.get_tracks():
-                return False
-        else:
-            if not self.get_tracks_info():
-                return False
-        return  True
+        if not self.get_album():
+            return
+        self.album_info_html()
+
+        if not self.get_tracks():
+            return
+        self.album_info_html()
+        if not self.get_tracks_info():
+            return
+        self.album_info_html()
 
     ''' testo html da info struttura '''
-    def get_album_detail_string(self):
-        if self.get_album_details():
-            html = []
-            html.append((f"Title: {self.album['title']}", 'red', 18))
-            html.append((f"Artist: {self.album['artist']}", 'black', 14))
-            html.append((f"Release date: {self.album['date']}", 'black', 12))
-            html.append((f"Tracks:", 'black', 14))
+    def album_info_html(self):
+        html = []
+        html.append((f"Title: {self.album['title']}", 'red', 18))
+        html.append((f"Artist: {self.album['artist']}", 'black', 14))
+        html.append((f"Release date: {self.album['date']}", 'black', 12))
+        html.append((f"Tracks:", 'black', 14))
 
-            try:
-                i = 1
-                for t, val in self.album['tracks'].items():
-                    html.append((f"   {i}: {t}  {val['duration']}", 'blu', 12))
-                    try:
-                        for kk, vv in val['author'].items():
-                            html.append((f"     {kk}  {vv}", 'green', 8))
-                    except Exception as e:
-                        pass
-                    i += 1
-            except:
-                pass
-            return html
-        return ''
-
-
-    def get_genres_from_album(self) -> list[tuple[str, int]]:
-        """Cerca il genere di un album su MusicBrainz e restituisce (genere, voto)."""
-
-        # Passaggio 1: Ricerca del Gruppo di Pubblicazione (Release Group)
         try:
-            # Cerchiamo l'album con l'artista specificato
-            result = musicbrainzngs.search_release_groups(
-                artist=self.artist_name,
-                releasegroup=self.album_title
-            )
-        except musicbrainzngs.ResponseError as e:
-            print(f"Errore di connessione a MusicBrainz: {e}")
-            return []
+            i = 1
+            for t, val in self.album['tracks'].items():
+                html.append((f"   {i}: {t}  {val['duration']}", 'blu', 12))
+                try:
+                    for kk, vv in val['author'].items():
+                        html.append((f"     {kk}  {vv}", 'green', 8))
+                except Exception as e:
+                    pass
+                i += 1
+        except Exception as e:
+            pass
+        self.info_signal.emit(html)
 
-        release_groups = result.get('release-group-list')
-
-        if not release_groups:
-            print(f"Nessun Gruppo di Pubblicazione trovato per '{self.artist_name}' - '{self.album_title}'.")
-            return []
-
-        # Prendiamo il risultato più probabile (il primo)
-        rg_id = release_groups[0]['id']
-
-        # Passaggio 2: Lookup per ottenere i generi
-        try:
-            # Usiamo l'MBID trovato e includiamo i generi
-            rg_details = musicbrainzngs.get_release_group_by_id(
-                rg_id,
-                includes=['tags']
-            )
-        except musicbrainzngs.ResponseError as e:
-            print(f"Errore durante il recupero dei dettagli (MBID: {rg_id}): {e}")
-            return []
-
-        # 3. Accesso ai dati
-        # I generi si trovano ora nella lista 'tag-list'
-        tags_data = rg_details.get('release-group', {}).get('tag-list', [])
-
-        # Estrai il nome del tag e il suo conteggio (voto)
-        genres_list = [(t['name'], int(t['count'])) for t in tags_data]
-
-        # Ordina per voto decrescente
-        genres_list.sort(key=lambda item: item[1], reverse=True)
-
-        return genres_list
-
+    '''
     def get_cover_info(self, release_id):
         # Usa get_image_list di musicbrainzngs
         image_data = musicbrainzngs.get_image_front(release_id)
         return image_data
+    '''
 
 class CDinfo:
     def __init__(self, drive=''):
@@ -553,6 +383,8 @@ class CDinfo:
                             p =  track.get('position', '')
                             if p:
                                 p = int(p) -1
+                                if p >= len(trk):
+                                    continue
                                 tr = trk[p]
                                 tr['titolo'] = track.get('title', 'N/A')
                                 tr['length'] =  track.get('length', 'N/A')
@@ -746,7 +578,6 @@ class CDinfo:
         return info
 
 
-from PyQt6.QtCore import QObject, pyqtSignal
 class CoverArtSignals(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
@@ -794,11 +625,6 @@ class CoverArtWorker(QObject):
             self.signals.error.emit(
                 f"Errore imprevisto: {e}"
             )
-
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
-from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon
-
 
 class Worker(QThread):
     finished = pyqtSignal(list)  # Signal to notify when the task is done
@@ -858,33 +684,33 @@ class ResizingPlainTextEdit(QPlainTextEdit):
         self.setMinimumHeight(height)
 
 class AlbumInfoDlg(QDialog):
-    def __init__(self, album, run):
+    def __init__(self, mi:MusicInfo):
         super().__init__()
-        self.album = album
-        self.run = run
+        mi.info_signal.connect(self.update)
         self.initUI()
 
-    def initUI(self):
+        self.worker = Worker(mi.get_album_details)  # Create the worker thread
+        self.worker.finished.connect(self.completed)
+        self.worker.start()
 
-        self.setWindowTitle('Album info')
+    def initUI(self):
+        self.setWindowTitle('Album info...')
         self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'album_info.png')))
-        self.worker = Worker(self.run)  # Create the worker thread
-        self.worker.finished.connect(self.update)
 
         v = QVBoxLayout(self)
         self.h = QHBoxLayout()
         self.txt_box = ResizingPlainTextEdit(self)
 
-        self.update(self.album)
-
         self.h.addWidget(self.txt_box)
         v.addLayout(self.h)
         self.adjustSize()
 
+    def completed(self):
+        self.setWindowTitle('Album info')
+
     def update(self, mes):
         if mes:
             self.write_text(mes)
-            self.worker.start()
 
     def write_text(self, lines):
         """Write multiple lines of text with different colors"""
@@ -905,27 +731,23 @@ class AlbumInfoDlg(QDialog):
 
 
     @staticmethod
-    def run(album, run):
-        dlg = AlbumInfoDlg(album, run)
+    def run(mi):
+        dlg = AlbumInfoDlg(mi)
         dlg.exec()
 
-def info_aa(info:AlbunInfo):
-    a = 0
+def brainz(artist, album, tracks):
+    mi = MusicInfo(artist, album.title)
+    mi.album['title'] = album.title
+    mi.album['artist'] = artist
+    mi.album['date'] = album.year
+    mi.album['tracks'] = {}
+    for t in tracks:
+        mi.album['tracks'][t.title] = {
+            'duration': duration(t.tm_sec)
+        }
 
-def brainz(artist, album):
-    mi = MusicInfo(artist, album)
-    mi.info_signal.connect(info_aa)
-    mi.album_details2()
-    t0 = time.monotonic()
-    album_details = mi.get_album_detail_string()
-    dt1 = time.monotonic() - t0
+    AlbumInfoDlg.run(mi)
 
-    if album_details:
-        AlbumInfoDlg.run(album_details, mi.get_album_detail_string)
-
-    a = 0
-
-import requests
 class CoverDownloader(QObject):
     cover_ready = pyqtSignal(str, bytes)
     def __init__(self, app='euterpe', ver='1.5', mail='luigi.collini@gmail.com', rate_limit=1.0):
@@ -990,6 +812,7 @@ class CoverDownloader(QObject):
             print(f"Errore ricerca: {e}")
             return None
 
+    '''
     def get_recording_credits(self, recording_id):
         """
         Recupera compositori e parolieri per una specifica registrazione.
@@ -1054,7 +877,9 @@ class CoverDownloader(QObject):
 
         except Exception as e:
             return {'composers': [], 'lyricists': []}
+    '''
 
+    '''
     def get_album_info(self, release_id, include_credits=False):
         """
         Recupera TUTTE le informazioni dell'album.
@@ -1201,6 +1026,7 @@ class CoverDownloader(QObject):
         except Exception as e:
             print(f"Errore recupero info: {e}")
             return None
+    '''
 
     def get_cover(self, release_id, size='500'):
         """
@@ -1228,7 +1054,7 @@ class CoverDownloader(QObject):
 
         return response.content
 
-
+    '''
     def download_album_info(self, artist, album, include_credits=False):
         """
         Recupera informazioni complete dell'album cercando prima la release.
@@ -1243,8 +1069,8 @@ class CoverDownloader(QObject):
         """
         print(f"🔍 Cerco: {artist} - {album}")
 
-        mi = MusicInfo(artist, album)
-        releases1 = mi.get_release()
+        #mi = MusicInfo(artist, album)
+        #releases1 = mi.get_release()
 
         # 1. Cerca release
         releases = self.search_release_fast(artist, album, limit=3)
@@ -1271,6 +1097,7 @@ class CoverDownloader(QObject):
             print(f"  ✗ Errore recupero informazioni")
 
         return info
+    '''
 
     def download_cover(self, artist='', album='', id='', size='500'):
         from threading import Thread

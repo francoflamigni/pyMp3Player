@@ -119,13 +119,6 @@ class FFmpegWorker(QThread):
 
                 cmd.extend(['-t', f'{durata}'])
 
-                '''
-                cmd.extend([
-                    '-t', f'{durata}',
-                    '-c:a', 'libmp3lame',
-                    '-b:a', self.quality,
-                ])
-                '''
                 if self.format == "flac":
                     # Parametri specifici per FLAC
                     cmd.extend([

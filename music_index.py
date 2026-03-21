@@ -19,12 +19,12 @@ from dialogs import lyric_song, mySearch
 from utility import myList, MusicList, AppContext, human_size
 
 
-def info_album(artist, album, parent=None):
+def info_album(artist, album, tracks, parent=None):
     #from music_brainz import CDinfo
     #cdi = CDinfo()
     #df = cdi.detect_info_by_metadata(None, artist, album)
     from music_brainz import brainz
-    brainz(artist, album)
+    brainz(artist, album, tracks)
 
 def edit_album(artist, album, dir, parent=None):
     from format_convert import AudioConverter
@@ -469,6 +469,7 @@ class MusicIndexDlg(QDialog):
                 if not album:
                     return
                 track = '' # track vuoto ad indicare tutte quelle dell'album
+                tracks, alb = self.music.find_tracks_ext(album, artist)
             else: #siamo nella lista tracce
                 album = self.albums.selectedItems()
                 if not album:
@@ -483,7 +484,7 @@ class MusicIndexDlg(QDialog):
                 ico = QIcon(get_resource_file(__file__, 'icone', 'lyric.png'))
                 ctx.addAction(ico, "Testo").triggered.connect(lambda checked=False, a=artist, t=track, c=self.appctx: lyric_song(a, t, c))
             else:
-                ctx.addAction("Informazioni").triggered.connect(lambda  checked=False, ar=artist, al=album: info_album(ar, al))
+                ctx.addAction("Informazioni").triggered.connect(lambda  checked=False, ar=artist, al=alb, tr=tracks: info_album(ar, al, tr))
                 if self.tracks.count():
                     trk = self.tracks.item(0).text()
                     try:

@@ -149,7 +149,7 @@ class Music:
                 path = os.path.join(t[0], t[1])
                 try:
                     brano = self._load_tag(path) #eyed3.load(path)
-                except:
+                except Exception as e:
                     ext = os.path.splitext(path)[1].lower()
                     if ext == '.mp3' or ext == '.flac':
                         self._anomalie.put(path + ' tag error')
@@ -269,6 +269,16 @@ class Music:
             tracks_id = self.album_track.find_tracks(alb.id)
             tracks = self.tracks.find(tracks_id, art)
         return tracks
+
+    def find_tracks_ext(self, album, art=''):
+        tracks = []
+        alb = {}
+        alb_art = album + '@' + art
+        if alb_art in self.albums.title.keys():
+            alb = self.albums.title[alb_art]
+            tracks_id = self.album_track.find_tracks(alb.id)
+            tracks = self.tracks.find_ext(tracks_id, art)
+        return tracks, alb
 
     def find_artist_by_album(self, id_album):
         for t in self.album_artist.a_a:  # t[0] id album, t[1] id artista
@@ -412,6 +422,12 @@ class tracks:
         #if tr[0].num is not None:
         tr.sort(key=lambda x: x.num if x.num is not None else 0)
         return [t.title for t in tr if art in t.artist]
+
+    def find_ext(self, ids, art=''):
+        tr = [v for v in self.name.values() if v.id in ids]
+        #if tr[0].num is not None:
+        tr.sort(key=lambda x: x.num if x.num is not None else 0)
+        return [t for t in tr if art in t.artist]
 
     def size(self):
         return len(self.name)

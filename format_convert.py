@@ -387,6 +387,7 @@ class AudioConverter(QDialog):
         self.populating = False
         self.mode = Mode.TAG_EDIT
         self.init_ui()
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         if folder:
             self.select_folder(folder)
         else:
@@ -459,15 +460,28 @@ class AudioConverter(QDialog):
 
         conversion_layout.addWidget(QLabel("Bitrate:"))
         self.bitrate_combo = QComboBox()
+        self.bitrate_combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.bitrate_combo.addItems(["128k", "192k", "256k", "320k"])
         self.bitrate_combo.setCurrentText("320k")
         conversion_layout.addWidget(self.bitrate_combo)
 
         conversion_layout.addStretch()
 
-        self.output_button = QPushButton("Scegli Cartella Output")
-        self.output_button.clicked.connect(self.select_output_folder)
-        conversion_layout.addWidget(self.output_button)
+        self.output_folder_edt = QLineEdit() #QLabel("Nessuna cartella selezionata")
+        self.output_folder_edt.setReadOnly(True)
+        self.output_folder_edt.setPlaceholderText("Nessuna cartella selezionata")
+        self.output_folder_edt.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_browse = QAction(icone_browse, "browse", self)
+        azione_browse.triggered.connect(self.select_output_folder)
+        self.output_folder_edt.addAction(
+            azione_browse,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
+
+        #self.output_button = QPushButton("Scegli Cartella Output")
+        #self.output_button.clicked.connect(self.select_output_folder)
+        conversion_layout.addWidget(self.output_folder_edt)
 
         self.convert_button = QPushButton("Elabora Tutti")
         self.convert_button.clicked.connect(self.start_conversion)
@@ -480,15 +494,22 @@ class AudioConverter(QDialog):
         return conversion_group
 
     def hide_conversion(self):
-        hide = self.mode == Mode.FORMAT_CONVERT
+        show = self.mode == Mode.FORMAT_CONVERT
         """Mostra o nasconde i controlli di conversione senza usare nuovi membri della classe"""
         # Trova il QGroupBox per nome
         for group in self.findChildren(QGroupBox, None):
             if group and group.title() == "Conversione":
-                group.setVisible(hide)
+                group.setVisible(show)
+                QApplication.processEvents()
+
                 # Nascondi/mostra tutti i widget figli
+                '''
                 for widget in group.findChildren(QWidget):
-                    widget.setVisible(hide)
+                    widget.setVisible(show)
+                if show:
+                    self.output_folder_edt.setFocus(Qt.FocusReason.OtherFocusReason)
+                    QApplication.processEvents()
+                '''
                 break
 
     def setup_folder(self):
@@ -988,7 +1009,7 @@ class AudioConverter(QDialog):
         folder = QFileDialog.getExistingDirectory(self, "Seleziona cartella di output")
         if folder:
             self.output_folder = folder
-            self.output_button.setText(f"Output: {Path(folder).name}")
+            self.output_folder_edt.setText(folder)
             self.convert_button.setEnabled(bool(self.audio_files))
 
     def start_conversion(self):
@@ -1032,10 +1053,12 @@ class AudioConverter(QDialog):
         """Callback per file convertito."""
         status = "✓" if success else "✗"
         basename = os.path.basename(filename)
-        items = self.table.findItems(basename, Qt.MatchFlag.MatchExactly)
-        if items:
-            track_num = items[0].row()
-            self.table.item(track_num, 0).setCheckState(Qt.CheckState.Unchecked)
+        self.status_label.setText(f"Elaborazione di {basename} terminata")
+        if self.mode == Mode.FORMAT_CONVERT:
+            items = self.table.findItems(basename, Qt.MatchFlag.MatchExactly)
+            if items:
+                track_num = items[0].row()
+                self.table.item(track_num, 0).setCheckState(Qt.CheckState.Unchecked)
         print(f"{status} {filename}")
 
     def on_conversion_finished(self):
