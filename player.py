@@ -2,7 +2,7 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox)
+                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox, QDialog)
 from PyQt6.QtGui import QIcon, QCursor, QAction, QColor
 from PyQt6.QtCore import Qt, QTimer, QEasingCurve, QPropertyAnimation
 
@@ -384,6 +384,7 @@ class Player(FramelessDialog):
             except:
                 pass
         else:
+            self.close_modal()
             self.background_mode = True
             self.titleBar.setTitle("Euterpe\U0001F535")
             self.setWindowOpacity(0.7)
@@ -414,6 +415,17 @@ class Player(FramelessDialog):
                 v.append(ann)
             v.append(mi[key])
             self.ply.open_file(v)
+
+    def close_modal(self):
+        top_widgets = QApplication.topLevelWidgets()
+
+        for widget in top_widgets:
+            # Controlla se il widget è una QDialog e se è modale
+            if isinstance(widget, QDialog) and widget.isModal():
+                # .reject() è meglio di .close() per i dialoghi perché
+                # simula la pressione del tasto ESC o il tasto "Annulla"
+                widget.reject()
+        a = 0
 
     @contextmanager
     def suspend_background_mode(self):

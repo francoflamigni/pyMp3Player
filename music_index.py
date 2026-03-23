@@ -3,7 +3,7 @@ import os
 import copy
 from PyQt6.QtCore import (Qt, QRect, QThreadPool, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty,
                           QEasingCurve, QPoint, QParallelAnimationGroup)
-from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen, QBrush
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QAbstractButton,
                              QAbstractItemView, QMenu, QToolTip, QGraphicsOpacityEffect, QStackedWidget,
@@ -16,15 +16,7 @@ from pyMyLib.utils import get_resource_file
 from sync_folders import get_folder_size
 
 from dialogs import lyric_song, mySearch
-from utility import myList, MusicList, AppContext, human_size
-
-
-def info_album(artist, album, tracks, parent=None):
-    #from music_brainz import CDinfo
-    #cdi = CDinfo()
-    #df = cdi.detect_info_by_metadata(None, artist, album)
-    from music_brainz import brainz
-    brainz(artist, album, tracks)
+from utility import myList, AppContext, human_size
 
 def edit_album(artist, album, dir, parent=None):
     from format_convert import AudioConverter
@@ -214,8 +206,6 @@ class MusicIndexDlg(QDialog):
 
         self.prog = QLineEdit() #QLabel('')
         self.prog.setReadOnly(True)
-        #self.prog.setFixedWidth(350) # setMinimumWidth(400)
-        #self.prog.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         icone_folder = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
         azione_folder = QAction(icone_folder, "browse", self)
@@ -225,8 +215,7 @@ class MusicIndexDlg(QDialog):
             QLineEdit.ActionPosition.LeadingPosition
         )
 
-        self.te = HoverLineEdit() #QLineEdit()
-        #self.te.setMinimumWidth(200)
+        self.te = HoverLineEdit()
         self.te.textChanged.connect(self.list_search)
         self.te.returnPressed.connect(self.search)
 
@@ -258,7 +247,7 @@ class MusicIndexDlg(QDialog):
         h0.addWidget(self.te, stretch=2)
         h0.addStretch()
 
-        self.artists = MusicList(self, show_tip=self.show_tip, hide_tip=self.hide_tip, label='artisti', cursor=1)
+        self.artists = myList(self, 'artisti', cursor=1)
         self.artists.setStyleSheet("""
             QListWidget::item:selected {
                 background-color: #FFFF77; /* Colore di sfondo della selezione */
@@ -312,7 +301,6 @@ class MusicIndexDlg(QDialog):
         )
 
         self.tab = SlidingStackedWidget() #QStackedWidget()
-
         self.tab.setMaximumWidth(250)
 
         self.pix = QLabel()
@@ -352,34 +340,18 @@ class MusicIndexDlg(QDialog):
 
         v.addLayout(h0)
         v.addWidget(splitter2)
-        '''
-        self.res = self.music.init(self.last_folder)
-        if self.res == self.music.INDEX_LOADED:
-            sz = int(get_folder_size(self.last_folder))
-            self.stat = f"""
-                    {len(self.music.artists.name)} Artisti\n
-                    {len(self.music.albums.title)} Album\n 
-                    {len(self.music.tracks.name)} Tracce\n
-                    {human_size(sz)} Su disco"""
-            self.prog.setToolTip(self.stat)
-            self.artists_sav = copy.deepcopy(self.music.artists)
-            self.set_artists()
-        elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
-            self.print('La cartella indicata non esiste o non contiene file')
-        self.print(self.last_folder)
-        '''
         self.print(f"Loading {self.last_folder}")
 
         self.artists.installEventFilter(self)
 
         self.te.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        #self.te.setFocus()
 
     def showEvent(self, event):
         super().showEvent(event)
         # Ogni volta che questa pagina viene mostrata, prendi il fuoco
         self.te.setFocus()
 
+    '''
     def show_tip(self, txt, pos):
         from utility import WikipediaWorker
 
@@ -411,6 +383,7 @@ class MusicIndexDlg(QDialog):
         # Se il worker che ha finito è quello attualmente tracciato, resettalo.
         # (Opzionale: necessario solo se si volesse fare cleanup specifico)
         pass
+    '''
 
     def list_search(self):
         txt = self.te.text()
@@ -450,8 +423,6 @@ class MusicIndexDlg(QDialog):
     def contextMenu(self, p, wd, it):
         pd = wd.mapToGlobal(p)
         ctx = QMenu(self)
-        if wd == self.artists: #nessuna azione nella lista artisti
-            return
         if wd == self.plst: #nella lista play list rimuove tutti o selezionati
             ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_remove.png'))
             ctx.addAction(ico, "Rimuove tutti").triggered.connect(lambda x: self.remove_playlist('all'))
@@ -464,7 +435,11 @@ class MusicIndexDlg(QDialog):
             if not artist: #l'artista deve essere selezionato
                 return
             artist = artist[0].text()
-            if wd == self.albums: #se lista album it è l'elemento selezionato
+            if wd == self.artists:  # nessuna azione nella lista artisti
+                ctx.addAction("Informazioni").triggered.connect(
+                    lambda checked=False, ar=artist: self.info_artist(ar))
+
+            elif wd == self.albums: #se lista album it è l'elemento selezionato
                 album = it.text()
                 if not album:
                     return
@@ -478,26 +453,34 @@ class MusicIndexDlg(QDialog):
                     album = album[0].text()
                 track = it.text()
 
-            ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
-            ctx.addAction(ico, "Aggiunge alla playlist").triggered.connect(lambda checked=False, a=artist, b=album, c=track: self.add_playlist(a, b, c))
-            if wd == self.tracks:
-                ico = QIcon(get_resource_file(__file__, 'icone', 'lyric.png'))
-                ctx.addAction(ico, "Testo").triggered.connect(lambda checked=False, a=artist, t=track, c=self.appctx: lyric_song(a, t, c))
-            else:
-                ctx.addAction("Informazioni").triggered.connect(lambda  checked=False, ar=artist, al=alb, tr=tracks: info_album(ar, al, tr))
-                if self.tracks.count():
-                    trk = self.tracks.item(0).text()
-                    try:
-                        v = self.music.tracks.name[trk + '@' + album]
-                        dir = os.path.dirname(v.file)
-                        ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
-                        (ctx.addAction(ico, "Edit tags").
-                         triggered.connect(lambda checked=False, ar=artist, al=album, d=dir: edit_album(ar, al, d, self)))
-                    except:
-                        pass
-                a = 0
+            if wd != self.artists:
+                ico = QIcon(get_resource_file(__file__, 'icone', 'playlist_add.png'))
+                ctx.addAction(ico, "Aggiunge alla playlist").triggered.connect(lambda checked=False, a=artist, b=album, c=track: self.add_playlist(a, b, c))
+                if wd == self.tracks:
+                    ico = QIcon(get_resource_file(__file__, 'icone', 'lyric.png'))
+                    ctx.addAction(ico, "Testo").triggered.connect(lambda checked=False, a=artist, t=track, c=self.appctx: lyric_song(a, t, c))
+                else:
+                    ctx.addAction("Informazioni").triggered.connect(lambda  checked=False, ar=artist, al=alb, tr=tracks: self.info_album(ar, al, tr))
+                    if self.tracks.count():
+                        trk = self.tracks.item(0).text()
+                        try:
+                            v = self.music.tracks.name[trk + '@' + album]
+                            dir = os.path.dirname(v.file)
+                            ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
+                            (ctx.addAction(ico, "Edit tags").
+                             triggered.connect(lambda checked=False, ar=artist, al=album, d=dir: edit_album(ar, al, d, self)))
+                        except:
+                            pass
 
         ctx.exec(pd)
+
+    def info_artist(self, artist):
+        from utility import ArtistInfoDlg
+        ArtistInfoDlg.run(self.appctx.mainWindow, artist, self.appctx.cache)
+
+    def info_album(self, artist, album, tracks):
+        from music_brainz import AlbumInfoDlg
+        AlbumInfoDlg.run(self.appctx.mainWindow, artist, album, tracks)
 
     def play_item(self, lst):
         if lst == self.albums:

@@ -1,33 +1,47 @@
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit
-from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread, QEvent
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QLabel, QFrame, QScrollArea
+from PyQt6.QtGui import QBrush, QTextCharFormat, QColor, QFont, QFontMetrics, QIcon, QPalette
 
 import time
 from datetime import datetime
+from pyMyLib.qtUtils import center_in_parent
 import requests
 
 def similar(a, b, threshold=0.85):
     from difflib import SequenceMatcher
     return SequenceMatcher(None, a.lower(), b.lower()).ratio() > threshold
 
-def duration(s):
+def duration(s, ms=False):
     tm = '0'
     try:
         t = int(s)
-        if t > 1000:
+        if ms:
             t = int(s) / 1000
         m = int(t / 60)
         s = t % (m * 60)
-        tm = f"{m}' {s:.1f}''"
+        tm = f"{m}' {s:.0f}''"
     except:
         pass
     return tm
 
+def to_sec(time_str):
+    clean_str = time_str.replace('"', '').replace("'", " ")
+
+    # Dividiamo la stringa in una lista di sottostringhe
+    parts = clean_str.split()
+
+    # Convertiamo in interi (assumendo che il primo sia minuti e il secondo secondi)
+    minutes = int(parts[0])
+    seconds = int(parts[1])
+
+    # Calcolo dei secondi totali
+    return (minutes * 60) + seconds
+
 class MusicInfo(QObject):
-    info_signal = pyqtSignal(object)
+    info_signal = pyqtSignal(str, str)
     def __init__(self, artist_name, album_title):
         super().__init__()
         self.artist_name = artist_name
@@ -152,7 +166,7 @@ class MusicInfo(QObject):
                     m1 = m['track-list']
                     for m2 in m1:
                         t = {}
-                        t['duration'] = duration(m2['length'])
+                        t['duration'] = duration(m2['length'], True)
                         tracks[m2['recording']['title']] = t
                         a = 0
                 self.album['tracks'] = tracks
@@ -238,34 +252,41 @@ class MusicInfo(QObject):
             return
         self.album_info_html()
 
+    def get_html_mes(self, color, size, mes, pos='left', indent=0):
+        return f'''<p style="font-family: Arial; color: {color}; font-size: {size}px; text-align: {pos}; text-indent: {indent}px;" >
+        {mes}
+        </P>'''
+
     ''' testo html da info struttura '''
     def album_info_html(self):
-        html = []
-        html.append((f"Title: {self.album['title']}", 'red', 18))
-        html.append((f"Artist: {self.album['artist']}", 'black', 14))
-        html.append((f"Release date: {self.album['date']}", 'black', 12))
-        html.append((f"Tracks:", 'black', 14))
+        hr_style = f"border: 0; height: 2px; background-color: white; width: 80%;"
+        html1 = []
 
+        html1.append(self.get_html_mes('red', 26, f"Titolo: {self.album['title']}", pos='center'))
+        html1.append(self.get_html_mes('white', 20, f"Artista: {self.album['artist']}", pos='center'))
+        html1.append(self.get_html_mes('yellow', 14, f"Edito il: {self.album['date']}", pos='center'))
+        html1.append(f'<hr style="{hr_style}">')
+        html1.append(self.get_html_mes('white', 18, f"Tracce:"))
+
+        html2 = []
         try:
             i = 1
+            tot = 0
             for t, val in self.album['tracks'].items():
-                html.append((f"   {i}: {t}  {val['duration']}", 'blu', 12))
+                html2.append(self.get_html_mes('lightblue', 16,
+                    f'<span style="color: white;">{i}:</span> {t}  <span style="color: white;">{val['duration']}</span>', indent=12))
+                tot += to_sec(val['duration'])
                 try:
                     for kk, vv in val['author'].items():
-                        html.append((f"     {kk}  {vv}", 'green', 8))
+                        html2.append(self.get_html_mes('lightgreen', 12, f"     {kk}  {vv}", indent=18))
                 except Exception as e:
                     pass
                 i += 1
+            html1.insert(3, self.get_html_mes('cyan', 14, f"Durata: {duration(tot)}", pos='center'))
         except Exception as e:
             pass
-        self.info_signal.emit(html)
+        self.info_signal.emit('\n'.join(html1), '\n'.join(html2))
 
-    '''
-    def get_cover_info(self, release_id):
-        # Usa get_image_list di musicbrainzngs
-        image_data = musicbrainzngs.get_image_front(release_id)
-        return image_data
-    '''
 
 class CDinfo:
     def __init__(self, drive=''):
@@ -638,115 +659,150 @@ class Worker(QThread):
         self.finished.emit(a)
 
 
-class ResizingPlainTextEdit(QPlainTextEdit):
-    def __init__(self, parent):
+class HtmlInfoDlg(QDialog):
+    def __init__(self, parent=None, **kwargs):
         super().__init__(parent)
-        # Enable auto resize
-        self.document().contentsChanged.connect(self.sizeChange)
-
-        # Set some reasonable defaults
-        self.setMinimumWidth(200)
-        self.setMinimumHeight(50)
-
-    def sizeChange(self):
-        # Get the size of the document contents
-        font_metrics = QFontMetrics(self.font())
-
-        # Calculate width based on the longest line
-        text = self.toPlainText()
-        lines = text.split('\n')
-        max_width = 0
-        for line in lines:
-            line_width = font_metrics.horizontalAdvance(line)
-            max_width = max(max_width, line_width)
-
-        # Calculate height based on number of lines and line height
-        num_lines = len(lines)
-        line_height = font_metrics.lineSpacing()
-        total_height = num_lines * line_height
-
-        # Add margins and extra space
-        margins = self.contentsMargins()
-        width = max_width + margins.left() + margins.right() + 30  # Extra space for scrollbar
-        height = total_height + margins.top() + margins.bottom() + 15  # Extra padding
-
-        # Add space for the document margins
-        doc_margin = 8  # Approximate document margins
-        width += doc_margin * 2
-        height += doc_margin * 2
-
-        # Set minimum sizes
-        width = max(width, self.minimumWidth())
-        height = max(height, self.minimumHeight())
-
-        # Set size of the text edit
-        self.setMinimumWidth(width)
-        self.setMinimumHeight(height)
-
-class AlbumInfoDlg(QDialog):
-    def __init__(self, mi:MusicInfo):
-        super().__init__()
-        mi.info_signal.connect(self.update)
+        self.parent = parent
         self.initUI()
+        self.initWorker(kwargs)
+
+    def initWorker(self, args):
+        pass
+
+    def initUI(self):
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setWindowOpacity(0.0)
+        # Layout principale della finestra
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        self.lab1 = QLabel(self)
+        self.lab1.setStyleSheet("""
+                    background-color: #333; 
+                    color: white; 
+                    padding: 15px; 
+                    border: none;
+                """)
+
+        # 1. Creiamo la Scroll Area
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # Limiti della finestra
+        self.scroll.setMinimumWidth(400)
+        self.scroll.setMaximumWidth(600)
+        self.scroll.setMinimumHeight(400)
+        self.scroll.setMaximumHeight(600)  # Oltre questo appare lo scroll
+        self.scroll.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #555;
+                background-color: #333;
+            }
+
+            QScrollBar:vertical {
+                border: none;
+                background: #222;       /* Colore del binario */
+                width: 10px;            /* Larghezza della barra */
+                margin: 0px 0px 0px 0px;
+            }
+
+            QScrollBar::handle:vertical {
+                background: #555;       /* Colore della maniglia */
+                min-height: 20px;
+                border-radius: 5px;     /* Rende la barra arrotondata */
+            }
+
+            QScrollBar::handle:vertical:hover {
+                background: #777;       /* Colore quando ci passi sopra il mouse */
+            }
+
+            /* Rimuove i pulsanti freccia sopra e sotto per un look più moderno */
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+
+        # 2. Creiamo la Label che starà dentro lo scroll
+        self.content_label = QLabel()
+        self.content_label.setTextFormat(Qt.TextFormat.RichText)
+        self.content_label.setWordWrap(True)
+        self.content_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        # Stile scuro come avevi chiesto
+        self.content_label.setStyleSheet("""
+                    background-color: #333; 
+                    color: white; 
+                    padding: 15px; 
+                    border: none;
+                """)
+
+        # 3. Assembliamo: Label -> ScrollArea -> Layout Finestra
+        self.scroll.setWidget(self.content_label)
+        v.addWidget(self.lab1)
+        v.addWidget(self.scroll)
+        self.hide()
+
+    def mousePressEvent(self, event):
+        self.close()
+        super().mousePressEvent(event)
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.ActivationChange:
+            if not self.isActiveWindow():
+                print("1")
+            else:
+                print("0")
+                a = 0
+        super().changeEvent(event)
+
+    def completed(self):
+        pass
+
+    def update(self, html1, html2):
+        if html1:
+            self.setWindowOpacity(1.0)
+            # Imposta il testo HTML
+            self.lab1.setText(html1)
+            self.content_label.setText(html2)
+
+            # Chiedi alla finestra di adattarsi al nuovo contenuto
+            self.adjustSize()
+
+            # Centra la finestra (usando la tua funzione esterna)
+            center_in_parent(self, self.parent)
+            self.show()
+
+
+class AlbumInfoDlg(HtmlInfoDlg):
+    @staticmethod
+    def run(parent, artist, album, tracks):
+        mi = MusicInfo(artist, album.title)
+        mi.album['title'] = album.title
+        mi.album['artist'] = artist
+        mi.album['date'] = album.year
+        mi.album['tracks'] = {}
+        for t in tracks:
+            mi.album['tracks'][t.title] = {
+                'duration': duration(t.tm_sec)
+            }
+        AlbumInfoDlg(parent, info_music=mi).exec()
+
+    def initWorker(self, kwargs):
+        mi = kwargs.get('info_music')
+        #mi = args[1]
+        mi.info_signal.connect(self.update)
 
         self.worker = Worker(mi.get_album_details)  # Create the worker thread
         self.worker.finished.connect(self.completed)
         self.worker.start()
 
-    def initUI(self):
-        self.setWindowTitle('Album info...')
-        self.setWindowIcon(QIcon(get_resource_file(__file__, 'icone', 'album_info.png')))
 
-        v = QVBoxLayout(self)
-        self.h = QHBoxLayout()
-        self.txt_box = ResizingPlainTextEdit(self)
-
-        self.h.addWidget(self.txt_box)
-        v.addLayout(self.h)
-        self.adjustSize()
-
-    def completed(self):
-        self.setWindowTitle('Album info')
-
-    def update(self, mes):
-        if mes:
-            self.write_text(mes)
-
-    def write_text(self, lines):
-        """Write multiple lines of text with different colors"""
-        self.txt_box.clear()
-        cursor = self.txt_box.textCursor()
-
-        for line, color, font_size in lines:
-            # Create a new text format with the specified color
-            text_format = QTextCharFormat()
-            text_format.setForeground(QBrush(QColor(color)))
-            font = QFont()
-            font.setPointSize(font_size)
-            text_format.setFont(font)
-
-            # Insert the text with the new format
-            cursor.insertText(line, text_format)
-            cursor.insertBlock()
-
-
-    @staticmethod
-    def run(mi):
-        dlg = AlbumInfoDlg(mi)
-        dlg.exec()
-
-def brainz(artist, album, tracks):
-    mi = MusicInfo(artist, album.title)
-    mi.album['title'] = album.title
-    mi.album['artist'] = artist
-    mi.album['date'] = album.year
-    mi.album['tracks'] = {}
-    for t in tracks:
-        mi.album['tracks'][t.title] = {
-            'duration': duration(t.tm_sec)
-        }
-
-    AlbumInfoDlg.run(mi)
 
 class CoverDownloader(QObject):
     cover_ready = pyqtSignal(str, bytes)

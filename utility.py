@@ -1,16 +1,17 @@
-from PyQt6.QtGui import QPixmap, QCursor, QColor, QIcon
+from PyQt6.QtGui import QPixmap, QCursor, QColor, QIcon, QPalette, QFontMetrics
 import io
 import sys
 import os
 import base64
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QRect, QPropertyAnimation, \
-    QEasingCurve
+    QEasingCurve, QThreadPool
 from PyQt6.QtWidgets import (QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget,
-    QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget)
+                             QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget, QPlainTextEdit)
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file
 from pyMyLib.qtUtils import center_in_parent
 from tempfile import TemporaryDirectory
+from music_brainz import HtmlInfoDlg
 
 
 def create_cursor(png_path, width=20, height=20, hotspot_x=10, hotspot_y=10):
@@ -116,22 +117,68 @@ def textwrap(txt, width=50):
 
     return stri
 
+class ResizingPlainTextEdit(QPlainTextEdit):
+    def __init__(self, parent):
+        super().__init__(parent)
+        # Enable auto resize
+        self.document().contentsChanged.connect(self.sizeChange)
+
+        # Set some reasonable defaults
+        self.setMinimumWidth(200)
+        self.setMinimumHeight(50)
+
+    def sizeChange(self):
+        # Get the size of the document contents
+        font_metrics = QFontMetrics(self.font())
+
+        # Calculate width based on the longest line
+        text = self.toPlainText()
+        lines = text.split('\n')
+        max_width = 0
+        total_height = 0
+        for line in lines:
+            line_width = font_metrics.horizontalAdvance(line)
+            max_width = max(max_width, line_width)
+            #total_height +=
+
+        # Calculate height based on number of lines and line height
+        num_lines = len(lines)
+        line_height = font_metrics.lineSpacing()
+        total_height = num_lines * line_height
+
+        # Add margins and extra space
+        margins = self.contentsMargins()
+        width = max_width + margins.left() + margins.right() + 30  # Extra space for scrollbar
+        height = total_height + margins.top() + margins.bottom() + 15  # Extra padding
+
+        # Add space for the document margins
+        doc_margin = 8  # Approximate document margins
+        width += doc_margin * 2
+        height += doc_margin * 2
+
+        # Set minimum sizes
+        width = max(width, self.minimumWidth())
+        height = max(height, self.minimumHeight())
+
+        # Set size of the text edit
+        self.setMinimumWidth(width)
+        self.setMinimumHeight(height)
+
 
 # --- Modifica i segnali per passare l'HTML del tooltip ---
 class WorkerSignals(QObject):
     """Definisce i segnali disponibili dal thread worker."""
     # Ora emettiamo la stringa HTML pronta per il tooltip
-    result = pyqtSignal(str, QPoint)  # (HTML del tooltip, Posizione del cursore)
+    result = pyqtSignal(str, str)  # (HTML del tooltip, Posizione del cursore)
     finished = pyqtSignal()
     error = pyqtSignal(str)
 
 
 # --- Worker Modificato ---
 class WikipediaWorker(QRunnable):
-    def __init__(self, artist_name, cursor_pos, lang="it", cache=None):
+    def __init__(self, artist_name, lang="it", cache=None):
         super().__init__()
         self.artist_name = artist_name
-        self.cursor_pos = cursor_pos + QPoint(150, 0)
         self.signals = WorkerSignals()
         self.setAutoDelete(True)
         self.lang = lang
@@ -144,9 +191,9 @@ class WikipediaWorker(QRunnable):
         self.style = """
         <style>
             .tooltip-container { font-family: sans-serif; width: 250px; padding: 10px; }
-            .title { display: block; text-align: center; font-size: 18px; font-weight: bold; margin-top: 15px; }
+            .title { display: block; text-align: center; font-size: 20px; font-weight: bold; color: red; margin-top: 15px; }
             .img-wrapper { text-align: center; margin: 10px 0 0 0; }
-            .summary-container { margin-top: 5px; min-height: 80px; font-size: 14px; } /* min-height evita il salto */
+            .summary-container { margin-top: 5px; min-height: 80px; font-size: 16px; line-height: 1.5;} /* min-height evita il salto */
         </style>
         """
     def cancel(self):
@@ -155,7 +202,7 @@ class WikipediaWorker(QRunnable):
     def assemble_html(self, img_tag, summary):
 
         tooltip_html = f"{self.style}<div class='tooltip-container'>"
-        tooltip_html += f"<center><span class='title'>{self.artist_name}</span></center><hr>"
+        #tooltip_html += f"<center><span class='title'>{self.artist_name}</span></center><hr>"
         if img_tag:
             tooltip_html += (f"""<div class='img-wrapper'>
                              <img src="data:{self.content_type};base64,{img_tag}" class="artist-img">
@@ -166,14 +213,43 @@ class WikipediaWorker(QRunnable):
             tooltip_html += "<div class='summary-container'><i>Caricamento biografia...</i></div></div>"
         else:
             # STEP 2: Aggiungi il summary reale
-            clean_summary = textwrap(summary, width=50).replace("\n", "<br>")
-            tooltip_html += f"<div class='summary-container'>{clean_summary}</div></div>"
+            #clean_summary = textwrap(summary, width=50).replace("\n", "<br>")
+            tooltip_html += f"<div class='summary-container'>{summary}</div></div>"
         return tooltip_html
+
+    def get_musical_summary(self, wikipedia):
+        # 1. Definiamo i suffissi musicali tipici di Wikipedia
+        musical_suffixes = [" (cantante)", " (gruppo musicale)", " (musicista)"]
+
+        # 2. Proviamo prima con i nomi specifici
+        for suffix in musical_suffixes:
+            try:
+                # Tenta ad esempio: wikipedia.summary("Frida (cantante)", sentences=5)
+                return wikipedia.summary(self.artist_name + suffix, sentences=5)
+            except (wikipedia.exceptions.PageError, wikipedia.exceptions.DisambiguationError):
+                continue  # Se non esiste o è ambiguo, prova il prossimo suffisso
+
+        # 3. Se i tentativi specifici falliscono, usiamo la tua riga originale
+        try:
+            return wikipedia.summary(self.artist_name, sentences=5)
+        except wikipedia.exceptions.DisambiguationError as e:
+            # 4. Fallback intelligente: se è un'ambiguità, cerchiamo "musica" tra le opzioni
+            for option in e.options:
+                if any(term in option.lower() for term in ['cantante', 'gruppo', 'band', 'music']):
+                    return wikipedia.summary(option, sentences=5)
+
+            return "Artista trovato ma con troppe ambiguità non musicali."
+        except wikipedia.exceptions.PageError:
+            return "Artista non trovato su Wikipedia."
 
     def run(self):
         import wikipedia
         wikipedia.set_lang(self.lang)
         file_cache = f"{self.artist_name}.html"
+        html1 = f'''<p style="font-family: Arial; color: red; font-size: {20}px; text-align: center;" > 
+        {self.artist_name}
+        </P>'''
+
 
         try:
             if self._is_cancelled:
@@ -182,7 +258,7 @@ class WikipediaWorker(QRunnable):
             if self.cache:
                 txt = self.cache.get(file_cache)
                 if txt:
-                    self.signals.result.emit(txt, self.cursor_pos)
+                    self.signals.result.emit(html1, txt)
                     return
 
             # 2. Raccolta Dati (senza emit intermedi)
@@ -195,23 +271,25 @@ class WikipediaWorker(QRunnable):
             if self._is_cancelled:
                 return
             full_html = self.assemble_html(img_tag, None)
-            self.signals.result.emit(full_html, self.cursor_pos)
+            self.signals.result.emit(html1, full_html)
 
-            summary = wikipedia.summary(self.artist_name, sentences=5)
+            #summary = wikipedia.summary(self.artist_name, sentences=5)
+            summary = self.get_musical_summary(wikipedia)
             # Rimuovi textwrap se usi un div con larghezza fissa, il browser gestirà il wrap meglio
 
             # 3. Costruzione HTML Finale
             full_html = self.assemble_html(img_tag, summary)
 
             # 4. Singola Emissione
-            self.signals.result.emit(full_html, self.cursor_pos)
+            self.signals.result.emit(html1, full_html)
 
             # 5. Salvataggio in Cache
             if self.cache:
                 self.cache.set(file_cache, full_html)
 
         except Exception as e:
-            self.signals.error.emit(f"Errore nella gestione del tooltip: {e}")
+            full_html = self.assemble_html(img_tag, "Nessuna informazione")
+            self.signals.result.emit(html1, full_html)
 
         finally:
             self.signals.finished.emit()
@@ -726,7 +804,7 @@ class myList(QListWidget):
                 self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
         super(QListWidget, self).mousePressEvent(event)
 
-
+'''
 class CustomToolTip(QLabel):
     def __init__(self):
         super().__init__(None)
@@ -739,8 +817,8 @@ class CustomToolTip(QLabel):
         self.animation = QPropertyAnimation(self, b"geometry")
         self.animation.setDuration(250)  # Millisecondi (un quarto di secondo)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-
+'''
+'''
 class MusicList(myList):
     def __init__(self, parent, show_tip=None, hide_tip=None, label='', cursor=0):
         super().__init__(parent, txt=label, cursor=cursor)
@@ -777,7 +855,6 @@ class MusicList(myList):
 
     def mousePressEvent(self, event):
         self.nascondi_mio_tip()
-
         super().mouseMoveEvent(event)
 
     def mostra_mio_tip(self, txt, global_pos):
@@ -834,10 +911,22 @@ class MusicList(myList):
         ))
         self.my_tip.animation.start()
 
-
-
         self.my_tip.setText(txt)
         self.my_tip.show()
+'''
+class ArtistInfoDlg(HtmlInfoDlg):
+    @staticmethod
+    def run(parent, artist, cache):
+        ArtistInfoDlg(parent, artist=artist, cache=cache).exec()
+
+    def initWorker(self, kwargs):
+        self.threadpool = QThreadPool()
+        artist = kwargs.get('artist')
+        cache = kwargs.get('cache')
+        worker = WikipediaWorker(artist, cache=cache)
+        worker.signals.result.connect(self.update)
+        self.threadpool.start(worker)
+
 
 class ShazamButtonHandler:
     def __init__(self, button):
