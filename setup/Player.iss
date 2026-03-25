@@ -53,15 +53,20 @@ Source: "{#MyBaseDir}\installer\dist\*"; DestDir: "{app}"; Flags: ignoreversion 
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "assoc_mp3"; Description: "Registra Euterpe per aprire file .mp3"; GroupDescription: "Associazioni file:"; Flags: unchecked
+Name: "assoc_mp3"; Description: "Associa i file .mp3 a Euterpe"; GroupDescription: "Associazioni file:"; Flags: checkedonce
+Name: "assoc_flac"; Description: "Associa i file .flac a Euterpe"; GroupDescription: "Associazioni file:"; Flags: checkedonce
 
 [Registry]
 Root: HKCR; Subkey: ".mp3\OpenWithProgids"; ValueType: string; ValueName: "Euterpe.AssocFile.MP3"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoc_mp3
-Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "Euterpe.AssocFile.MP3"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoc_mp3
 Root: HKCR; Subkey: "Euterpe.AssocFile.MP3"; ValueType: string; ValueName: ""; ValueData: "File Audio MP3"; Flags: uninsdeletekey; Tasks: assoc_mp3
 Root: HKCR; Subkey: "Euterpe.AssocFile.MP3\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppName}\{#MyAppExeName},0"; Tasks: assoc_mp3
 Root: HKCR; Subkey: "Euterpe.AssocFile.MP3\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppName}\{#MyAppExeName}"" ""%1"""; Tasks: assoc_mp3
-Root: HKCR; Subkey: "Euterpe.AssocFile.MP3"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Euterpe Music Player"; Tasks: assoc_mp3
+
+; --- ASSOCIAZIONE FLAC ---
+Root: HKCR; Subkey: ".flac\OpenWithProgids"; ValueType: string; ValueName: "Euterpe.AssocFile.FLAC"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assoc_flac
+Root: HKCR; Subkey: "Euterpe.AssocFile.FLAC"; ValueType: string; ValueName: ""; ValueData: "File Audio FLAC"; Flags: uninsdeletekey; Tasks: assoc_flac
+Root: HKCR; Subkey: "Euterpe.AssocFile.FLAC\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: assoc_flac
+Root: HKCR; Subkey: "Euterpe.AssocFile.FLAC\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: assoc_flac
 
 [Run]
 ; Apri le impostazioni di Windows per completare l'associazione

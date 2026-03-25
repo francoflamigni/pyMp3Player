@@ -2,9 +2,10 @@ import os
 import sys
 
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox, QDialog)
-from PyQt6.QtGui import QIcon, QCursor, QAction, QColor
+                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox, QDialog, QSplashScreen)
+from PyQt6.QtGui import QIcon, QCursor, QAction, QColor, QPixmap
 from PyQt6.QtCore import Qt, QTimer, QEasingCurve, QPropertyAnimation
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
@@ -74,7 +75,7 @@ class MyTitleBar(StandardTitleBar):
         self.anim.start()
 
 class Player(FramelessDialog):
-    def __init__(self, file_da_riprodurre=None):
+    def __init__(self, splash=None):
         from tempfile import TemporaryDirectory
         super().__init__()
 
@@ -86,7 +87,8 @@ class Player(FramelessDialog):
         ini = iniConf(AppConfig, case_sensitive=True)
         cache = Cache(ini)
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
-        self.file_da_riprodurre = file_da_riprodurre
+        #self.file_da_riprodurre = file_da_riprodurre
+        self.splash = splash
 
         # Imposta lo sfondo nero e, opzionalmente, il testo bianco per leggibilità
         self.setObjectName("MainFrame")
@@ -100,10 +102,38 @@ class Player(FramelessDialog):
         self.background_mode = False
         self.create_ui()
 
+        self.init_server()
 
         #self.Install_idle_fun()
         self.show()
         self.Install_idle_fun()
+
+    def init_server(self):
+        self.server_name = AppConfig
+        self.server = QLocalServer(self)
+
+        # Se il server esiste già da una sessione crashata, lo puliamo
+        QLocalServer.removeServer(self.server_name)
+
+        if self.server.listen(self.server_name):
+            self.server.newConnection.connect(self.gestisci_nuova_connessione)
+    def gestisci_nuova_connessione(self):
+        """Viene chiamato quando una SECONDA istanza tenta di aprirsi."""
+        socket = self.server.nextPendingConnection()
+        if socket.waitForReadyRead(1000):
+            # Legge il percorso del file inviato dall'altra istanza
+            path = socket.readAll().data().decode('utf-8')
+            self.carica_brano(path)
+            # Porta la finestra in primo piano
+            self.activateWindow()
+            self.raise_()
+        socket.close()
+    def carica_brano(self, path):
+        b = self.dlg.music._load_tag(path)
+        from mp3_tag import track
+        t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
+                  id=0, file=path, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
+        self.open_file([t])
 
     def set_windows_animations(self, enabled=True):
         import ctypes
@@ -141,13 +171,17 @@ class Player(FramelessDialog):
         self.setWindowState(
             self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         QApplication.processEvents()
-        close_splash()
+        if self.splash:
+            self.splash.finish(self)
+        #close_splash()
+        '''
         if self.file_da_riprodurre:
             b = self.dlg.music._load_tag(self.file_da_riprodurre)
             from mp3_tag import track
             t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
                 id=0, file=self.file_da_riprodurre, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
             self.open_file([t])
+        '''
 
         self.dlg.process()
 
@@ -490,8 +524,11 @@ class Player(FramelessDialog):
             if ret and lst:
                 self.dlg.setPlaylist(lst)
 
-    def on_close(self):
+    def closeEvent(self, event):
+        self.server.close()  # Smette di accettare nuove connessioni
+        QLocalServer.removeServer(self.server_name)
         self.appCtx.temp_dir_obj.cleanup()
+        super().closeEvent(event)
 
     def get_generi(self):
         from collections import defaultdict
@@ -506,11 +543,36 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     set_application_icon(app, f'Mysoft.{AppConfig}.v1', get_resource_file(__file__, 'icone', 'player.ico'))
 
+    has_file = len(sys.argv) > 1
+
+    if has_file:
+        socket = QLocalSocket()
+        socket.connectToServer(AppConfig)
+
+        if socket.waitForConnected(200):
+            percorso_file = sys.argv[1]
+            if os.path.exists(percorso_file) and (
+                    percorso_file.lower().endswith(".mp3") or percorso_file.lower().endswith(".flac")):
+                socket.write(sys.argv[1].encode('utf-8'))
+                socket.waitForBytesWritten(500)
+                socket.disconnectFromServer()
+                sys.exit(0)
+
+    pixmap = QPixmap( get_resource_file(__file__, 'icone', 'splash.bmp') )  # Carica la tua immagine
+    splash = QSplashScreen(pixmap)
+    splash.show()
+    app.processEvents()
+
     file_da_riprodurre = None
+    '''
     if len(sys.argv) > 1:
         percorso_file = sys.argv[1]
         if os.path.exists(percorso_file) and (percorso_file.lower().endswith(".mp3") or percorso_file.lower().endswith(".flac")):
             file_da_riprodurre = percorso_file
+    '''
 
-    player = Player(file_da_riprodurre)
+    player = Player(splash)
+    #splash.finish(player)
+    if has_file:
+        player.carica_brano(sys.argv[1])
     sys.exit(app.exec())
