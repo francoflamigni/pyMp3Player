@@ -100,11 +100,10 @@ class Player(FramelessDialog):
         self.background_mode = False
         self.create_ui()
 
-        #close_splash()
 
-        self.Install_idle_fun()
+        #self.Install_idle_fun()
         self.show()
-        #close_splash()
+        self.Install_idle_fun()
 
     def set_windows_animations(self, enabled=True):
         import ctypes
@@ -144,8 +143,11 @@ class Player(FramelessDialog):
         QApplication.processEvents()
         close_splash()
         if self.file_da_riprodurre:
+            b = self.dlg.music._load_tag(self.file_da_riprodurre)
             from mp3_tag import track
-            self.open_file([track(file=self.file_da_riprodurre)])
+            t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
+                id=0, file=self.file_da_riprodurre, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
+            self.open_file([t])
 
         self.dlg.process()
 

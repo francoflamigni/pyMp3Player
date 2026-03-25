@@ -536,7 +536,16 @@ class MusicPlayerDlg(QDialog):
         self.add_note(tt)
 
         self.cover.reset()
-        is_cover = self.appCtx.mainWindow.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
+        pic = self.appCtx.mainWindow.dlg.music.find_pic_by_file(self.tracks[self.index].file)
+        is_cover = False
+        if pic:
+            qp = QPixmap()
+            if qp.loadFromData(pic):
+                self.cover.setPixmap(qp.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+                is_cover = True
+        else:
+            self.cover.clear()
+        #is_cover = self.appCtx.mainWindow.get_track_pix(self.tracks[self.index].album,  self.tracks[self.index].artist, self.cover)
         if not is_cover:
             self.gestisci_visualizzazione_cover()
 

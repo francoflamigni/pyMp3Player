@@ -1,6 +1,8 @@
-import eyed3
-from eyed3.id3 import genres
+#import eyed3
+#from eyed3.id3 import genres
 from mutagen.flac import FLAC
+from mutagen.mp3 import MP3
+from tinytag import TinyTag
 
 import os
 from threading import Thread, Lock
@@ -148,41 +150,14 @@ class Music:
                     break
                 path = os.path.join(t[0], t[1])
                 try:
-                    brano = self._load_tag(path) #eyed3.load(path)
+                    brano = self._load_tag(path)
                 except Exception as e:
                     ext = os.path.splitext(path)[1].lower()
                     if ext == '.mp3' or ext == '.flac':
                         self._anomalie.put(path + ' tag error')
                     continue
 
-                '''
-                if brano is not None and brano.tag is not None:
-                    if brano.tag.title is None:
-                        self._anomalie.put(path + ' no title')
-                        brano.tag.title, _ = os.path.splitext(t[1])
-                    if brano.tag.album is None:
-                        self._anomalie.put(path + ' no album')
-                        brano.tag.album = os.path.basename(t[0])
-                    if brano.tag.artist is None:
-                        self._anomalie.put(path + ' no artist')
-                        dir = os.path.dirname(t[0])
-                        brano.tag.artist = os.path.basename(dir)
-
-                    try:
-                        if brano.tag.recording_date is None and brano.tag.release_date is None:
-                            self._anomalie.put(path + ' no year 1')
-                    except:
-                        self._anomalie.put(path + ' no year 2')
-                    if brano.tag.track_num.count is None:
-                        self._anomalie.put(path + ' no num')
-                    if brano.info is None:
-                        self._anomalie.put(path + ' no info')
-                        continue
-
-                    self.add_track(brano.tag, path, brano.info.time_secs)
-                    count += 1
-                '''
-                self.add_track2(brano, path)
+                self.add_track(brano, path)
                 count += 1
             except Empty:
                 continue
@@ -200,7 +175,21 @@ class Music:
                 'durata_sec': b.info.length,
                 'filename': path,
             }
-            a = 0
+        else:
+            # Esempio per 12.000 file
+            tag = TinyTag.get(path)
+
+            brano = {
+                'artista': tag.artist,
+                'album': tag.album,
+                'titolo': tag.title,
+                'anno': tag.year[:4] if tag.year else '',
+                'genere': tag.genre,
+                'numero': tag.track,
+                'durata_sec': tag.duration,  # Durata in secondi (float)
+                'filename': path,
+            }
+        '''
         else:
             b = eyed3.load(path)
             brano = {
@@ -213,6 +202,8 @@ class Music:
                 'durata_sec': b.info.time_secs,
                 'filename': path
             }
+        '''
+
         if not brano['artista']:
             self._anomalie.put(path + ' no artist')
         if not brano['album']:
@@ -232,6 +223,7 @@ class Music:
             for file in files:
                 self.inp.put((root, file))
 
+    '''
     def add_track(self, tag, path, time_secs):
         with self.lock:
             id_artist = self.artists.add(tag.artist)
@@ -239,13 +231,14 @@ class Music:
             self.album_artist.add(id_album, id_artist)
             id_track = self.tracks.add(tag, time_secs)
             self.album_track.add(id_album, id_track)
+    '''
 
-    def add_track2(self, tags, path):
+    def add_track(self, tags, path):
         with self.lock:
             id_artist = self.artists.add(tags['artista'])
-            id_album = self.albums.add2(tags, path)
+            id_album = self.albums.add(tags, path)
             self.album_artist.add(id_album, id_artist)
-            id_track = self.tracks.add2(tags)
+            id_track = self.tracks.add(tags)
             self.album_track.add(id_album, id_track)
 
     def get_artists(self):
@@ -292,16 +285,24 @@ class Music:
         alb_art = album + '@' + art
         if alb_art in self.albums.title.keys():
             alb = self.albums.title[alb_art]
-            if alb.path.endswith('.mp3'):
-                brano = eyed3.load(alb.path)
-                if len(brano.tag.images) > 0:
-                    return brano.tag.images[0].image_data
-            elif alb.path.endswith('.flac'):
-                audio = FLAC(alb.path)
+            return self.find_pic_by_file(alb.path)
+        return None
+
+    def find_pic_by_file(self, path):
+        img_data = None
+        try:
+            if path.endswith('.mp3'):
+                audio = MP3(path)
+                for key in audio.tags.keys():
+                    if key.startswith('APIC'):
+                        img_data = audio.tags[key].data
+            elif path.endswith('.flac'):
+                audio = FLAC(path)
                 if audio.pictures:
                     img_data = audio.pictures[0].data
-                    return img_data
-        return None
+        except Exception as e:
+            pass
+        return img_data
 
     def save(self, path):
         r = []
@@ -388,6 +389,7 @@ class tracks:
         self.name = {}
         self.id = 0
 
+    '''
     def add(self, tag, time_secs):
         nome = tag.title + '@' + tag.album
         if nome in self.name.keys():
@@ -401,8 +403,9 @@ class tracks:
             genre = tag.genre.name
         self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs, genre)
         return self.id
+    '''
 
-    def add2(self, tags):
+    def add(self, tags):
         nome = tags['titolo'] + '@' + tags['album']
         if nome in self.name.keys():
             return self.name[nome].id
@@ -466,6 +469,7 @@ class albums:
         self.title = {}
         self.id = 0
 
+    '''
     def add(self, tag, path):
         title = tag.album + '@' + tag.artist
         if title in self.title.keys():
@@ -480,8 +484,9 @@ class albums:
 
         self.title[title] = album(tag.album, year, self.id, path)
         return self.id
+    '''
 
-    def add2(self, tags, path):
+    def add(self, tags, path):
         title = tags['album'] + '@' + tags['artista']
         if title in self.title.keys():
             return self.title[title].id
@@ -552,7 +557,3 @@ class album_track:
 
     def load(self, lst):
         self.a_t = json.loads(lst)
-
-
-def Generi():
-    return genres

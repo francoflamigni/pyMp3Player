@@ -39,6 +39,7 @@ pip install musicbrainzngs
 pip install lameenc  
 
 pip install mutagen  
+pip install tinytag
 
 per le copertine dei cd
 https://musicbrainz.org/

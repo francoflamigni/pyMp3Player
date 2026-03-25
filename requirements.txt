@@ -23,3 +23,4 @@ pillow
 langdetect
 edge-tts
 win32-setctime
+tinytag

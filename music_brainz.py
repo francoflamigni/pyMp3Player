@@ -197,9 +197,7 @@ class MusicInfo(QObject):
         offset = 0
         works = []
 
-        trk = self.album['tracks']
-        #query = f"arid:{self.id_artist} AND work:'{self.album['title']}'"
-        #ress = musicbrainzngs.search_works(query=query, includes=["artist-rels"], limit = limit, offset = 0)
+        #trk = self.album['tracks']
         a = 0
         try:
             while True:
@@ -237,20 +235,20 @@ class MusicInfo(QObject):
         return True
 
     def get_album_details(self):
-        if not self.get_artist():
-            return
-        self.album_info_html()
+        self.album_info_html()  # per stampare i dati dell'mp3
+        if self.get_artist():
+            self.album_info_html()
 
-        if not self.get_album():
-            return
-        self.album_info_html()
+            if self.get_album():
+                self.album_info_html()
 
-        if not self.get_tracks():
-            return
-        self.album_info_html()
-        if not self.get_tracks_info():
-            return
-        self.album_info_html()
+                if self.get_tracks():
+                    self.album_info_html()
+
+                    if self.get_tracks_info():
+                        self.album_info_html()
+                        return True
+        return False
 
     def get_html_mes(self, color, size, mes, pos='left', indent=0):
         return f'''<p style="font-family: Arial; color: {color}; font-size: {size}px; text-align: {pos}; text-indent: {indent}px;" >
@@ -648,15 +646,18 @@ class CoverArtWorker(QObject):
             )
 
 class Worker(QThread):
-    finished = pyqtSignal(list)  # Signal to notify when the task is done
+    finished = pyqtSignal(bool)  # Signal to notify when the task is done
     def __init__(self, fun):
         super().__init__()
         self.fun = fun
     def run(self):
+        self.finished.emit(self.fun())
+        '''
         a = self.fun()
         if not a:
             a = []
         self.finished.emit(a)
+        '''
 
 
 class HtmlInfoDlg(QDialog):
@@ -761,7 +762,7 @@ class HtmlInfoDlg(QDialog):
                 a = 0
         super().changeEvent(event)
 
-    def completed(self):
+    def completed(self, res):
         pass
 
     def update(self, html1, html2):
