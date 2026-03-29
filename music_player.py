@@ -7,10 +7,10 @@ vlc_path = str(get_resource_path_pathlib(__file__, 'exe/vlc'))
 os.environ['PYTHON_VLC_LIB_PATH'] = os.path.join(vlc_path, 'libvlc.dll')
 import vlc
 
-from PyQt6.QtCore import QSize, QTimer, pyqtSignal, QRectF
-from PyQt6.QtGui import QIcon, QPen, QLinearGradient, QBrush, QColor, QFont
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty
+from PyQt6.QtGui import QIcon, QPen, QLinearGradient, QBrush, QColor, QFont, QPixmap, QPainter
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect)
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect, QLabel)
 
 from pyMyLib.qtUtils import set_background, waitCursor
 
@@ -29,19 +29,20 @@ class MusicPlayerDlg(QDialog):
     Mode_Music = 1  # mp3
     Mode_Radio = 2  #
     Mode_Cd = 3
-    Mode_Play = 4
-    Mode_Pause = 5
+    Status_Play = 4
+    Status_Pause = 5
     next_song_signal = pyqtSignal(int)
     def __init__(self, appCtx: AppContext = None, parent=None):
         super().__init__(parent)
         self.appCtx = appCtx
 
-        self.media = None
+        self.media = None #titolo del brano
         self.is_paused = False
         self.tracks = []
         self.index = -1
         self.listplayer = None
         self.radio_info = None
+        self.ply_lst = False #true se si tratta di una playlist
         self.busy = False
 
         type = 'spectrum'
@@ -134,14 +135,14 @@ class MusicPlayerDlg(QDialog):
 
         # volume
         ctrl_height = 170
-        vol = self.volume_ui(ctrl_height)
+        self.vol = self.volume_ui(ctrl_height)
 
         # equalizzatore
         equalizer = Equalizer(self.appCtx.config, self.mediaplayer, ctrl_height)
 
         h2 = QHBoxLayout()
         h2.addWidget(equalizer)
-        h2.addWidget(vol)
+        h2.addWidget(self.vol)
 
         v2 = QVBoxLayout(self)
         v2.addWidget(group_box)
@@ -349,7 +350,7 @@ class MusicPlayerDlg(QDialog):
             lyricsDlg.run(self.appCtx, txt, track)
 
     def set_play_icon(self, type):
-        if type == MusicPlayerDlg.Mode_Play:
+        if type == MusicPlayerDlg.Status_Play:
             ic = 'SP_MediaPlay'
             tp = 'Play'
         else:
@@ -365,7 +366,7 @@ class MusicPlayerDlg(QDialog):
                 self.listplayer.pause()
             else:
                 self.mediaplayer.pause()
-            self.set_play_icon(MusicPlayerDlg.Mode_Play)
+            self.set_play_icon(MusicPlayerDlg.Status_Play)
             self.is_paused = True
             self.timer.stop()
             self.animation_pause()
@@ -378,7 +379,7 @@ class MusicPlayerDlg(QDialog):
                     return
 
                 self.mediaplayer.play()
-            self.set_play_icon(MusicPlayerDlg.Mode_Pause)
+            self.set_play_icon(MusicPlayerDlg.Status_Pause)
             self.timer.start()
             self.is_paused = False
             self.animation_play()
@@ -390,9 +391,10 @@ class MusicPlayerDlg(QDialog):
     def stop(self):
         # Stop player
         self.mediaplayer.stop()
-        self.set_play_icon(MusicPlayerDlg.Mode_Play)
+        self.set_play_icon(MusicPlayerDlg.Status_Play)
         self.mode = MusicPlayerDlg.Mode_None
         self.index = -1
+        self.ply_lst = False
         self.animation_pause()
         if self.radio_info:
             self.radio_info.stop()
@@ -412,7 +414,6 @@ class MusicPlayerDlg(QDialog):
 
     def volume_ui(self, ctrl_height):
         vc = VolumeControl(ctrl_height, self.mediaplayer.audio_get_volume())
-        #vc.volumeDial.setValue(self.mediaplayer.audio_get_volume())
         vc.volumeDial.valueChanged.connect(self.set_volume)
         return vc
 
@@ -450,7 +451,7 @@ class MusicPlayerDlg(QDialog):
 
         self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
         self.listplayer.play()
-        self.set_play_icon(MusicPlayerDlg.Mode_Pause)
+        self.set_play_icon(MusicPlayerDlg.Status_Pause)
         self.timer.setInterval(500)
         self.timer.start()
         self.cover.clear()
@@ -510,13 +511,14 @@ class MusicPlayerDlg(QDialog):
 
         return True
 
-    def open_file(self, tracks=None):
+    def open_file(self, tracks=None, playlist_mode=False):
         if self.mode != MusicPlayerDlg.Mode_None:
             self.stop()
 
         if tracks is None or len(tracks) == 0:
             return
 
+        self.ply_lst = playlist_mode
         self.tracks = tracks
         self.index = 0
         self.currentChanged(0)
@@ -525,7 +527,20 @@ class MusicPlayerDlg(QDialog):
     def play_song(self):
         self.tm = self.tracks[self.index].tm_sec
         filename = self.tracks[self.index].file
-        #loudness = calculate_single_loudness(filename)
+
+        if self.ply_lst:
+            peak_db = get_volume_stats(filename)
+            if self.index == 0:
+                self.base_peak_db = peak_db
+            else:
+                if self.base_peak_db['mean'] < -25:
+                    self.base_peak_db = peak_db
+                vol = self.mediaplayer.audio_get_volume()
+                target_volume = calculate_safe_gain(vol, self.base_peak_db, peak_db)
+
+                self.set_volume(target_volume)
+                self.vol.UpdateVolume(target_volume)
+
         self.t_time.setText(get_tm(self.tm))
         self.media = self.instance.media_new(filename)
         self._play()
@@ -1061,6 +1076,9 @@ class VolumeControl(QFrame):
         """)
         self.update_text(vol)
 
+    def UpdateVolume(self, val):
+        self.volumeDial.UpdateValue(val)
+
     @staticmethod
     def percentage_to_db(percentage):
         if percentage <= 0:
@@ -1250,6 +1268,9 @@ class VolumeDial(QDial):
             else:
                 new_value = self.maximum()
 
+        self.UpdateValue(new_value)
+
+    def UpdateValue(self, new_value):
         # 4. AGGIORNAMENTO
         #print(f"    final: {new_value}")
         self.last_valid_value = new_value
@@ -1266,33 +1287,6 @@ class VolumeDial(QDial):
 
     def mouseMoveEvent(self, event):
         self._updateValueFromMouse(event.pos())
-
-from typing import Optional
-
-def calculate_single_loudness(file_path: str) -> Optional[float]:
-    import soundfile as sf
-    import pyloudnorm as pln
-    """
-    Funzione per la Fase 1: Calcola il loudness di un singolo file.
-    """
-    try:
-        # Carica i dati audio con soundfile
-        data, rate = sf.read(file_path, dtype='float32')
-
-        # Misura il loudness con pyloudnorm
-        meter = pln.Meter(rate, block_size=0.400)  # Block size 400ms per lo standard EBU R128
-        loudness = meter.integrated_loudness(data)
-
-        return loudness
-    except Exception as e:
-        print(f"Impossibile calcolare il loudness per {file_path}: {e}")
-        return None
-
-
-from PyQt6.QtWidgets import QLabel
-from PyQt6.QtCore import QPropertyAnimation, pyqtProperty, Qt
-from PyQt6.QtGui import QPixmap, QPainter
-
 
 class CoverLabel(QLabel):
     def __init__(self, parent=None):
@@ -1349,3 +1343,37 @@ class CoverLabel(QLabel):
         # Disegniamo l'immagine centrata rispetto al nuovo asse
         painter.drawPixmap(-side // 2, -side // 2, side, side, self.original_pixmap)
         painter.end()
+
+import subprocess
+import re
+def get_volume_stats(file_path):
+    cmd = ["ffmpeg", "-i", file_path, "-af", "volumedetect", "-f", "null", "-"]
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+
+    # Estraiamo entrambi i valori
+    max_v = re.search(r"max_volume: ([\-\d\.]+) dB", result.stderr)
+    mean_v = re.search(r"mean_volume: ([\-\d\.]+) dB", result.stderr)
+
+    stats = {
+        "max": float(max_v.group(1)) if max_v else 0.0,
+        "mean": float(mean_v.group(1)) if mean_v else -20.0
+    }
+    return stats
+
+
+
+def calculate_safe_gain(user_vol, ref, curr):
+    # Calcola la differenza basata sulla media (ascolto naturale)
+    ref_mean = ref['mean']
+    curr_mean = curr['mean']
+    diff_db = ref_mean - curr_mean
+    diff_db = max(min(diff_db, 15.0), -15.0)
+
+    # Controlla che questa differenza non porti il picco sopra lo 0
+    # Se curr_max è -2.0, non possiamo alzare più di 2.0 dB
+    headroom = abs(curr['max'])
+    safe_diff_db = min(diff_db, headroom)
+
+    # Converti in ratio per VLC
+    ratio = pow(10, safe_diff_db / 20)
+    return int(user_vol * ratio)

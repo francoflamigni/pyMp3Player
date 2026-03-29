@@ -128,6 +128,7 @@ class Player(FramelessDialog):
             self.activateWindow()
             self.raise_()
         socket.close()
+
     def carica_brano(self, path):
         b = self.dlg.music._load_tag(path)
         from mp3_tag import track
@@ -174,14 +175,6 @@ class Player(FramelessDialog):
         if self.splash:
             self.splash.finish(self)
         #close_splash()
-        '''
-        if self.file_da_riprodurre:
-            b = self.dlg.music._load_tag(self.file_da_riprodurre)
-            from mp3_tag import track
-            t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
-                id=0, file=self.file_da_riprodurre, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
-            self.open_file([t])
-        '''
 
         self.dlg.process()
 
@@ -386,9 +379,9 @@ class Player(FramelessDialog):
         if self.ply.open_radio(url, fav):
             self._set_player_mode()
 
-    def open_file(self, tracks=None):
-        self.background(True)
-        self.ply.open_file(tracks)
+    def open_file(self, tracks=None, ply_lst=False):
+        self.background(True) #forza l'uscita dalla modalità background
+        self.ply.open_file(tracks, ply_lst)
         self._set_player_mode()
 
     def open_cd(self, drive):

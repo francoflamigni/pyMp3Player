@@ -3,10 +3,12 @@ import io
 import sys
 import os
 import base64
-from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QRect, QPropertyAnimation, \
+from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QBuffer, QIODevice, \
     QEasingCurve, QThreadPool
 from PyQt6.QtWidgets import (QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget,
                              QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget, QPlainTextEdit)
+from PyQt6.QtGui import QImage, QColor
+
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file
 from pyMyLib.qtUtils import center_in_parent
@@ -28,66 +30,63 @@ def close_splash():
         #log.info('Splash screen closed.')
 
 def qpixmap_to_bytes(pixmap):
-    from PIL import ImageQt
-    """Converte un QPixmap in dati binari."""
-    # Converte QPixmap in PIL Image
-    qimage = pixmap.toImage()
-    pil_image = ImageQt.fromqimage(qimage)
+    """Converte un QPixmap in dati binari senza usare Pillow."""
+    byte_array = QBuffer()
+    byte_array.open(QIODevice.OpenModeFlag.WriteOnly)
 
-    # Salva in un buffer
-    buffer = io.BytesIO()
-    pil_image.save(buffer, format='PNG')
-    return buffer.getvalue()
+    # Salva direttamente il pixmap nel buffer in formato PNG
+    pixmap.save(byte_array, "PNG")
+
+    return byte_array.data().data()
 
 def resize_image_data(image_data, target_size=(400, 400), quality=85):
-    from PIL import Image
     """
-    Ridimensiona i dati dell'immagine mantenendo le proporzioni.
-
-    Args:
-        image_data: Dati binari dell'immagine
-        target_size: Tuple (width, height) della dimensione target
-        quality: Qualità JPEG (1-100)
-
-    Returns:
-        bytes: Dati dell'immagine ridimensionata in formato JPEG
+    Ridimensiona l'immagine usando le classi native di PyQt.
     """
     try:
-        # Carica l'immagine dai dati binari
-        image = Image.open(io.BytesIO(image_data))
+        # 1. Carica i dati binari in una QImage
+        image = QImage.fromData(image_data)
 
-        # Converte in RGB se necessario (per PNG con trasparenza, etc.)
-        if image.mode in ('RGBA', 'LA', 'P'):
-            # Crea uno sfondo bianco per le immagini con trasparenza
-            background = Image.new('RGB', image.size, (255, 255, 255))
-            if image.mode == 'P':
-                image = image.convert('RGBA')
-            background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+        if image.isNull():
+            raise Exception("Impossibile caricare l'immagine: dati non validi o formato non supportato.")
+
+        # 2. Gestione trasparenza (conversione in RGB con sfondo bianco)
+        # PyQt gestisce molti formati con trasparenza (Format_ARGB32, etc.)
+        if image.hasAlphaChannel():
+            # Crea un'immagine della stessa dimensione, ma puramente RGB
+            background = QImage(image.size(), QImage.Format.Format_RGB32)
+            background.fill(QColor("white"))
+
+            # Usa un QPainter per "incollare" l'immagine sopra lo sfondo bianco
+            from PyQt6.QtGui import QPainter
+            painter = QPainter(background)
+            painter.drawImage(0, 0, image)
+            painter.end()
             image = background
-        elif image.mode != 'RGB':
-            image = image.convert('RGB')
+        else:
+            # Assicurati che sia in un formato RGB standard
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
 
-        # Calcola le nuove dimensioni mantenendo le proporzioni
-        original_width, original_height = image.size
-        target_width, target_height = target_size
+        # 3. Ridimensionamento mantenendo le proporzioni
+        # Qt.AspectRatioMode.KeepAspectRatio calcola automaticamente il ratio
+        # Qt.TransformationMode.SmoothTransformation è l'equivalente di LANCZOS/Alta qualità
+        resized_image = image.scaled(
+            target_size[0],
+            target_size[1],
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
 
-        # Calcola il rapporto per mantenere le proporzioni
-        ratio = min(target_width / original_width, target_height / original_height)
+        # 4. Salvataggio in buffer come JPEG
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        # Il formato va specificato come stringa ("JPG" o "JPEG")
+        resized_image.save(buffer, "JPG", quality=quality)
 
-        new_width = int(original_width * ratio)
-        new_height = int(original_height * ratio)
-
-        # Ridimensiona l'immagine con un filtro di alta qualità
-        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        # Salva in un buffer come JPEG
-        output_buffer = io.BytesIO()
-        resized_image.save(output_buffer, format='JPEG', quality=quality, optimize=True)
-
-        return output_buffer.getvalue()
+        return buffer.data().data()  # Ritorna i bytes (QByteArray -> bytes)
 
     except Exception as e:
-        raise Exception(f"Errore nel ridimensionamento dell'immagine: {e}")
+        raise Exception(f"Errore nel ridimensionamento con PyQt: {e}")
 
 def get_windows_flag():
     CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
@@ -753,7 +752,7 @@ def lista_file_per_ultimo_accesso(cartella_root):
 
 
 class myList(QListWidget):
-    play_signal = pyqtSignal(QListWidget)
+    play_item_signal = pyqtSignal(QListWidget)
     def __init__(self, parent, txt='', cursor=0):
         super().__init__(parent)
         self.itc = None
@@ -797,7 +796,7 @@ class myList(QListWidget):
             if it == self.itc and x <= 50:
                 try:
                     self.unsetCursor()
-                    self.play_signal.emit(self)
+                    self.play_item_signal.emit(self)
                 except:
                     pass
             elif it != self.itc and x <= 50:

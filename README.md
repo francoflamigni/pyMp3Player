@@ -41,6 +41,10 @@ pip install lameenc
 pip install mutagen  
 pip install tinytag
 
+virtualenv .venv12b --python=python3.12
+.venv12b\Scripts\activate
+pip install -r requirements.txt
+
 per le copertine dei cd
 https://musicbrainz.org/
 

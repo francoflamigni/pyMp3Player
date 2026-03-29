@@ -184,7 +184,7 @@ class HiFiToggle(QAbstractButton):
         painter.drawRoundedRect(knob_rect, 2, 2)
 
 class MusicIndexDlg(QDialog):
-    play_signal = pyqtSignal(list)
+    play_signal = pyqtSignal(list, bool)
     def __init__(self, appCtx:AppContext):
         super().__init__()
         self.appctx = appCtx
@@ -268,7 +268,7 @@ class MusicIndexDlg(QDialog):
         self.albums.setSortingEnabled(False)
         self.albums.itemSelectionChanged.connect(self.album_changed)
         self.albums.doubleClicked.connect(self.play_album)
-        self.albums.play_signal.connect(self.play_item)
+        self.albums.play_item_signal.connect(self.play_item)
 
         splitter1 = QSplitter(self)
         splitter1.setOrientation(Qt.Orientation.Horizontal)
@@ -287,7 +287,7 @@ class MusicIndexDlg(QDialog):
         self.tracks.setSortingEnabled(False)
         self.tracks.itemSelectionChanged.connect(self.track_changed)
         self.tracks.doubleClicked.connect(self.play_song)
-        self.tracks.play_signal.connect(self.play_item)
+        self.tracks.play_item_signal.connect(self.play_item)
 
         splitter2 = QSplitter(self)
         splitter2.setOrientation(Qt.Orientation.Vertical)
@@ -318,7 +318,7 @@ class MusicIndexDlg(QDialog):
         """)
         self.playPlaylist = QPushButton(self)
         self.playPlaylist.setIcon(QIcon(get_resource_file(__file__, 'icone', 'play.png')))
-        self.playPlaylist.clicked.connect(lambda x: self.play_playlist(1))
+        self.playPlaylist.clicked.connect(self.play_playlist)
         vl.addWidget(self.plst)
         vl.addWidget(self.playPlaylist)
         vl.setContentsMargins(0, 0, 0, 0)
@@ -414,12 +414,6 @@ class MusicIndexDlg(QDialog):
 
         self.switch_to_page(1)
 
-    def play_playlist(self, index):
-        if index == 0:
-            return
-        v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
-        self.play_signal.emit(v)
-
     def contextMenu(self, p, wd, it):
         pd = wd.mapToGlobal(p)
         ctx = QMenu(self)
@@ -481,12 +475,6 @@ class MusicIndexDlg(QDialog):
     def info_album(self, artist, album, tracks):
         from music_brainz import AlbumInfoDlg
         AlbumInfoDlg.run(self.appctx.mainWindow, artist, album, tracks)
-
-    def play_item(self, lst):
-        if lst == self.albums:
-            self.play_album()
-        elif lst == self.tracks:
-            self.play_song()
 
     def clear_playlist(self):
         self.plst.clear()
@@ -713,7 +701,7 @@ class MusicIndexDlg(QDialog):
             trk = self.tracks.selectedItems()[0].text()
             t = trk + '@' + alb
             tt = self.music.tracks.name[t]
-            self.play_signal.emit([tt])
+            self.play_signal.emit([tt], False)
         except:
             pass
 
@@ -723,7 +711,17 @@ class MusicIndexDlg(QDialog):
             trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
 
             v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
-            self.play_signal.emit(v)
+            self.play_signal.emit(v, False)
         except:
             pass
+
+    def play_playlist(self):
+        v = [self.plst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(len(self.plst))]
+        self.play_signal.emit(v, True)
+
+    def play_item(self, lst):
+        if lst == self.albums:
+            self.play_album()
+        elif lst == self.tracks:
+            self.play_song()
 

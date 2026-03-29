@@ -1,5 +1,3 @@
-#import eyed3
-#from eyed3.id3 import genres
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from tinytag import TinyTag
@@ -161,6 +159,8 @@ class Music:
                 count += 1
             except Empty:
                 continue
+            except Exception as e:
+                a = 0
         a = 0
     def _load_tag(self, path):
         if path.endswith('.flac'):
@@ -189,32 +189,24 @@ class Music:
                 'durata_sec': tag.duration,  # Durata in secondi (float)
                 'filename': path,
             }
-        '''
-        else:
-            b = eyed3.load(path)
-            brano = {
-                'artista': b.tag.artist if b.tag.artist else '',
-                'album': b.tag.album if b.tag.album else '',
-                'titolo': b.tag.title or os.path.splitext(os.path.basename(path))[0],
-                'anno': b.tag.recording_date.year if b.tag.recording_date else (b.tag.release_date.year if b.tag.release_date else 0),
-                'genere': b.tag.genre.name if b.tag.genre else '',
-                'numero': b.tag.track_num.count if b.tag.track_num else '',
-                'durata_sec': b.info.time_secs,
-                'filename': path
-            }
-        '''
 
+        mes = []
         if not brano['artista']:
-            self._anomalie.put(path + ' no artist')
+            mes.append('no artist')
         if not brano['album']:
-            self._anomalie.put(path + ' no album')
+            mes.append('no album')
         if not brano['titolo']:
-            self._anomalie.put(path + ' no title')
+            mes.append('no title')
         if not brano['anno']:
-            self._anomalie.put(path + ' no year')
+            mes.append('no year')
         if not brano['numero']:
-            self._anomalie.put(path + ' no num')
+            mes.append('no num')
         a = 0
+        if mes:
+            mes.insert(0, path)
+            mes = '\n'.join(mes)
+            self._anomalie.put(mes)
+            raise Exception(mes)
         return brano
 
     def get_mp3(self, path):
