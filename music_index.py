@@ -1,6 +1,8 @@
 import os
 
 import copy
+import time
+
 from PyQt6.QtCore import (Qt, QRect, QThreadPool, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty,
                           QEasingCurve, QPoint, QParallelAnimationGroup)
 from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen
@@ -510,15 +512,12 @@ class MusicIndexDlg(QDialog):
             trks = self.music.find_tracks(album, artist)
             vi = [self.music.tracks.name[trk + '@' + album] for trk in trks if trk]
 
-        #tot_time = 0
         for p in vi:
             qi = QListWidgetItem(p.title)
             qi.setData(Qt.ItemDataRole.UserRole, p)
             qi.setToolTip(f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}")
             self.plst.addItem(qi)
-            #tot_time += p.tm_sec
 
-        #mes = f"Playlist\nBrani: {self.plst.count()}\nDurata: {printable_duration(tot_time)}"
         self.playPlaylist.setToolTip(self.playlist_info())
         self.switch_to_page(1)
 
@@ -551,25 +550,47 @@ class MusicIndexDlg(QDialog):
             qi.setToolTip(f"Artista: {p.artist} Album: {p.album} Traccia: {p.title}")
             self.plst.addItem(qi)
 
+    def library_info(self):
+        sz = int(get_folder_size(self.last_folder))
+        self.stat = f"""
+                {len(self.music.artists.name)} Artisti\n
+                {len(self.music.albums.title)} Album\n 
+                {len(self.music.tracks.name)} Tracce\n
+                {human_size(sz)} Su disco"""
+
     def process(self):
+        t0 = time.monotonic()
+
         self.res = self.music.init(self.last_folder)
-        if self.res == self.music.INDEX_LOADED:
-            sz = int(get_folder_size(self.last_folder))
-            self.stat = f"""
-                    {len(self.music.artists.name)} Artisti\n
-                    {len(self.music.albums.title)} Album\n 
-                    {len(self.music.tracks.name)} Tracce\n
-                    {human_size(sz)} Su disco"""
-            self.prog.setToolTip(self.stat)
+        if self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
+            self.print('La cartella indicata non esiste o non contiene file')
+            return
+        elif self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
+            if not yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
+                return
+            self.music.index(self.print, self.last_folder)
+        '''
+        elif self.res == self.music.INDEX_LOADED:
             self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
-        elif self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
-            self.print('La cartella indicata non esiste o non contiene file')
-        #self.print(self.last_folder)
+        '''
+
+        self.artists_sav = copy.deepcopy(self.music.artists)
+        self.set_artists()
+
+        t1 = time.monotonic()
+        print(f"elaborazione: {(t1-t0):.2f}")
+        self.library_info()
+
+        self.prog.setToolTip(self.stat)
+        self.print(self.last_folder)
+        """
         elif self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
             if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
                 self.index(self.last_folder)
-        self.print(self.last_folder)
+                self.library_info()
+                self.prog.setToolTip(self.stat)
+        """
 
     ''' Cerca canzone artista album'''
     def search(self):
@@ -642,26 +663,24 @@ class MusicIndexDlg(QDialog):
             self.tracks.clear()
             t = items[0].text()
             albums = self.music.find_albums(t)
-            albums = [d.title for d in sorted(albums, key=lambda x: int(x.year))]
-            self.albums.addItems(albums)
-            #for a in albums:
-            #    self.albums.addItem(a.title)
+            albums_title = [d.title for d in sorted(albums, key=lambda x: int(x.year))]
+            self.albums.addItems(albums_title)
 
     def album_changed(self):
-        items = self.albums.selectedItems()
-        art = self.artists.selectedItems()
-        if len(items) > 0 and len(art) > 0:
-            self.albums.setSelCur(items[0])
+        albums = self.albums.selectedItems()
+        artists = self.artists.selectedItems()
+        if len(albums) > 0 and len(artists) > 0:
+            self.albums.setSelCur(albums[0])
             self.tracks.clear()
-            trk_name = items[0].text()
-            art_name = art[0].text()
-            tracks = self.music.find_tracks(trk_name, art_name)
-            self.get_track_pix(trk_name, art_name, self.pix)
+            album_title = albums[0].text()
+            artist_name = artists[0].text()
+            tracks = self.music.find_tracks(album_title, artist_name)
+            self.get_track_pix(album_title, artist_name, self.pix)
             self.tracks.addItems(a for a in tracks)
             self.switch_to_page(0)
 
-    def get_track_pix(self, trk_name, art_name, pix):
-        pic = self.music.find_pic(trk_name, art_name)
+    def get_track_pix(self, album_title, artist_name, pix):
+        pic = self.music.find_pic(album_title, artist_name)
         if pic is not None:
             qp = QPixmap()
             if qp.loadFromData(pic):
@@ -682,14 +701,18 @@ class MusicIndexDlg(QDialog):
 
     def index2(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.last_folder,
-                                                  options=QFileDialog.Option.ShowDirsOnly) #.DontUseNativeDialog)
-        self.index(folder)
+                                                  options=QFileDialog.Option.ShowDirsOnly)
+        if folder:
+            self.last_folder = folder
+            self.process()
 
+    '''
     def index(self, folder=''):
         if folder != '':
             self.music.index(self.print, folder)
             self.artists_sav = copy.deepcopy(self.music.artists)
             self.set_artists()
+    '''
 
     def print(self, t):
         self.prog.setText(t)

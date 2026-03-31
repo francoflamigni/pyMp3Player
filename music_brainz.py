@@ -262,7 +262,7 @@ class MusicInfo(QObject):
 
         html1.append(self.get_html_mes('red', 26, f"Titolo: {self.album['title']}", pos='center'))
         html1.append(self.get_html_mes('white', 20, f"Artista: {self.album['artist']}", pos='center'))
-        html1.append(self.get_html_mes('yellow', 14, f"Edito il: {self.album['date']}", pos='center'))
+        html1.append(self.get_html_mes('yellow', 14, f"Pubblicato il: {self.album['date']}", pos='center'))
         html1.append(f'<hr style="{hr_style}">')
         html1.append(self.get_html_mes('white', 18, f"Tracce:"))
 

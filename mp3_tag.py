@@ -22,8 +22,8 @@ GENRE = [
     'Rap', 'Reggae', 'Techno', 'Fusion', 'Musical', 'Audiobook', 'Soundtrack'
 ]
 
-
-def find_last(path):
+'''
+def find_last2(path):
     percorso_sicuro = glob.escape(path)
     f = os.path.join(percorso_sicuro, '**')
     list_of_files = glob.glob(f, recursive=True)
@@ -34,6 +34,33 @@ def find_last(path):
     v = os.path.getmtime(latest_file)
     t = ts_date2(v)
     return {r: v}
+'''
+
+def find_last(path):
+    latest_mtime = 0
+    latest_file = None
+
+    # os.walk è ok, ma usiamo topdown per efficienza
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            # Opzionale: filtra solo estensioni audio per precisione
+            # if not name.lower().endswith(('.mp3', '.flac')): continue
+
+            full_path = os.path.join(root, name)
+            try:
+                # stat() è molto veloce durante il walk su sistemi moderni
+                mtime = os.path.getmtime(full_path)
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+                    latest_file = full_path
+            except OSError:
+                continue
+
+    if not latest_file:
+        return {}
+
+    rel_path = os.path.relpath(latest_file, path)
+    return {rel_path: latest_mtime}
 
 
 
@@ -88,17 +115,20 @@ class Music:
             return Music.NO_INDEX
         if float(lst) > float(lst_t):
             return Music.OLD_INDEX  # l'indice va rigenerato
+
         self.load(jf)
         self.path = folder
         return Music.INDEX_LOADED  # non ci sono state modifiche si può caricare l'indice
 
     def index(self, print, folder):
+        '''
         print('Attendi...')
         if self.init(folder) == Music.INDEX_LOADED:
             print(folder)
             return
         if folder == '':
             return
+        '''
         self.path = folder
 
         self.print = print
@@ -135,8 +165,6 @@ class Music:
             if t.genre:
                 self.genre.add(t.genre)
                 self.artist_genre[t.artist].add(t.genre)
-            a = 0
-        b = 0
 
     def process(self, nome):
         count = 0
@@ -210,8 +238,12 @@ class Music:
         return brano
 
     def get_mp3(self, path):
+        last_update = 0
         for root, dirs, files in os.walk(path):
-            self.print(os.path.basename(root))
+            now = time.monotonic()
+            if now - last_update > 0.1:
+                self.print(os.path.basename(root))
+                last_update = now
             for file in files:
                 self.inp.put((root, file))
 
