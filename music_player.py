@@ -16,6 +16,7 @@ from pyMyLib.qtUtils import set_background, waitCursor
 
 import scrobbler
 from utility import ShazamButtonHandler, songInfoDlg, AppContext
+from pyMyLib.utils import get_windows_flag
 
 
 def get_tm(secs):
@@ -1348,7 +1349,7 @@ import subprocess
 import re
 def get_volume_stats(file_path):
     cmd = ["ffmpeg", "-i", file_path, "-af", "volumedetect", "-f", "null", "-"]
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', creationflags=get_windows_flag())
 
     # Estraiamo entrambi i valori
     max_v = re.search(r"max_volume: ([\-\d\.]+) dB", result.stderr)

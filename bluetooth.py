@@ -7,8 +7,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
                              QListWidgetItem, QGroupBox, QMessageBox, QSplitter, QDialog, QStatusBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 
-from utility import get_windows_flag
-from pyMyLib.utils import iniConf, get_resource_file
+from pyMyLib.utils import get_resource_file, get_windows_flag
 
 class BluetoothWorker(QThread):
     """Thread separato per operazioni Bluetooth che potrebbero bloccare l'UI"""

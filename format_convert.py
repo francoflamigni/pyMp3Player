@@ -10,7 +10,7 @@ from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
 
 import shutil
-from pyMyLib.utils import get_resource_file
+from pyMyLib.utils import get_resource_file, get_windows_flag
 
 from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidgetItem,
@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout,
                              QSplitter, QScrollArea, QSizePolicy)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEvent, QByteArray
 from PyQt6.QtGui import QPixmap, QIcon, QAction
-from utility import get_windows_flag
 
 from mp3_tag import GENRE
 

@@ -7,7 +7,7 @@ from threading import Thread, Lock
 from queue import Empty, Queue
 import json
 import glob
-from pyMyLib.utils import ts_date2, iniConf
+from pyMyLib.utils import ts_date2, iniConf, find_last
 import hashlib
 import time
 from collections import defaultdict
@@ -23,19 +23,6 @@ GENRE = [
 ]
 
 '''
-def find_last2(path):
-    percorso_sicuro = glob.escape(path)
-    f = os.path.join(percorso_sicuro, '**')
-    list_of_files = glob.glob(f, recursive=True)
-    if not list_of_files:
-        return {}
-    latest_file = max(list_of_files, key=os.path.getmtime)
-    r = os.path.relpath(latest_file, path)
-    v = os.path.getmtime(latest_file)
-    t = ts_date2(v)
-    return {r: v}
-'''
-
 def find_last(path):
     latest_mtime = 0
     latest_file = None
@@ -61,7 +48,7 @@ def find_last(path):
 
     rel_path = os.path.relpath(latest_file, path)
     return {rel_path: latest_mtime}
-
+'''
 
 
 class Music:
@@ -246,16 +233,6 @@ class Music:
                 last_update = now
             for file in files:
                 self.inp.put((root, file))
-
-    '''
-    def add_track(self, tag, path, time_secs):
-        with self.lock:
-            id_artist = self.artists.add(tag.artist)
-            id_album = self.albums.add(tag, path)
-            self.album_artist.add(id_album, id_artist)
-            id_track = self.tracks.add(tag, time_secs)
-            self.album_track.add(id_album, id_track)
-    '''
 
     def add_track(self, tags, path):
         with self.lock:

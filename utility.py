@@ -11,7 +11,7 @@ from PyQt6.QtGui import QImage, QColor
 
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file
-from pyMyLib.qtUtils import center_in_parent
+from pyMyLib.qtUtils import center_in_parent, GlobalInputEventFilter
 from tempfile import TemporaryDirectory
 from music_brainz import HtmlInfoDlg
 
@@ -88,9 +88,6 @@ def resize_image_data(image_data, target_size=(400, 400), quality=85):
     except Exception as e:
         raise Exception(f"Errore nel ridimensionamento con PyQt: {e}")
 
-def get_windows_flag():
-    CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
-    return CREATE_NO_WINDOW
 
 def textwrap(txt, width=50):
     v = txt.split(' ')
@@ -576,6 +573,7 @@ class CDMonitor(QObject):
         """Ferma il monitoraggio del lettore CD."""
         self.timer.stop()
 
+'''
 class GlobalInputEventFilter(QObject):
     from PyQt6.QtCore import pyqtSignal
     # Segnale personalizzato per il movimento del mouse
@@ -590,6 +588,7 @@ class GlobalInputEventFilter(QObject):
 
         # Restituisci False per non interferire con l'evento
         return False
+'''
 
 class IdleTimeout:
     def __init__(self, parent, idle_time, timeout_fun, exit_on_press=True):
