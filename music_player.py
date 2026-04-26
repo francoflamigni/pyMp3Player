@@ -45,6 +45,7 @@ class MusicPlayerDlg(QDialog):
         self.radio_info = None
         self.ply_lst = False #true se si tratta di una playlist
         self.busy = False
+        self.gain_ctrl = GainControl()
 
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--quiet', '--audio-visual=visual']
@@ -532,15 +533,13 @@ class MusicPlayerDlg(QDialog):
         if self.ply_lst:
             peak_db = get_volume_stats(filename)
             if self.index == 0:
-                self.base_peak_db = peak_db
+                user_vol = self.mediaplayer.audio_get_volume()
+                self.gain_ctrl.set_reference(peak_db, user_vol)
             else:
-                if self.base_peak_db['mean'] < -25:
-                    self.base_peak_db = peak_db
-                vol = self.mediaplayer.audio_get_volume()
-                target_volume = calculate_safe_gain(vol, self.base_peak_db, peak_db)
-
-                self.set_volume(target_volume)
-                self.vol.UpdateVolume(target_volume)
+                user_vol = self.mediaplayer.audio_get_volume()
+                target = self.gain_ctrl.calculate(user_vol, peak_db)
+                self.set_volume(target)
+                self.vol.UpdateVolume(target)
 
         self.t_time.setText(get_tm(self.tm))
         self.media = self.instance.media_new(filename)
@@ -1345,36 +1344,112 @@ class CoverLabel(QLabel):
         painter.drawPixmap(-side // 2, -side // 2, side, side, self.original_pixmap)
         painter.end()
 
+''' -------------------------------------- '''
+import math
 import subprocess
 import re
-def get_volume_stats(file_path):
-    cmd = ["ffmpeg", "-i", file_path, "-af", "volumedetect", "-f", "null", "-"]
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', creationflags=get_windows_flag())
+def get_volume_stats(file_path: str, scan_seconds: int = 30) -> dict | None:
+    """
+    Ritorna {"max": float, "mean": float} in dBFS,
+    oppure None se ffmpeg fallisce o il file non è leggibile.
+    Analizza solo i primi `scan_seconds` secondi per velocità.
+    """
+    cmd = [
+        "ffmpeg",
+        "-i", file_path,
+        "-t", str(scan_seconds),   # analizza solo i primi N secondi
+        "-af", "volumedetect",
+        "-f", "null", "-"
+    ]
 
-    # Estraiamo entrambi i valori
-    max_v = re.search(r"max_volume: ([\-\d\.]+) dB", result.stderr)
-    mean_v = re.search(r"mean_volume: ([\-\d\.]+) dB", result.stderr)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            creationflags=get_windows_flag(),
+            timeout=15,            # evita hang su file problematici
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        print(f"[get_volume_stats] Errore ffmpeg: {e}")
+        return None
 
-    stats = {
-        "max": float(max_v.group(1)) if max_v else 0.0,
-        "mean": float(mean_v.group(1)) if mean_v else -20.0
+    stderr = result.stderr
+    max_v  = re.search(r"max_volume:\s*([\-\d\.]+)\s*dB", stderr)
+    mean_v = re.search(r"mean_volume:\s*([\-\d\.]+)\s*dB", stderr)
+
+    # Se anche solo uno manca, il dato è inaffidabile
+    if not max_v or not mean_v:
+        print(f"[get_volume_stats] Parsing fallito per: {file_path}")
+        print(stderr[-300:])       # ultime righe per debug
+        return None
+
+    return {
+        "max":  float(max_v.group(1)),
+        "mean": float(mean_v.group(1)),
     }
-    return stats
 
+class GainControl:
+    ALPHA = 0.08          # smoothing — aumenta per reattività, abbassa per morbidezza
+    MAX_STEP_DB = 6.0     # clamp per step singolo
+    HEADROOM_DB = 1.0     # margine dal picco
+    MAX_VLC_VOL = 200
+    SILENT_THRESHOLD = -25.0  # soglia per scartare il riferimento
 
+    def __init__(self):
+        self.target_lufs: float | None = None
+        self.smooth_gain: float | None = None  # float per precisione EMA
 
-def calculate_safe_gain(user_vol, ref, curr):
-    # Calcola la differenza basata sulla media (ascolto naturale)
-    ref_mean = ref['mean']
-    curr_mean = curr['mean']
-    diff_db = ref_mean - curr_mean
-    diff_db = max(min(diff_db, 15.0), -15.0)
+    def _to_lufs(self, stats: dict) -> float:
+        rms = stats.get('mean', -60.0)
+        if rms > 0:
+            rms = 20 * math.log10(rms + 1e-9)
+        return rms
 
-    # Controlla che questa differenza non porti il picco sopra lo 0
-    # Se curr_max è -2.0, non possiamo alzare più di 2.0 dB
-    headroom = abs(curr['max'])
-    safe_diff_db = min(diff_db, headroom)
+    def _is_valid_reference(self, stats: dict) -> bool:
+        """Scarta brani con intro silenziosa o fade-in lungo."""
+        return stats.get('mean', -99) >= self.SILENT_THRESHOLD
 
-    # Converti in ratio per VLC
-    ratio = pow(10, safe_diff_db / 20)
-    return int(user_vol * ratio)
+    def set_reference(self, ref_stats: dict, user_vol: int):
+        """Chiama sul primo brano (o quando vuoi reimpostare il riferimento)."""
+        if self._is_valid_reference(ref_stats):
+            self.target_lufs = self._to_lufs(ref_stats)
+        self.smooth_gain = float(user_vol)
+
+    def calculate(self, user_vol: int, curr_stats: dict) -> int:
+        """
+        Ritorna il volume VLC aggiustato per il brano corrente.
+        `user_vol` è il volume impostato dall'utente sul brano di riferimento.
+        """
+        if self.target_lufs is None or self.smooth_gain is None:
+            # Prima chiamata senza riferimento: usa il volume corrente
+            self.smooth_gain = float(user_vol)
+            return user_vol
+
+        curr_lufs = self._to_lufs(curr_stats)
+        diff_db = self.target_lufs - curr_lufs
+
+        # 1. Clamp per evitare salti brutali
+        diff_db = max(min(diff_db, self.MAX_STEP_DB), -self.MAX_STEP_DB)
+
+        # 2. Headroom: limita solo gli aumenti, non i tagli
+        if diff_db > 0:
+            peak = curr_stats.get('max', 0.0)   # in dBFS, es. -0.3
+            available = abs(peak) - self.HEADROOM_DB
+            diff_db = min(diff_db, max(available, 0.0))
+
+        # 3. Gain target basato su user_vol (ancora sotto controllo utente)
+        ratio = 10 ** (diff_db / 20.0)
+        target = user_vol * ratio
+        target = max(0.0, min(target, self.MAX_VLC_VOL))
+
+        # 4. EMA — aggiorna lo stato persistente
+        self.smooth_gain = self.ALPHA * target + (1 - self.ALPHA) * self.smooth_gain
+
+        return int(round(self.smooth_gain))
+
+    def reset(self):
+        """Chiama all'inizio di ogni nuova playlist."""
+        self.target_lufs = None
+        self.smooth_gain = None

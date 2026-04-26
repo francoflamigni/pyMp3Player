@@ -12,7 +12,7 @@ shazamio
 googletrans==3.1.0a0
 lyricsgenius
 musicbrainzngs
-C:/Users/franc/MySoft/pyMyLib/
+-e C:/Users/franc/MySoft/pyMyLib/
 pywin32
 psutil
 mutagen
