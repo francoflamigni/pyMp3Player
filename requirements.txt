@@ -4,6 +4,7 @@ pyinstaller
 python-vlc
 pyqt6==6.9.1
 pyqt6-qt6==6.9.1
+qtwidgets
 PyQt6-Frameless-Window
 pyradios
 soundcard

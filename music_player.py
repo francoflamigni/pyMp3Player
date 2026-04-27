@@ -45,7 +45,11 @@ class MusicPlayerDlg(QDialog):
         self.radio_info = None
         self.ply_lst = False #true se si tratta di una playlist
         self.busy = False
-        self.gain_ctrl = GainControl()
+
+        autogain = self.appCtx.config.get('user', 'auto_gain')
+        self.gain_ctrl = None
+        if autogain == '1':
+            self.gain_ctrl = GainControl()
 
         type = 'spectrum'
         args = ['--gain=40.0', '--no-video-title-show', '--quiet', '--audio-visual=visual']
@@ -521,25 +525,34 @@ class MusicPlayerDlg(QDialog):
             return
 
         self.ply_lst = playlist_mode
+        if self.ply_lst:
+            self.set_auto_gain()
         self.tracks = tracks
         self.index = 0
         self.currentChanged(0)
         self.play_song()
 
+    def set_auto_gain(self):
+        autogain = self.appCtx.config.get('user', 'auto_gain')
+        self.gain_ctrl = None
+        self.gain_ctrl = None
+        if autogain == '1':
+            self.gain_ctrl = GainControl()
+
     def play_song(self):
         self.tm = self.tracks[self.index].tm_sec
         filename = self.tracks[self.index].file
 
-        if self.ply_lst:
+        if self.ply_lst and self.gain_ctrl:
             peak_db = get_volume_stats(filename)
-            if self.index == 0:
-                user_vol = self.mediaplayer.audio_get_volume()
-                self.gain_ctrl.set_reference(peak_db, user_vol)
-            else:
-                user_vol = self.mediaplayer.audio_get_volume()
-                target = self.gain_ctrl.calculate(user_vol, peak_db)
-                self.set_volume(target)
-                self.vol.UpdateVolume(target)
+            user_vol = self.mediaplayer.audio_get_volume()
+            if user_vol > 0:
+                if self.index == 0:
+                    self.gain_ctrl.set_reference(peak_db, user_vol)
+                else:
+                    target = self.gain_ctrl.calculate(user_vol, peak_db)
+                    self.set_volume(target)
+                    self.vol.UpdateVolume(target)
 
         self.t_time.setText(get_tm(self.tm))
         self.media = self.instance.media_new(filename)

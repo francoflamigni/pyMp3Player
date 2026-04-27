@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidg
                              QListWidget, QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QHeaderView,
                              QPlainTextEdit, QAbstractItemView, QMenu, QLabel, QGroupBox, QComboBox, QFormLayout,
                              QSpinBox, QFileDialog, QCheckBox, QGridLayout)
+
+from qtwidgets import Toggle
 import scrobbler
 
 from pyMyLib.qtUtils import exitBtn, center_in_parent, set_background, yesNoMessage, waitCursor
@@ -303,7 +305,7 @@ class ConfigBox(QDialog):
         lang = self.ini.get('user', 'lang')
 
         self.setWindowTitle('Preferenze')
-        center_in_parent(self, parent, 200, 160)
+        center_in_parent(self, parent, 260, 160)
         vb = QVBoxLayout(self)
 
         # cache
@@ -350,11 +352,24 @@ class ConfigBox(QDialog):
         self.maxidle.setRange(0, 300)
         qf2.addWidget(QLabel("Timeout (sec.)"), 0, 0)
         qf2.addWidget(self.maxidle, 0, 1)
-        self.clic_exit = QCheckBox(self)
+        self.clic_exit = Toggle(self)
+        self.clic_exit.setMaximumSize(60, 30)
         qf2.addWidget(QLabel("Esce con un clic)"), 1, 0)
         qf2.addWidget(self.clic_exit, 1, 1)
 
         vb.addWidget(timeout_box)
+
+        auto_gain_box = QGroupBox(self)
+        auto_gain_box.setTitle("Regolazione automatica del volume")
+        hs = QHBoxLayout(auto_gain_box)
+        self.gain_msg = QLabel(self)
+        hs.addWidget(self.gain_msg)
+        self.gain = Toggle(self)
+        self.gain.setMaximumSize(60, 30)
+        self.gain.clicked.connect(self.gain_state)
+        hs.addWidget(self.gain)
+
+        vb.addWidget(auto_gain_box)
 
         speaker_box = QGroupBox(self)
         speaker_box.setTitle('Annunciatore')
@@ -392,8 +407,13 @@ class ConfigBox(QDialog):
         self.maxidle.setValue(tmout)
 
         clic_exit = self.ini.get('user', 'clic_exit')
-        ck = Qt.CheckState.Unchecked if clic_exit == '' or clic_exit == '0' else Qt.CheckState.Checked
-        self.clic_exit.setCheckState(ck)
+        clic_exit = Qt.CheckState.Unchecked if clic_exit == '' or clic_exit == '0' else Qt.CheckState.Checked
+        self.clic_exit.setCheckState(clic_exit)
+
+        gain = self.ini.get('user', 'auto_gain')
+        gain = Qt.CheckState.Unchecked if gain == '' or gain == '0' else Qt.CheckState.Checked
+        self.gain.setCheckState(gain)
+        self.gain_state()
 
         cache = self.ini.get('cache')
         if not cache:
@@ -417,6 +437,12 @@ class ConfigBox(QDialog):
     def cachepath(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Folder', self.cache_dir.text())
 
+    def gain_state(self):
+        if self.gain.isChecked():
+            self.gain_msg.setText("Attivo")
+        else:
+            self.gain_msg.setText("Non Attivo")
+
     def accept(self):
         lang = self.c1.currentText()
         self.ini.set('user', 'lang', lang)
@@ -424,6 +450,8 @@ class ConfigBox(QDialog):
         self.ini.set('user', 'tmout', tmout)
         clic_exit = 1 if self.clic_exit.isChecked() else 0
         self.ini.set('user', 'clic_exit', str(clic_exit))
+        gain = 1 if self.gain.isChecked() else 0
+        self.ini.set('user', 'auto_gain', str(gain))
 
         cs = {
             "dir": self.cache_dir.text(),
