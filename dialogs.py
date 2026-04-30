@@ -308,6 +308,8 @@ class ConfigBox(QDialog):
         center_in_parent(self, parent, 260, 160)
         vb = QVBoxLayout(self)
 
+        vg = QGridLayout()
+
         # cache
         cachebox = QGroupBox(self)
         cachebox.setTitle('Cache')
@@ -332,7 +334,8 @@ class ConfigBox(QDialog):
         hc.addWidget(self.cache_size)
         vc.addLayout(hc)
 
-        vb.addWidget(cachebox)
+        #vb.addWidget(cachebox)
+        vg.addWidget(cachebox, 0, 0)
 
         lang_box = QGroupBox(self)
         lang_box.setTitle('Lingua preferita')
@@ -343,7 +346,8 @@ class ConfigBox(QDialog):
 
         qf1.addWidget(self.c1)
 
-        vb.addWidget(lang_box)
+        #vb.addWidget(lang_box)
+        vg.addWidget(lang_box, 1, 0)
 
         timeout_box = QGroupBox(self)
         timeout_box.setTitle('Background')
@@ -357,7 +361,8 @@ class ConfigBox(QDialog):
         qf2.addWidget(QLabel("Esce con un clic)"), 1, 0)
         qf2.addWidget(self.clic_exit, 1, 1)
 
-        vb.addWidget(timeout_box)
+        #vb.addWidget(timeout_box)
+        vg.addWidget(timeout_box,0, 1)
 
         auto_gain_box = QGroupBox(self)
         auto_gain_box.setTitle("Regolazione automatica del volume")
@@ -369,7 +374,8 @@ class ConfigBox(QDialog):
         self.gain.clicked.connect(self.gain_state)
         hs.addWidget(self.gain)
 
-        vb.addWidget(auto_gain_box)
+        #vb.addWidget(auto_gain_box)
+        vg.addWidget(auto_gain_box, 1, 1)
 
         speaker_box = QGroupBox(self)
         speaker_box.setTitle('Annunciatore')
@@ -387,10 +393,11 @@ class ConfigBox(QDialog):
         self.speker_volume.setSingleStep(10)
         hc.addWidget(self.speker_volume)
         vs.addLayout(hc)
-        vb.addWidget(speaker_box)
 
-        vb.addWidget(speaker_box)
+        #vb.addWidget(speaker_box)
+        vg.addWidget(speaker_box, 2, 0)
 
+        vb.addLayout(vg)
         vb.addLayout(exitBtn(self))
 
         self.load_from_config()
