@@ -246,63 +246,6 @@ class ConversionWorker(QThread):
         except Exception as e:
             return False
 
-    '''
-    def _add_tags(self, audio_file, mp3_file):
-        """Aggiunge tag ID3 al file MP3."""
-        try:
-            try:
-                id3_tags = ID3(str(mp3_file))
-            except ID3NoHeaderError:
-                id3_tags = ID3()
-
-            # Usa il titolo originale se presente, altrimenti quello generato
-            title = audio_file.original_title or audio_file.generated_title
-            track = audio_file.track or audio_file.generated_track
-
-            # Aggiungi tag
-            if title:
-                id3_tags.add(TIT2(encoding=3, text=title))
-            if audio_file.artist:
-                id3_tags.add(TPE1(encoding=3, text=audio_file.artist))
-            if audio_file.album:
-                id3_tags.add(TALB(encoding=3, text=audio_file.album))
-            if audio_file.year:
-                id3_tags.add(TDRC(encoding=3, text=audio_file.year))
-            if audio_file.genre:
-                id3_tags.add(TCON(encoding=3, text=audio_file.genre))
-            if track:
-                id3_tags.add(TRCK(encoding=3, text=track))
-
-            # Rimuovi tutte le copertine esistenti prima di aggiungere quella nuova
-            keys_to_remove = [key for key in id3_tags.keys() if key.startswith('APIC')]
-            for key in keys_to_remove:
-                del id3_tags[key]
-
-            # Aggiungi la copertina se presente
-            if audio_file.album_art:
-                # Determina il tipo MIME dall'header dei dati
-                mime_type = 'image/jpeg'  # default
-                if audio_file.album_art.startswith(b'\x89PNG'):
-                    mime_type = 'image/png'
-                elif audio_file.album_art.startswith(b'GIF'):
-                    mime_type = 'image/gif'
-                elif audio_file.album_art.startswith(b'BM'):
-                    mime_type = 'image/bmp'
-
-                id3_tags.add(APIC(
-                    encoding=3,
-                    mime=mime_type,
-                    type=3,  # Cover (front)
-                    desc=u'Cover',
-                    data=audio_file.album_art
-                ))
-
-            id3_tags.save(str(mp3_file))
-
-        except Exception as e:
-            print(f"Errore aggiunta tag: {e}")
-    '''
-
     def _add_tags(self, audio_file, file_path):
         """Aggiunge tag al file audio (supporta MP3 e FLAC)."""
         file_path_str = str(file_path)
@@ -786,7 +729,10 @@ class AudioConverter(QDialog):
             tipo_item.setFlags(tipo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
         if self.audio_files:
-            self.display_cover(self.audio_files[0].album_art)
+            if self.audio_files[0].album_art:
+                self.current_cover_data = self.audio_files[0].album_art
+            self.display_cover(self.current_cover_data)
+
 
         self.populating = False
 
@@ -1000,6 +946,9 @@ class AudioConverter(QDialog):
             if genre and not audio_file.genre or genre and genre != audio_file.genre:
                 audio_file.genre = genre
                 self.table.setItem(row, off + 5, QTableWidgetItem(genre))
+
+            if self.current_cover_data and not audio_file.album_art or self.current_cover_data and audio_file.album_art != self.current_cover_data:
+                audio_file.album_art = self.current_cover_data
 
         self.status_label.setText("Informazioni globali applicate")
 
