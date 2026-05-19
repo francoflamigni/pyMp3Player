@@ -16,10 +16,6 @@ pip install pyqt6-qt6==6.6.1
 
 pip install PyQt6-Frameless-Window
 
-pip install superqt
-
-pip install eyed3
-
 pip install pyradios 
 
 pip install soundcard

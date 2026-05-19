@@ -413,16 +413,16 @@ class AudioConverter(QDialog):
         self.output_folder_edt.setReadOnly(True)
         self.output_folder_edt.setPlaceholderText("Nessuna cartella selezionata")
         self.output_folder_edt.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
-        azione_browse = QAction(icone_browse, "browse", self)
-        azione_browse.triggered.connect(self.select_output_folder)
-        self.output_folder_edt.addAction(
-            azione_browse,
-            QLineEdit.ActionPosition.LeadingPosition
-        )
 
-        #self.output_button = QPushButton("Scegli Cartella Output")
-        #self.output_button.clicked.connect(self.select_output_folder)
+        if self.mode == Mode.FORMAT_CONVERT:
+            icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+            azione_browse = QAction(icone_browse, "browse", self)
+            azione_browse.triggered.connect(self.select_output_folder)
+            self.output_folder_edt.addAction(
+                azione_browse,
+                QLineEdit.ActionPosition.LeadingPosition
+            )
+
         conversion_layout.addWidget(self.output_folder_edt)
 
         self.convert_button = QPushButton("Elabora Tutti")
@@ -443,15 +443,6 @@ class AudioConverter(QDialog):
             if group and group.title() == "Conversione":
                 group.setVisible(show)
                 QApplication.processEvents()
-
-                # Nascondi/mostra tutti i widget figli
-                '''
-                for widget in group.findChildren(QWidget):
-                    widget.setVisible(show)
-                if show:
-                    self.output_folder_edt.setFocus(Qt.FocusReason.OtherFocusReason)
-                    QApplication.processEvents()
-                '''
                 break
 
     def setup_folder(self):
@@ -462,16 +453,14 @@ class AudioConverter(QDialog):
         self.folder_label = QLineEdit() #QLabel("Nessuna cartella selezionata")
         self.folder_label.setReadOnly(True)
         self.folder_label.setPlaceholderText("Nessuna cartella selezionata")
-        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
-        azione_browse = QAction(icone_browse, "browse", self)
-        azione_browse.triggered.connect(self.select_folder)
-        self.folder_label.addAction(
-            azione_browse,
-            QLineEdit.ActionPosition.LeadingPosition
-        )
-
-        #self.folder_button = QPushButton("Scegli Cartella")
-        #self.folder_button.clicked.connect(self.select_folder)
+        if self.mode == Mode.FORMAT_CONVERT:
+            icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+            azione_browse = QAction(icone_browse, "browse", self)
+            azione_browse.triggered.connect(self.select_folder)
+            self.folder_label.addAction(
+                azione_browse,
+                QLineEdit.ActionPosition.LeadingPosition
+            )
 
         self.save_button = QPushButton("Salva")
         self.save_button.clicked.connect(self.save)

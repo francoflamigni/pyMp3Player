@@ -353,40 +353,6 @@ class MusicIndexDlg(QDialog):
         # Ogni volta che questa pagina viene mostrata, prendi il fuoco
         self.te.setFocus()
 
-    '''
-    def show_tip(self, txt, pos):
-        from utility import WikipediaWorker
-
-        #qp = QCursor.pos()  # Posizione globale del cursore
-        #p = self.artists.mapFromGlobal(qp)
-        #qi = self.artists.itemAt(p)
-        #if qi:
-        #txt = qi.text()
-        worker = WikipediaWorker(txt, pos, cache=self.appctx.cache)
-        worker.signals.result.connect(self.artists.show_tooltip_result)
-
-        self._current_worker = worker
-        self.threadpool.start(worker)
-
-    def hide_tip(self):
-        try:
-            self._current_worker.cancel()
-            self._current_worker = None
-        except:
-            pass
-
-    def show_tooltip_result(self, text, pos):
-        """Slot chiamato quando il worker ha un risultato pronto."""
-        self._current_worker = None
-        QToolTip.showText(pos, text, self, QRect(), 60000)
-
-    def worker_finished(self):
-        """Slot chiamato quando un worker (qualsiasi) ha finito."""
-        # Se il worker che ha finito è quello attualmente tracciato, resettalo.
-        # (Opzionale: necessario solo se si volesse fare cleanup specifico)
-        pass
-    '''
-
     def list_search(self):
         txt = self.te.text()
         if not txt:
@@ -468,7 +434,11 @@ class MusicIndexDlg(QDialog):
                         except:
                             pass
 
-        ctx.exec(pd)
+        if len(ctx.actions()) == 1:
+            # Se c'è solo un'azione, eseguila immediatamente senza mostrare il menu
+            ctx.actions()[0].trigger()
+        elif len(ctx.actions()) > 1:
+            ctx.exec(pd)
 
     def info_artist(self, artist):
         from utility import ArtistInfoDlg

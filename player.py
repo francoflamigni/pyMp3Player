@@ -194,7 +194,7 @@ class Player(FramelessDialog):
         self.tb = QTabBar()
         self.tb.addTab('')
         self.tb.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'mp3.png')))
-        self.tb.setTabToolTip(0, 'Mp3 Flac')
+        self.tb.setTabToolTip(0, 'archivio musicale')
         self.tb.addTab('')
         self.tb.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'radio.png')))
         self.tb.setTabToolTip(1, 'Radio')

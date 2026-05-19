@@ -1,10 +1,11 @@
 import random
 from typing import Set, Tuple
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QIntValidator, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QSortFilterProxyModel
+from PyQt6.QtGui import QIntValidator, QIcon, QCursor
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QAbstractItemView, QTableWidgetItem, QPushButton, \
-    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout, QComboBox, QLayout
+    QHeaderView, QGroupBox, QLabel, QLineEdit, QSpinBox, QHBoxLayout, QComboBox, QLayout, QWidget, QGridLayout, QDial, \
+    QTableView
 
 from pyMyLib.utils import get_resource_file
 
@@ -276,6 +277,13 @@ class PlayListDlg(QDialog):
 
     def setup_ui(self):
         vlayout = QVBoxLayout(self)
+
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Cerca un artista...")
+        self.search_bar.textChanged.connect(self.salta_all_artista)
+        self.search_bar.setClearButtonEnabled(True)
+        vlayout.addWidget(self.search_bar)
+
         self.table = QTableWidget(self)
         self.fields = ["Artista", "Preferenza"]
         self.table.setColumnCount(len(self.fields))
@@ -285,6 +293,7 @@ class PlayListDlg(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(1, 120)
         self.table.cellClicked.connect(self.handle_cell_clicked)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         self.table.setShowGrid(True)
         for artist in self.index.artists.name.keys():
@@ -295,7 +304,7 @@ class PlayListDlg(QDialog):
         self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
 
         vlayout.addWidget(self.table)
-        self.dw = DurationWidget()
+        self.dw = DurationPicker() #DurationWidget()
         vlayout.addWidget(self.dw)
 
         bt_crea = QPushButton()
@@ -304,6 +313,31 @@ class PlayListDlg(QDialog):
 
         vlayout.addWidget(bt_crea)
         self.setup_geometry()
+
+    def salta_all_artista(self, testo_ricercato):
+        # Se la barra di ricerca è vuota, non fare nulla
+        if not testo_ricercato:
+            return
+
+        # Convertiamo subito il testo cercato in minuscolo
+        testo_basso = testo_ricercato.lower()
+        modello = self.table.model()
+
+        # Scorriamo tutte le righe della tabella (colonna 0 = Artista)
+        for riga in range(modello.rowCount()):
+            indice = modello.index(riga, 0)
+
+            # Recuperiamo il nome dell'artista e lo convertiamo in stringa minuscola
+            nome_artista = str(modello.data(indice, Qt.ItemDataRole.DisplayRole)).lower()
+
+            # Il controllo "in" di Python verifica se la stringa è contenuta in qualsiasi punto
+            if testo_basso in nome_artista:
+                # Trovato! Selezioniamo la riga
+                self.table.setCurrentIndex(indice)
+                # Spostiamo la vista mettendo la riga al centro
+                self.table.scrollTo(indice, QTableView.ScrollHint.PositionAtCenter)
+                break  # Interrompiamo il ciclo al primo risultato utile
+
 
     def setup_geometry(self):
         # 1. Adattiamo le colonne al contenuto
@@ -420,4 +454,72 @@ class PlayListDlg(QDialog):
     def get_playlist(self):
         return self.list
 
+
+class ClickAndHideDial(QDial):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def mousePressEvent(self, event):
+        # Se l'utente clicca con il tasto sinistro
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Nasconde il cursore del mouse (lo imposta come "Blank")
+            self.setCursor(QCursor(Qt.CursorShape.BlankCursor))
+
+        # Gestisce l'evento normalmente (fa girare la manopola)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        # Quando l'utente rilascia il tasto sinistro
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Ripristina il cursore standard (la freccia)
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+        super().mouseReleaseEvent(event)
+
+class DurationPicker(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QGridLayout(self)
+
+        # 1. Creazione del Dial (la rotella)
+        self.dial = ClickAndHideDial(self)
+        self.dial.setRange(10, 180)  # Da 10 a 180 minuti
+        self.dial.setSingleStep(5)
+        self.dial.setPageStep(5) # Salti di 5 minuti
+        self.dial.setNotchesVisible(True)  # Mostra i tacchetti visivi
+        self.dial.setTracking(True)
+
+        # 2. Creazione del Display Centrale
+        self.display = QLabel("10 min")
+        self.display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Fogli di stile per renderlo carino (QSS)
+        self.display.setStyleSheet("font-size: 16px; font-weight: bold; background: transparent;")
+
+        # 3. Sovrapposizione nello stesso slot del Grid Layout
+        layout.addWidget(self.dial, 0, 0)
+        layout.addWidget(self.display, 0, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # Connessione del segnale per aggiornare il testo
+        self.dial.valueChanged.connect(self.update_display)
+
+    def update_display(self, value):
+        valore_arrotondato = round(value / 5) * 5
+
+        # Blocca i segnali momentaneamente per evitare loop infiniti,
+        # poi forza il dial sul valore arrotondato
+        self.dial.blockSignals(True)
+        self.dial.setValue(valore_arrotondato)
+        self.dial.blockSignals(False)
+        value = valore_arrotondato
+        if value >= 60:
+            ore = value // 60
+            minuti = value % 60
+            self.display.setText(f"{ore}h {minuti:02d}m")
+        else:
+            self.display.setText(f"{value} min")
+
+    def get_duration_seconds(self):
+        val = self.dial.value()
+        return val * 60
 
