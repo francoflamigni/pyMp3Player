@@ -193,7 +193,7 @@ class Player(FramelessDialog):
 
         self.tb = QTabBar()
         self.tb.addTab('')
-        self.tb.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'mp3.png')))
+        self.tb.setTabIcon(0, QIcon(get_resource_file(__file__, 'icone', 'music_archive.png')))
         self.tb.setTabToolTip(0, 'archivio musicale')
         self.tb.addTab('')
         self.tb.setTabIcon(1, QIcon(get_resource_file(__file__, 'icone', 'radio.png')))
@@ -362,7 +362,10 @@ class Player(FramelessDialog):
                         ico=get_resource_file(__file__, 'icone', 'folders_sync.png')),
             AddMenuItem("Preferenze", fun=self.preference,
                         ico=get_resource_file(__file__, 'icone', 'preferences.png')),
-            AddMenuItem("Informazioni", fun=self.info)
+            AddMenuItem("Aiuto", fun=self.help,
+                        ico=get_resource_file(__file__, 'icone', 'help.png')),
+            AddMenuItem("Informazioni", fun=self.info,
+                        ico=get_resource_file(__file__, 'icone', 'about.png'))
         ]
         contextMenu.addActions(actions)
         contextMenu.exec(p)
@@ -506,6 +509,9 @@ class Player(FramelessDialog):
         with self.suspend_background_mode():
             if ConfigBox.run(self, self.appCtx.config) == 1:
                 self.Install_idle_fun()
+    def help(self):
+        from dialogs import FinestraManuale
+        FinestraManuale.run(self, get_resource_file(__file__, 'docs', 'Euterpe guida utente.htm'))
 
     def create_playlist(self):
         index = self.dlg.music
