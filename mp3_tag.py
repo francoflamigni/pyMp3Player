@@ -286,7 +286,7 @@ class Music:
         alb_art = album + '@' + art
         if alb_art in self.albums.title.keys():
             alb = self.albums.title[alb_art]
-            return self.find_pic_by_file(alb.path)
+            return self.find_pic_by_file(alb.path.lower())
         return None
 
     def find_pic_by_file(self, path):

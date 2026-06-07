@@ -21,6 +21,8 @@ https://github.com/andreztz/pyradios/tree/main/pyradios
 '''
 
 AppConfig = 'Euterpe'
+Version = ' 1.5.1'
+ReleaseDate = '2 Novembre 2025'
 
 
 
@@ -480,74 +482,3 @@ class ConfigBox(QDialog):
     @staticmethod
     def run(parent, ini):
         return ConfigBox(parent, ini).exec()
-
-
-class FinestraManuale(QDialog):
-    def __init__(self, parent, percorso_html):
-        super().__init__(parent)
-
-        # Configurazione della finestra principale
-        self.setWindowTitle("Manuale di Aiuto")
-        self.setGeometry(100, 100, 900, 700)
-
-        # 1. Creiamo il widget QTextBrowser
-        self.browser_aiuto = QTextBrowser()
-        self.browser_aiuto.setStyleSheet("""
-                /* Regola per le immagini grandi (es. screenshot) */
-                img {
-                    display: block;
-                    margin-left: auto;
-                    margin-right: auto;
-                    max-width: 100%;
-                    height: auto;
-                    margin-top: 10px;
-                    margin-bottom: 10px;
-                }
-
-                /* Regola correttiva per le icone inline: 
-                   Se l'immagine è più piccola di 40px (altezza o larghezza), 
-                   la rimettiamo in linea con il testo senza mandarla a capo */
-                img[width^="1"], img[width^="2"], img[width^="3"],
-                img[height^="1"], img[height^="2"], img[height^="3"],
-                .inline-icon { 
-                    display: inline-block !important;
-                    margin: 0 4px !important;
-                    vertical-align: middle;
-                }
-            """)
-        self.browser_aiuto.setOpenExternalLinks(True)
-
-        # --- STRATEGIA DI CARICAMENTO ---
-        percorso_assoluto = os.path.abspath(os.path.normpath(percorso_html))
-
-        # Gestiamo SOLO la lettura del file nei blocchi try/except
-        contenuto_html = ""
-        try:
-            with open(percorso_assoluto, 'r', encoding='utf-8') as f:
-                contenuto_html = f.read()
-        except UnicodeDecodeError:
-            with open(percorso_assoluto, 'r', encoding='windows-1252') as f:
-                contenuto_html = f.read()
-
-        html_content = contenuto_html.replace('<p class=ScreenshotManuale>', '<p align="center">')
-        # --- ORA CARICHIAMO IL TESTO (Fuori da try/except, così viene eseguito SEMPRE) ---
-        # 1. Impostiamo il testo HTML
-        self.browser_aiuto.setHtml(html_content)
-
-        # 2. Diciamo al documento dove cercare le immagini collegate
-        cartella_padre = os.path.dirname(percorso_assoluto)
-        url_base = QUrl.fromLocalFile(cartella_padre + "/")
-        self.browser_aiuto.document().setBaseUrl(url_base)
-
-        # --- CONFIGURAZIONE INTERFACCIA (Mancava questo pezzo per mostrare il layout) ---
-        # Creiamo il widget contenitore centrale
-
-        # Inseriamo il browser nel layout
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.browser_aiuto)
-
-        # Applichiamo il layout al widget centrale
-
-    @staticmethod
-    def run(parent, percorso_html):
-        return FinestraManuale(parent, percorso_html).exec()

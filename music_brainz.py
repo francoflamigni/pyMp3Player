@@ -756,9 +756,10 @@ class HtmlInfoDlg(QDialog):
     def changeEvent(self, event):
         if event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
-                print("1")
+                #print("1")
+                a = 1
             else:
-                print("0")
+                #print("0")
                 a = 0
         super().changeEvent(event)
 

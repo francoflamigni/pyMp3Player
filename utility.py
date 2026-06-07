@@ -217,13 +217,19 @@ class WikipediaWorker(QRunnable):
         # 1. Definiamo i suffissi musicali tipici di Wikipedia
         musical_suffixes = [" (cantante)", " (gruppo musicale)", " (musicista)"]
 
+        wikipedia.set_user_agent("Euterpe/1.0 (contatto@tuodominio.com)")
+
         # 2. Proviamo prima con i nomi specifici
         for suffix in musical_suffixes:
             try:
                 # Tenta ad esempio: wikipedia.summary("Frida (cantante)", sentences=5)
                 return wikipedia.summary(self.artist_name + suffix, sentences=5)
-            except (wikipedia.exceptions.PageError, wikipedia.exceptions.DisambiguationError):
+            except wikipedia.exceptions.PageError as e:
+                continue
+            except wikipedia.exceptions.DisambiguationError as e:
                 continue  # Se non esiste o è ambiguo, prova il prossimo suffisso
+            except Exception as e:
+                a = 0
 
         # 3. Se i tentativi specifici falliscono, usiamo la tua riga originale
         try:
@@ -802,116 +808,7 @@ class myList(QListWidget):
                 self.setCursor(create_cursor(get_resource_file(__file__, 'icone', 'play.png')))
         super(QListWidget, self).mousePressEvent(event)
 
-'''
-class CustomToolTip(QLabel):
-    def __init__(self):
-        super().__init__(None)
-        self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
-        self.setWordWrap(True)
-        self.setFixedWidth(400)
-        self.setStyleSheet("background-color: #333; color: white; border: 1px solid #555; padding: 10px;")
 
-        # L'animazione agirà sulla geometria (posizione e dimensione)
-        self.animation = QPropertyAnimation(self, b"geometry")
-        self.animation.setDuration(250)  # Millisecondi (un quarto di secondo)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-'''
-'''
-class MusicList(myList):
-    def __init__(self, parent, show_tip=None, hide_tip=None, label='', cursor=0):
-        super().__init__(parent, txt=label, cursor=cursor)
-        self.my_tip = CustomToolTip()
-        self.active_item = None  # Per sapere su quale riga siamo
-        self.show_tip = show_tip
-        self.hide_tip = hide_tip
-        self.screen_height = QApplication.primaryScreen().size().height()
-
-    def mouseMoveEvent(self, event):
-        p = event.pos()
-        if p.x() > 70:
-            self.unsetCursor()
-            self.nascondi_mio_tip()
-            super().mouseMoveEvent(event)
-            return
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        item = self.itemAt(event.pos())
-        # Se il mouse è ancora sulla stessa riga, NON fare nulla (niente flicker!)
-        if item == self.active_item:
-            super().mouseMoveEvent(event)
-            return
-
-        # Se cambiamo riga o usciamo
-        if item:
-            self.nascondi_mio_tip()
-            self.active_item = item
-            p = event.globalPosition().toPoint()
-            QTimer.singleShot(100, lambda: self.mostra_mio_tip(item.text(), p))
-            #self.mostra_mio_tip(item.text(), p)
-        else:
-            self.nascondi_mio_tip()
-
-    def mousePressEvent(self, event):
-        self.nascondi_mio_tip()
-        super().mouseMoveEvent(event)
-
-    def mostra_mio_tip(self, txt, global_pos):
-        cursor_pos = QCursor.pos()
-        item = self.itemAt(self.mapFromGlobal(cursor_pos))
-        if item is not None and item.text() == txt:
-            self.my_tip.move(global_pos.x() + 30, global_pos.y() - 15)
-            self.show_tip(txt, global_pos)
-
-
-        # 3. Qui lanci il tuo WikipediaWorker.
-        # Quando il worker emette il segnale, chiamerai self.my_tip.setText(html_wikipedia)
-        # Il widget resterà visibile e il testo cambierà istantaneamente senza sparire!
-
-    def leaveEvent(self, event):
-        self.nascondi_mio_tip()
-        self.unsetCursor()
-        super().leaveEvent(event)
-
-    def nascondi_mio_tip(self):
-        self.active_item = None
-        self.my_tip.hide()
-        self.hide_tip()
-
-    def show_tooltip_result(self, txt):
-        # 1. Aggiorna il contenuto (ora con foto + testo)
-        self.my_tip.setText(txt)
-
-        # 2. Salva la posizione attuale del ToolTip (per non farlo saltare altrove)
-        posizione_attuale = self.my_tip.pos()
-
-        # 3. Chiedi a Qt di calcolare quanto spazio servirebbe ORA
-        # Usiamo sizeHint() per sapere la dimensione ideale senza cambiare subito il widget
-        dimensione_ideale = self.my_tip.sizeHint()
-
-        # 4. Opzione A: Scatto istantaneo
-        # self.my_tip.resize(dimensione_ideale)
-
-        y0 = posizione_attuale.y()
-        dy0 = dimensione_ideale.height()
-        dy = y0 + dy0
-        if dy > self.screen_height:
-            ddy = dy - self.screen_height
-            y0 -= ddy
-
-        # 5. Opzione B: Animazione di crescita fluida verso la nuova dimensione
-        self.my_tip.animation.stop()  # Ferma animazioni precedenti
-        self.my_tip.animation.setStartValue(self.my_tip.geometry())
-        self.my_tip.animation.setEndValue(QRect(
-            posizione_attuale.x(),
-           y0,
-            self.my_tip.width(),  # Larghezza fissa
-            dy0  # Nuova altezza calcolata
-        ))
-        self.my_tip.animation.start()
-
-        self.my_tip.setText(txt)
-        self.my_tip.show()
-'''
 class ArtistInfoDlg(HtmlInfoDlg):
     @staticmethod
     def run(parent, artist, cache):

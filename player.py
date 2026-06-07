@@ -9,10 +9,10 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 from qframelesswindow import FramelessDialog, StandardTitleBar
 
-from pyMyLib.qtUtils import informMessage, AddMenuItem, set_application_icon
+from pyMyLib.qtUtils import informMessage, AddMenuItem, set_application_icon, FinestraManuale
 from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 
-from dialogs import AppConfig
+from dialogs import AppConfig, Version, ReleaseDate
 from utility import AppContext
 
 from music_index import MusicIndexDlg
@@ -22,7 +22,7 @@ from utility import detect_cd_drives, close_splash, Cache
 from mp3_tag import GENRE
 from contextlib import contextmanager
 
-INFO_MES = f'{AppConfig}\nMusic manager\nVersione 1.5.1\n02 Novembre 2025'
+INFO_MES = f'{AppConfig}\nMusic manager\nVersione {Version}\n{ReleaseDate}'
 
 class MyTitleBar(StandardTitleBar):
     def __init__(self, parent):
@@ -483,7 +483,7 @@ class Player(FramelessDialog):
             bt.exec()
 
     def info(self):
-        informMessage(INFO_MES, 'Εὐτέρπη', 15, True, get_resource_file(__file__, 'icone', 'pentagram.png'))
+        informMessage(INFO_MES, 'Εὐτέρπη', 12, True, get_resource_file(__file__, 'icone', 'pentagram.png'))
 
     def convert(self):
         from format_convert import AudioConverter
@@ -510,7 +510,6 @@ class Player(FramelessDialog):
             if ConfigBox.run(self, self.appCtx.config) == 1:
                 self.Install_idle_fun()
     def help(self):
-        from dialogs import FinestraManuale
         FinestraManuale.run(self, get_resource_file(__file__, 'docs', 'Euterpe guida utente.htm'))
 
     def create_playlist(self):

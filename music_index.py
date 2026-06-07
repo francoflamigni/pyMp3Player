@@ -549,18 +549,11 @@ class MusicIndexDlg(QDialog):
         self.set_artists()
 
         t1 = time.monotonic()
-        print(f"elaborazione: {(t1-t0):.2f}")
+        #print(f"elaborazione: {(t1-t0):.2f}")
         self.library_info()
 
         self.prog.setToolTip(self.stat)
         self.print(self.last_folder)
-        """
-        elif self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
-            if yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
-                self.index(self.last_folder)
-                self.library_info()
-                self.prog.setToolTip(self.stat)
-        """
 
     ''' Cerca canzone artista album'''
     def search(self):
