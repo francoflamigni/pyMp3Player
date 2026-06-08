@@ -1,13 +1,12 @@
-setuptools==69.0.3
-pyinstaller-hooks-contrib==2023.12
-pyinstaller==5.7.0
+setuptools
+pyinstaller-hooks-contrib
+pyinstaller
 python-vlc
-pyqt6==6.6.1
-pyqt6-qt6==6.6.1
+pyqt6==6.9.1
+pyqt6-qt6==6.9.1
+qtwidgets
 PyQt6-Frameless-Window
-superqt
-eyed3
-pyradios 
+pyradios
 soundcard
 soundfile
 shazamio
@@ -15,3 +14,12 @@ googletrans==3.1.0a0
 lyricsgenius
 musicbrainzngs
 -e C:/Users/franc/MySoft/pyMyLib/
+pywin32
+psutil
+mutagen
+discid
+langdetect
+edge-tts
+win32-setctime
+tinytag
+wikipedia

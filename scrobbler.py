@@ -1,12 +1,15 @@
-# -*- coding: utf-8 -*-
+import os.path
+
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+
 import logging
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
 import re
 import struct
-from lyricsgenius import Genius
+import time
+
 logger = logging.getLogger(__package__)
 
 formatter = logging.Formatter(
@@ -174,68 +177,192 @@ def get_thumbnail(url):
     if len(url) > 0:
         try:
             im = urllib.request.urlopen(url).read()
+            if "DOCTYPE" in str(im):
+                return None
             return im
-            with open("c:/temp/test.png", "wb") as f:
-                f.write(im)
+
         except:
             pass
     return None
 
-def get_title(url):
-    title = ''
-    request = urllib.request.Request(url, headers={'Icy-MetaData': 1})  # request metadata
-    try:
-        response = urllib.request.urlopen(request)
-    except:
-        return title
 
-    metaint = int(response.headers['icy-metaint'])
-    for _ in range(10):  # # title may be empty initially, try several times
-        response.read(metaint)  # skip to metadata
-        metadata_length = struct.unpack('B', response.read(1))[0] * 16  # length byte
-        metadata = response.read(metadata_length).rstrip(b'\0')
-        # extract title from the metadata
-        m = re.search(br"StreamTitle='([^']*)';", metadata)
-        if m:
-            title = m.group(1)
-            if title:
-                break
+from threading import Thread, Event
+class GetRadioInfo(QObject):
+    radio_info_msg = pyqtSignal(str)
+    def __init__(self, url, timeout):
+        super().__init__()
+        self.url = url
+        self.timer = QTimer()
+        self.timeout = timeout
+        #self.running = False
+        self.stop_event = Event()
+        self.th = None
 
-    if isinstance(title, str) is False:
-        encoding = 'latin1'  # default: iso-8859-1 for mp3 and utf-8 for ogg streams
-        title = title.decode(encoding, errors='replace')
-    return title
+    def start(self):
+        self.th = Thread(target=self.get_title, daemon=True)
+        #self.running = True
+        self.th.start()
 
-def song_text(artist, song):
-    oldtoken = 'RAiSHWVhVPsbCpdYygn-I6g9CAHa5DwXvujb_Tv98U1K21JWSigV3YLc3w7miV1l'
+    def stop(self):
+        self.stop_event.set()
 
-    txt = ''
+    def get_title(self):
+        while not self.stop_event.is_set():
+            title = ''
+            try:
+                # Aggiungiamo un timeout alla urlopen per evitare blocchi infiniti
+                request = urllib.request.Request(self.url, headers={'Icy-MetaData': '1'})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    metaint = response.headers.get('icy-metaint')
 
-    clientID = 'vMXGN9eXhW_1JqnbqVGumj5wPK9b3y3rgCAZzxEqM2Hvkt-3p58cP4iYxFxhDVPV'
-    secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
-    token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
+                    if metaint:
+                        metaint = int(metaint)
+                        # Leggiamo i dati necessari per trovare il titolo
+                        for _ in range(5):  # Riduciamo i tentativi per velocità
+                            response.read(metaint)  # Salta i dati audio
 
-    api = Genius(token, verbose=False, timeout=10,
-                        remove_section_headers=False, skip_non_songs=True, response_format='dom')
-    waitCursor(True)
-    try:
-        #art = api.search_artist(artist, max_songs=0)
-        song = api.search_song(song, artist, None, False)
-        if song is not None:
-            txt = song.lyrics
-            txt = re.sub(r'.*(?=[\[{])', r'\n', txt)
+                            # Leggi il byte della lunghezza (va moltiplicato per 16)
+                            res = response.read(1)
+                            if not res: break
 
-            lines = txt.strip().split('\n')
-            lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
-            lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
-            lines[-1] = re.sub(r'\d+$', '', lines[-1])
-            lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
-            txt =  '\n'.join(lines)
+                            metadata_length = struct.unpack('B', res)[0] * 16
+                            if metadata_length > 0:
+                                metadata = response.read(metadata_length).rstrip(b'\0')
+                                m = re.search(br"StreamTitle='([^']*)';", metadata)
+                                if m:
+                                    raw_title = m.group(1)
+                                    # Gestione decodifica intelligente
+                                    try:
+                                        title = raw_title.decode('utf-8')
+                                    except UnicodeDecodeError:
+                                        title = raw_title.decode('latin1', errors='replace')
 
-            a = 0
-    except ConnectionError as err:
-        a = 0
-    except Exception as er1:
-        a = 0
-    waitCursor()
-    return txt
+                                    if title:
+                                        break
+
+                    # Chiudendo il blocco 'with', la connessione viene rilasciata
+            except Exception as e:
+                print(f"Errore recupero info radio: {e}")
+                title = "Info non disponibile"
+
+            # Invia il segnale (se title è vuoto, invia stringa vuota)
+            self.radio_info_msg.emit(title)
+
+            # Attesa intelligente: si interrompe subito se chiami stop_event.set()
+            self.stop_event.wait(timeout=self.timeout / 1000.0)
+
+
+class LyricsWorker(QObject):
+    finished = pyqtSignal(str)
+    def __init__(self, artist, song):
+        super().__init__()
+        self.artist = artist
+        self.song_title = song
+        self.token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
+
+        """
+        clientID = 'vMXGN9eXhW_1JqnbqVGumj5wPK9b3y3rgCAZzxEqM2Hvkt-3p58cP4iYxFxhDVPV'
+        secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
+        token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
+        """
+    def _song_text(self):
+        from lyricsgenius import Genius
+
+        txt = ''
+
+        api = Genius(self.token, verbose=False, timeout=10,
+                            remove_section_headers=False, skip_non_songs=True, response_format='dom')
+
+        try:
+            #art = api.search_artist(artist, max_songs=0)
+            song = api.search_song(self.song_title, self.artist, None, False)
+            if song is not None:
+                txt = song.lyrics
+                txt = re.sub(r'.*(?=[\[{])', r'\n', txt)
+
+                lines = txt.strip().split('\n')
+                lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
+                lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
+                lines[-1] = re.sub(r'\d+$', '', lines[-1])
+                lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
+                txt =  '\n'.join(lines)
+
+                a = 0
+        except ConnectionError as err:
+            txt = f"Connection error: {err}"
+        except Exception as er1:
+            txt = f"Error: {er1}"
+
+        self.finished.emit(txt)
+        return txt
+
+    def song_text(self):
+        Thread(target=self._song_text, daemon=True).start()
+
+    def song_text2(self):
+        waitCursor(True)
+        t = self._song_text()
+        waitCursor()
+        return t
+
+import edge_tts
+import asyncio
+class Speaker:
+    def __init__(self, gender, tmp_dir):
+        self.gender = 'Male' if gender.lower() == 'uomo' else 'Female'
+        self.voce = ''
+        self.tmp_dir = tmp_dir
+        self.slang = {'it': 'IT',
+                 'fr': 'FR',
+                 'es': 'ES',
+                 'de': 'DE',
+                 'en': 'GB'}
+
+    async def select_voce(self, gender='Female'):
+        # Recupera tutte le voci disponibili
+        voci = await edge_tts.VoicesManager.create()
+
+        try:
+            # Filtra per la lingua desiderata (es. "it" per italiano)
+            voci_filtrate = voci.find(Locale=self.codice_lingua, Gender=self.gender)
+            self.voce = voci_filtrate[0]['ShortName']
+        except:
+            self.voce = "it-IT-IsabellaNeural"
+
+    def detect_lingua(self, frase):
+        from langdetect import detect
+        lingua_rilevata = detect(frase)
+        if lingua_rilevata is None:
+            lingua = "it"
+        else:
+            lingua = lingua_rilevata.lower()
+        try:
+            self.codice_lingua = f"{lingua}-{self.slang[lingua]}"
+        except:
+            self.codice_lingua = 'it-IT'
+
+    def pronuncia(self, frase, volume="50"):
+        vol = f"{int(volume):+}%"
+        return asyncio.run(self._pronuncia(frase, vol))
+
+    async def _pronuncia(self, frase, volume):
+        try:
+            if not self.voce:
+                self.detect_lingua(frase)
+                await self.select_voce()
+
+            communicate = edge_tts.Communicate(frase.title(), self.voce, volume=volume)
+            audio_data = b""
+
+            # 1. Recupero i dati binari (MP3) in memoria
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+
+            # Salva su disco
+            file_out = os.path.join(self.tmp_dir, "Euterpe_output.mp3")
+            with open(file_out, "wb") as f:
+                f.write(audio_data)
+            return file_out
+        except Exception as e:
+            return ''

@@ -1,5 +1,6 @@
 # pymp3Player
-
+Euterpe
+Εὐτέρπη
 dipendenze
 
 
@@ -15,10 +16,6 @@ pip install pyqt6-qt6==6.6.1
 
 pip install PyQt6-Frameless-Window
 
-pip install superqt
-
-pip install eyed3
-
 pip install pyradios 
 
 pip install soundcard
@@ -31,7 +28,18 @@ pip install googletrans==3.1.0a0
 
 pip install lyricsgenius
 
+pip install python-dateutil
+
 pip install musicbrainzngs
+
+pip install lameenc  
+
+pip install mutagen  
+pip install tinytag
+
+virtualenv .venv12b --python=python3.12
+.venv12b\Scripts\activate
+pip install -r requirements.txt
 
 per le copertine dei cd
 https://musicbrainz.org/
@@ -48,3 +56,9 @@ secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooK
 token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
 installata versione 3.2.0
 
+picovoice 
+https://github.com/francoflamigni?tab=repositories
+
+MusicBrainz
+Franco59
+Av@lon91

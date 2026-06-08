@@ -6,4 +6,7 @@ installer/*.spec
 #setup/
 *.exe
 exe/
+docs/*.files
+docs/*.pdf
+docs/*.htm
 .idea/
