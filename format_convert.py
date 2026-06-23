@@ -332,6 +332,9 @@ class AudioConverter(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         if folder:
             self.select_folder(folder)
+            acs = self.folder_label.actions()
+            if acs:
+                acs[0].setVisible(False)
         else:
             self.mode = Mode.FORMAT_CONVERT
             self.save_button.setVisible(False)
@@ -453,20 +456,19 @@ class AudioConverter(QDialog):
         self.folder_label = QLineEdit() #QLabel("Nessuna cartella selezionata")
         self.folder_label.setReadOnly(True)
         self.folder_label.setPlaceholderText("Nessuna cartella selezionata")
-        if self.mode == Mode.FORMAT_CONVERT:
-            icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
-            azione_browse = QAction(icone_browse, "browse", self)
-            azione_browse.triggered.connect(self.select_folder)
-            self.folder_label.addAction(
-                azione_browse,
-                QLineEdit.ActionPosition.LeadingPosition
-            )
+        #if self.mode == Mode.FORMAT_CONVERT:
+        icone_browse = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
+        azione_browse = QAction(icone_browse, "browse", self)
+        azione_browse.triggered.connect(self.select_folder)
+        self.folder_label.addAction(
+            azione_browse,
+            QLineEdit.ActionPosition.LeadingPosition
+        )
 
         self.save_button = QPushButton("Salva")
         self.save_button.clicked.connect(self.save)
 
         folder_layout.addWidget(self.folder_label)
-        #folder_layout.addWidget(self.folder_button)
         folder_layout.addWidget(self.save_button)
 
         folder_group.setSizePolicy(QSizePolicy.Policy.Preferred,  # orizzontale
@@ -613,7 +615,7 @@ class AudioConverter(QDialog):
         self.audio_files = []
 
         # Estensioni supportate
-        extensions = ['.aif', '.aiff', '.flac', '.wav', '.m4a', '.mp3', '.wma']
+        extensions = ['.aif', '.aiff', '.flac', '.wav', '.m4a', '.mp3', '.wma', '.mp4']
 
         folder_path = Path(self.current_folder)
         for ext in extensions:

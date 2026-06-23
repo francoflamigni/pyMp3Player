@@ -54,7 +54,10 @@ class GeneratorePesato:
                     continue
 
                 track = random.choice(tracks)
-                durata_traccia = self.index.tracks.name[track + '@' + album.title].tm_sec
+                try:
+                    durata_traccia = self.index.tracks.name[track + '@' + album.title].tm_sec
+                except KeyError as e:
+                    continue
 
                 # Verifica se aggiungere la traccia supera la durata target
                 d1 = durata_totale + durata_traccia
@@ -71,6 +74,8 @@ class GeneratorePesato:
                     continue
                 else:
                     tentativi_artista = 0
+                    tentativi_falliti += 1
+
 
         return list(self.tracce_usate)
 
@@ -304,7 +309,7 @@ class PlayListDlg(QDialog):
         self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
 
         vlayout.addWidget(self.table)
-        self.dw = DurationPicker() #DurationWidget()
+        self.dw = DurationPicker()
         vlayout.addWidget(self.dw)
 
         bt_crea = QPushButton()
@@ -436,10 +441,8 @@ class PlayListDlg(QDialog):
                 continue
         duration = self.dw.get_duration_seconds()
         if not duration:
-            self.dw.hours_edit.setFocus()
-            self.dw.hours_edit.selectAll()
             return
-        a = 0
+
         self.list = Create_playlist(self.index, preferences, duration)
         if self.list:
             self.done(1)
