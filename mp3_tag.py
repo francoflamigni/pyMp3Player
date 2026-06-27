@@ -424,13 +424,13 @@ class tracks:
     def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         #if tr[0].num is not None:
-        tr.sort(key=lambda x: x.num if x.num is not None else 0)
+        tr.sort(key=lambda x: int(x.num) if x.num is not None else 0)
         return [t.title for t in tr if art in t.artist]
 
     def find_ext(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         #if tr[0].num is not None:
-        tr.sort(key=lambda x: x.num if x.num is not None else 0)
+        tr.sort(key=lambda x: int(x.num) if x.num is not None else 0)
         return [t for t in tr if art in t.artist]
 
     def size(self):
