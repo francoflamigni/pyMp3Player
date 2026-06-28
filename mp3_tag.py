@@ -22,35 +22,6 @@ GENRE = [
     'Rap', 'Reggae', 'Techno', 'Fusion', 'Musical', 'Audiobook', 'Soundtrack'
 ]
 
-'''
-def find_last(path):
-    latest_mtime = 0
-    latest_file = None
-
-    # os.walk è ok, ma usiamo topdown per efficienza
-    for root, dirs, files in os.walk(path):
-        for name in files:
-            # Opzionale: filtra solo estensioni audio per precisione
-            # if not name.lower().endswith(('.mp3', '.flac')): continue
-
-            full_path = os.path.join(root, name)
-            try:
-                # stat() è molto veloce durante il walk su sistemi moderni
-                mtime = os.path.getmtime(full_path)
-                if mtime > latest_mtime:
-                    latest_mtime = mtime
-                    latest_file = full_path
-            except OSError:
-                continue
-
-    if not latest_file:
-        return {}
-
-    rel_path = os.path.relpath(latest_file, path)
-    return {rel_path: latest_mtime}
-'''
-
-
 class Music:
     NO_INDEX = -1  # manca l'indice
     INDEX_LOADED = 0  # indice caricacato
@@ -184,7 +155,7 @@ class Music:
                 'artista': b.get('artist', [''])[0],
                 'album': b.get('album', [''])[0],
                 'titolo': b.get('title', [''])[0],
-                'anno': b.get('date')[0][:4],
+                'anno': b.get('date', [''])[0][:4],
                 'genere': b.get('genre', [''])[0],
                 'numero': b.get('tracknumber', ['0'])[0].split('/')[0],
                 'durata_sec': b.info.length,
@@ -306,31 +277,64 @@ class Music:
         return img_data
 
     def save(self, path):
+        data = {
+            "artists": self.artists.save(),
+            "albums": self.albums.save(),
+            "tracks": self.tracks.save()
+        }
+        '''
         r = []
         r.append(self.artists.save())
         r.append(self.albums.save())
         r.append(self.album_artist.save())
         r.append(self.tracks.save())
         r.append(self.album_track.save())
-        with open(path, 'w') as fp:
-            json.dump(r, fp, indent=4)
-        fp.close
+        '''
+        with open(path, 'w', encoding='utf-8') as fp:
+            json.dump(data, fp, indent=4, ensure_ascii=False)
+        #fp.close
 
     def load(self, path):
-        with open(path, 'r') as fp:
+        with open(path, 'r', encoding='utf-8') as fp:
             try:
                 data = json.load(fp)
             except json.JSONDecodeError as js:
                 return
 
-            a = 0
+        self.artists.load(data.get("artists", {}))
+        self.albums.load(data.get("albums", {}))
+        self.tracks.load(data.get("tracks", {}))
+
+        # 2. Pulisci le relazioni
+        self.album_artist.a_a.clear()
+        self.album_track.a_t.clear()
+
+        # 3. Ricostruisci le relazioni iterando sulle tracce appena caricate
+        for track_key, trk in self.tracks.name.items():
+            # Troviamo l'ID dell'artista
+            art_id = self.artists.name.get(trk.artist)
+
+            # Troviamo l'ID dell'album (ricorda che la chiave in albums.title è album@artista)
+            album_key = f"{trk.album}@{trk.artist}"
+            alb = self.albums.title.get(album_key)
+
+            # Se entrambi esistono, ricreiamo i collegamenti
+            if art_id is not None and alb is not None:
+                self.album_artist.add(alb.id, art_id)
+                self.album_track.add(alb.id, trk.id)
+
+        '''
+        # Verifica della validità strutturale
+        if not isinstance(data, list) or len(data) < 5:
+            return  # JSON incompleto, ignora o logga l'errore
         self.artists.load(data[0])
         self.albums.load(data[1])
         self.album_artist.load(data[2])
         self.tracks.load(data[3])
         self.album_track.load(data[4])
+        '''
 
-        fp.close
+        #fp.close
         self.get_generi()
 
 
@@ -357,11 +361,13 @@ class artists:
             self.name = dizionario_filtrato
 
     def save(self):
-        return json.dumps(self.name, indent=4)
+        return self.name #json.dumps(self.name, indent=4)
 
     def load(self, dic):
-        self.name = json.loads(dic)
-        a = 0
+        #self.name = json.loads(dic)
+        self.name = dic
+        if self.name:
+            self.id = max(self.name.values())
 
 class track:
     def __init__(self, title='', album='', artist='', id=0, file='', num=0, tm_sec=0., genre=''):
@@ -390,22 +396,6 @@ class tracks:
         self.name = {}
         self.id = 0
 
-    '''
-    def add(self, tag, time_secs):
-        nome = tag.title + '@' + tag.album
-        if nome in self.name.keys():
-            return self.name[nome].id
-
-        self.id += 1
-        genre = ''
-        if tag.genre:
-            # L'attributo .name decodifica automaticamente il codice numerico
-            # (es. 12 -> 'Other') o restituisce la stringa se non è numerico.
-            genre = tag.genre.name
-        self.name[nome] = track(tag.title, tag.album, tag.artist, self.id, tag.file_info.name, tag.track_num.count, time_secs, genre)
-        return self.id
-    '''
-
     def add(self, tags):
         nome = tags['titolo'] + '@' + tags['album']
         if nome in self.name.keys():
@@ -424,28 +414,41 @@ class tracks:
     def find(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         #if tr[0].num is not None:
-        tr.sort(key=lambda x: int(x.num) if x.num is not None else 0)
+        tr.sort(key=lambda x: int(x.num) if (x.num and str(x.num).isdigit()) else 0)
         return [t.title for t in tr if art in t.artist]
 
     def find_ext(self, ids, art=''):
         tr = [v for v in self.name.values() if v.id in ids]
         #if tr[0].num is not None:
-        tr.sort(key=lambda x: int(x.num) if x.num is not None else 0)
+        tr.sort(key=lambda x: int(x.num) if (x.num and str(x.num).isdigit()) else 0)
         return [t for t in tr if art in t.artist]
 
     def size(self):
         return len(self.name)
 
     def save(self):
-        return json.dumps({i: j.__dict__ for i, j in self.name.items()}, indent=4)
+        return {i: j.__dict__ for i, j in self.name.items()} #json.dumps({i: j.__dict__ for i, j in self.name.items()}, indent=4)
 
-    def load(self, dic):
+    def load(self, data_dict):
+        self.name.clear()
+
+        for key, value in data_dict.items():
+            trk = track()
+            trk.set(value)
+            self.name[key] = trk
+
+        # Allinea il contatore degli ID alla traccia con ID più alto
+        if self.name:
+            self.id = max(trk.id for trk in self.name.values())
+
+        '''
         dd = json.loads(dic)
         for key, value in dd.items():
             trk = track()
             trk.set(value)
             self.name[key] = trk
         a = 0
+        '''
 
 
 class album:
@@ -461,31 +464,14 @@ class album:
         self.id = value['id']
         self.path = value['path']
 
-    def save(self, fp):
-        jstr = json.dumps({'title': self.title, 'year': self.year, 'id': self.id, 'path': self.path})
+    #def save(self, fp):
+    #    jstr = json.dumps({'title': self.title, 'year': self.year, 'id': self.id, 'path': self.path})
 
 
 class albums:
     def __init__(self):
         self.title = {}
         self.id = 0
-
-    '''
-    def add(self, tag, path):
-        title = tag.album + '@' + tag.artist
-        if title in self.title.keys():
-            return self.title[title].id
-        self.id += 1
-
-        year = 1900
-        if tag.recording_date is not None:
-            year = tag.recording_date.year
-        elif tag.release_date is not None:
-            year = tag.release_date.year
-
-        self.title[title] = album(tag.album, year, self.id, path)
-        return self.id
-    '''
 
     def add(self, tags, path):
         title = tags['album'] + '@' + tags['artista']
@@ -507,14 +493,27 @@ class albums:
         return albums
 
     def save(self):
-        return json.dumps({i:j.__dict__ for i, j in self.title.items()}, indent=4)
+        return {i:j.__dict__ for i, j in self.title.items()} #json.dumps({i:j.__dict__ for i, j in self.title.items()}, indent=4)
 
-    def load(self, dic):
+    def load(self, data_dict):
+        self.title.clear()  # Buona pratica per evitare rimasugli in memoria
+
+        for key, value in data_dict.items():
+            alb = album()
+            alb.set(value)
+            self.title[key] = alb
+
+        # Allinea il contatore degli ID all'album con ID più alto
+        if self.title:
+            self.id = max(alb.id for alb in self.title.values())
+
+        '''
         dd = json.loads(dic)
         for key, value in dd.items():
             alb = album()
             alb.set(value)
             self.title[key] = alb
+        '''
 
 
 class album_artist:
@@ -531,11 +530,13 @@ class album_artist:
         v = [q[0] for q in self.a_a if q[1] == id]
         return v
 
+    '''
     def save(self):
         return json.dumps(self.a_a, indent=4)
 
     def load(self, lst):
         self.a_a = json.loads(lst)
+    '''
 
 
 
@@ -553,8 +554,10 @@ class album_track:
         v = [t[1] for t in self.a_t if t[0] == album_id]
         return v
 
+    '''
     def save(self):
         return json.dumps(self.a_t, indent=4)
 
     def load(self, lst):
         self.a_t = json.loads(lst)
+    '''

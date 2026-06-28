@@ -117,6 +117,7 @@ class Player(FramelessDialog):
 
         if self.server.listen(self.server_name):
             self.server.newConnection.connect(self.gestisci_nuova_connessione)
+
     def gestisci_nuova_connessione(self):
         """Viene chiamato quando una SECONDA istanza tenta di aprirsi."""
         socket = self.server.nextPendingConnection()
@@ -137,6 +138,9 @@ class Player(FramelessDialog):
         self.open_file([t])
 
     def set_windows_animations(self, enabled=True):
+        import sys
+        if sys.platform != "win32":
+            return  # Esce silenziosamente se non siamo su Windows
         import ctypes
         from ctypes import wintypes
         # DWMWA_TRANSITIONS_FORCEDISABLED = 3
@@ -457,7 +461,6 @@ class Player(FramelessDialog):
                 # .reject() è meglio di .close() per i dialoghi perché
                 # simula la pressione del tasto ESC o il tasto "Annulla"
                 widget.reject()
-        a = 0
 
     @contextmanager
     def suspend_background_mode(self):

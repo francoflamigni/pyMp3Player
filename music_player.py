@@ -10,7 +10,8 @@ import vlc
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty
 from PyQt6.QtGui import QIcon, QPen, QLinearGradient, QBrush, QColor, QFont, QPixmap, QPainter
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QStyle, QPushButton, QLineEdit, QComboBox,
-                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect, QLabel)
+                             QFrame, QDial, QSlider, QGroupBox, QMessageBox, QGraphicsDropShadowEffect, QLabel,
+                             QApplication)
 
 from pyMyLib.qtUtils import set_background, waitCursor
 
@@ -20,6 +21,8 @@ from pyMyLib.utils import get_windows_flag
 
 
 def get_tm(secs):
+    if not secs:
+        return "00:00"
     min = int(secs / 60)
     sec = int(secs) - int(min * 60)
     return "{:02.0F}:{:02.0F}".format(min, sec)
@@ -396,6 +399,7 @@ class MusicPlayerDlg(QDialog):
 
     def stop(self):
         # Stop player
+        self.timer.stop()
         self.mediaplayer.stop()
         self.set_play_icon(MusicPlayerDlg.Status_Play)
         self.mode = MusicPlayerDlg.Mode_None
@@ -546,7 +550,7 @@ class MusicPlayerDlg(QDialog):
         if self.ply_lst and self.gain_ctrl:
             peak_db = get_volume_stats(filename)
             user_vol = self.mediaplayer.audio_get_volume()
-            if user_vol > 0:
+            if user_vol > 0 and peak_db is not None:
                 if self.index == 0:
                     self.gain_ctrl.set_reference(peak_db, user_vol)
                 else:
@@ -640,6 +644,7 @@ class MusicPlayerDlg(QDialog):
                 self.stop()
                 waitCursor()
                 return False
+            QApplication.processEvents()
             time.sleep(1.0)
         self.update_ui()
         waitCursor()

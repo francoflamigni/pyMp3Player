@@ -241,7 +241,7 @@ class mySearch(QDialog):
                 if art:
                     mes.append(str(kk) + ' album: ' + art + ';' + a.title + '\n')
                     kk += 1
-        a3 = [k for k in self.music.tracks.name.values() if k is not None and txt in k.title.lower()]
+        a3 = [k for k in self.music.tracks.name.values() if k is not None and txt in str(k.title).lower()]
         if len(a3) > 0:
             for a in a3:
                 if a.artist in self.music.artists.name.keys():
@@ -272,14 +272,14 @@ class mySearch(QDialog):
             for item in selected_items:
                 t = item.text()
                 risultato = t.split(':', 1)[1].strip()
-                if 'artista' in t.lower():
+                if 'artista' in str(t).lower():
                     continue
                 else:
                     r = risultato.split(';')
-                    artista = r[0].strip()
-                    album = r[1].strip()
+                    artista = r[0].strip() if len(r) > 0 else ""
+                    album = r[1].strip() if len(r) > 1 else ""
                     traccia = ''
-                    if 'traccia' in t:
+                    if 'traccia' in t and len(r) > 2:
                         traccia = r[2].strip()
 
                     self.pls.append((artista, album, traccia))
