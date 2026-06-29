@@ -131,11 +131,15 @@ class Player(FramelessDialog):
         socket.close()
 
     def carica_brano(self, path):
-        b = self.dlg.music._load_tag(path)
-        from mp3_tag import track
-        t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
-                  id=0, file=path, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
-        self.open_file([t])
+        try:
+            b = self.dlg.music._load_tag(path)
+            from mp3_tag import track
+            t = track(title=b['titolo'], album=b['album'], artist=b['artista'],
+                      id=0, file=path, num=0, tm_sec=b['durata_sec'], genre=b['genere'])
+            self.open_file([t])
+        except Exception as e:
+            print(f"Errore caricamento brano: {e}")
+            informMessage(f"Impossibile riprodurre il file:\n{path}", 'Errore File', 10, False)
 
     def set_windows_animations(self, enabled=True):
         import sys
@@ -436,9 +440,15 @@ class Player(FramelessDialog):
         from scrobbler import Speaker
         if self.background_mode:
             spk = self.appCtx.config.get('speaker')
-            gender = spk['gender']
-            volume = spk['volume']
+            if not spk:
+                spk = {}
+            gender = spk.get('gender', 'Donna')
+            volume = spk.get('volume', '50')
             mi = self.dlg.music.tracks.name
+            if not mi:
+                print("Libreria vuota. Impossibile avviare il background.")
+                self.background(True)  # Forza l'uscita
+                return
             key = random.choice(list(mi.keys()))
             mstr = mi[key]
             annuncio = Speaker(gender, self.appCtx.tmpDir).pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), volume)
@@ -531,6 +541,7 @@ class Player(FramelessDialog):
         self.appCtx.temp_dir_obj.cleanup()
         super().closeEvent(event)
 
+    '''
     def get_generi(self):
         from collections import defaultdict
         musica = self.dlg.music
@@ -538,6 +549,7 @@ class Player(FramelessDialog):
         for t in musica.tracks.name.values():
             if t.genre:
                 art_gen[t.artist].add(t.genre)
+    '''
 
 
 if __name__ == "__main__":

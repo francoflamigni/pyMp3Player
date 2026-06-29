@@ -193,7 +193,7 @@ class MusicIndexDlg(QDialog):
         self.play_cur = False
         self._current_worker = None
         self.artists_sav = None
-        self.threadpool = QThreadPool()
+        #self.threadpool = QThreadPool()
 
         self.setObjectName("mp3_widget")
         set_background(self)
@@ -426,11 +426,12 @@ class MusicIndexDlg(QDialog):
                     if self.tracks.count():
                         trk = self.tracks.item(0).text()
                         try:
-                            v = self.music.tracks.name[trk + '@' + album]
-                            dir = os.path.dirname(v.file)
-                            ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
-                            (ctx.addAction(ico, "Edit tags").
-                             triggered.connect(lambda checked=False, ar=artist, al=album, d=dir: edit_album(ar, al, d, self)))
+                            v = self.music.tracks.name.get(f"{trk}@{album}")
+                            if v:
+                                dir = os.path.dirname(v.file)
+                                ico = QIcon(get_resource_file(__file__, 'icone', 'background.png'))
+                                (ctx.addAction(ico, "Edit tags").
+                                    triggered.connect(lambda checked=False, ar=artist, al=album, d=dir: edit_album(ar, al, d, self)))
                         except:
                             pass
 
@@ -562,24 +563,24 @@ class MusicIndexDlg(QDialog):
         sel, pls = mySearch.run(self.appctx, self.music, txt)
         if sel:
             if 'artista' in sel:
-                a = sel.split(':')[1].strip()
-                self._select_artist(a)
+                parti = sel.split(':')
+                if len(parti) > 1:
+                    self._select_artist(parti[1].strip())
             elif 'album' in sel:
-                a1 = sel.split(':')[1].strip()
-                a2 = a1.split(';')
-                artist = a2[0].strip()
-                self._select_artist(artist)
-                album = a2[1].strip()
-                self._select_album(album)
+                parti = sel.split(':')
+                if len(parti) > 1:
+                    a2 = parti[1].strip().split(';')
+                    if len(a2) > 1:
+                        self._select_artist(a2[0].strip())
+                        self._select_album(a2[1].strip())
             elif 'traccia' in sel:
-                a1 = sel.split(':')[1].strip()
-                a2 = a1.split(';')
-                artist = a2[0].strip()
-                self._select_artist(artist)
-                album = a2[1].strip()
-                self._select_album(album)
-                track = a2[2].strip()
-                self._select_track(track)
+                parti = sel.split(':')
+                if len(parti) > 1:
+                    a2 = parti[1].strip().split(';')
+                    if len(a2) > 2:
+                        self._select_artist(a2[0].strip())
+                        self._select_album(a2[1].strip())
+                        self._select_track(a2[2].strip())
         elif pls:
             for p in pls:
                 self.add_playlist(p[0], p[1], p[2])
@@ -685,9 +686,12 @@ class MusicIndexDlg(QDialog):
         try:
             alb = self.albums.selectedItems()[0].text()
             trk = self.tracks.selectedItems()[0].text()
-            t = trk + '@' + alb
-            tt = self.music.tracks.name[t]
-            self.play_signal.emit([tt], False)
+            t = f"{trk}@{alb}"
+            tt = self.music.tracks.name.get(t)
+            if tt:
+                self.play_signal.emit([tt], False)
+            else:
+                print(f"Errore: Traccia '{t}' non trovata nel database.")
         except:
             pass
 
@@ -696,9 +700,11 @@ class MusicIndexDlg(QDialog):
             alb = self.albums.selectedItems()[0].text()
             trks = [self.tracks.item(row).text() for row in range(self.tracks.count())]
 
-            v = [self.music.tracks.name[trk + '@' + alb] for trk in trks]
-            self.play_signal.emit(v, False)
-        except:
+            v = [self.music.tracks.name.get(f"{trk}@{alb}") for trk in trks]
+            v = [track for track in v if track is not None]
+            if v:
+                self.play_signal.emit(v, False)
+        except IndexError:
             pass
 
     def play_playlist(self):

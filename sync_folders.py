@@ -73,10 +73,15 @@ def get_folder_size(path):
 def check_disk_space(target_path, required_size):
     """Verifica se c'è spazio sufficiente sulla partizione del target."""
     try:
-        # Usa psutil per ottenere lo spazio libero sulla partizione
-        disk_usage = psutil.disk_usage(os.path.abspath(target_path))
-        available_space = disk_usage.free
-        return available_space >= required_size
+        check_path = os.path.abspath(target_path)
+        while not os.path.exists(check_path):
+            parent = os.path.dirname(check_path)
+            if parent == check_path:  # Raggiunta la root del disco
+                break
+            check_path = parent
+
+        disk_usage = psutil.disk_usage(check_path)
+        return disk_usage.free >= required_size
     except Exception:
         # Fallback se psutil fallisce o il percorso non è valido
         return False
@@ -285,8 +290,6 @@ class SyncApp(QDialog):
         self.tree_widget.setItemDelegateForColumn(0, self.state_delegate)
 
         # Connessioni
-        #btn_select_A.clicked.connect(lambda: self.select_folder('A'))
-        #btn_select_B.clicked.connect(lambda: self.select_folder('B'))
         btn_load.clicked.connect(self.load_initial_structure)
         self.tree_widget.itemDoubleClicked.connect(self.handle_item_double_click)
         self.tree_widget.itemExpanded.connect(self.handle_item_expanded)
@@ -329,7 +332,11 @@ class SyncApp(QDialog):
             return
 
         # Lista completa dei contenuti in B per verifica rapida
-        contents_B = set(os.listdir(self.root_B))
+        try:
+            contents_B = set(os.listdir(self.root_B)) if os.path.exists(self.root_B) else set()
+        except Exception as e:
+            QMessageBox.critical(self, "Errore Lettura", f"Impossibile leggere Root B: {e}")
+            return
 
         for subdir_name in subdirs_A:
             full_path_A = os.path.join(self.root_A, subdir_name)
@@ -454,6 +461,8 @@ class SyncApp(QDialog):
         if path_A is None:
             # si tartta di un file
             p = item.parent()
+            if p is None:
+                return  # Interrompi se la gerarchia è compromessa
             state = p.data(0, Qt.ItemDataRole.UserRole + 3)
             path_A = p.data(0, Qt.ItemDataRole.UserRole + 1)
             path_B = p.data(0, Qt.ItemDataRole.UserRole + 2)
@@ -462,7 +471,11 @@ class SyncApp(QDialog):
             dst_file = os.path.join(path_B, file)
             if not os.path.exists(path_B):
                 os.makedirs(path_B)
-            ret = shutil.copy2(src_file, dst_file)
+            try:
+                ret = shutil.copy2(src_file, dst_file)
+            except Exception as e:
+                QMessageBox.critical(self, "Errore di Copia", f"Impossibile copiare il file: {e}")
+                return
             di = save_expansion_state(self.tree_widget)
             self.load_initial_structure()
             restore_expansion_state(self.tree_widget, di)

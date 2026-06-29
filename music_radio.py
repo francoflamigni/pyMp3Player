@@ -13,6 +13,7 @@ https://streamurl.link/ per trovare stazioni radio
 
 class RadioDlg(QDialog):
     radio_signal = pyqtSignal(str, str)
+    icon_loaded_signal = pyqtSignal(int, bytes)
     def __init__(self, appContext: AppContext):
         super().__init__()
         self.appContext = appContext
@@ -134,54 +135,50 @@ class RadioDlg(QDialog):
                 except:
                     pass
 
-        #QTimer.singleShot(0, lambda: self.azione_cancella.setVisible(bool(self.ed.text())))
+        self.icon_loaded_signal.connect(self.update_table_icon)
 
-    '''
-    def gestisci_pulsante_clear(self, testo):
-        if testo:
-            # La aggiungiamo solo quando serve
-            if not self.x_aggiunta:
-                self.ed.addAction(self.azione_cancella, QLineEdit.ActionPosition.TrailingPosition)
-                # IMPORTANTE: Se la aggiungi ora, finirà a sinistra della lente
-                # se la lente era stata aggiunta per prima.
-                self.x_aggiunta = True
-            self.azione_cancella.setVisible(True)
-        elif not testo and self.x_aggiunta:
-            self.azione_cancella.setVisible(False)
-    '''
 
     def search(self):
         from pyradios import RadioBrowser
         src = self.ed.text()
         if len(src) > 0:
             waitCursor(True)
-            rb = RadioBrowser()
-            a = rb.search(name=src, name_exact=False, hidebroken=True,
+            try:
+                rb = RadioBrowser()
+                a = rb.search(name=src, name_exact=False, hidebroken=True,
                           limit=50,  # Limita i risultati per non bloccare la UI
                           order="clickcount",  # Mostra prima le più popolari (più probabile siano attive)
-                          reverse=True
-                          )
-            self.fill_table(a)
-            if a:
-                self.update_last_searches()
-            waitCursor()
+                          reverse=True)
+                self.fill_table(a)
+                if a:
+                    self.update_last_searches()
+            except Exception as e:
+                print(f"Errore durante la ricerca radio: {e}")
+            finally:
+                waitCursor()  # Ripristina SEMPRE il cursore normale
 
-    def load_icons(self, list):
+    def load_icons(self, rlist):
         import scrobbler
         row = 0
-        for l in list:
+        for l in rlist:
             if 'ref' in l['url']:
                 continue
             im = scrobbler.get_thumbnail(l['favicon'])
             if im is not None:
-                try:
-                    qii = self.table.item(row, 1)
-                    qp = QPixmap()
-                    qp.loadFromData(im)
-                    qii.setIcon(QIcon(qp))
-                except:
-                    continue
+                self.icon_loaded_signal.emit(row, im)
+
             row += 1
+
+    def update_table_icon(self, row, image_data):
+        # Questo gira in modo sicuro nel Main Thread
+        try:
+            qii = self.table.item(row, 1)
+            if qii:
+                qp = QPixmap()
+                if qp.loadFromData(image_data):
+                    qii.setIcon(QIcon(qp))
+        except Exception:
+            pass
 
     def fill_table(self, rList):
         from threading import Thread
@@ -280,19 +277,18 @@ class RadioDlg(QDialog):
             rd = {}
         rd[nome] = r.url + '@' + r.favicon
         self.appContext.config.set_sez('radio', rd)
-        self.ini.save()
+        self.appContext.config.save()
         self.favorites.addItem(nome)
-        a = 0
 
     def del_favourites(self, it):
         row = self.favorites.row(it)
         qi = self.favorites.takeItem(row)
         nome = qi.text()
 
-        rd = self.ini.get('radio')
+        rd = self.appContext.config.get('radio')
         del rd[nome]
-        self.ini.set_sez('radio', rd)
-        self.ini.save()
+        self.appContext.config.set_sez('radio', rd)
+        self.appContext.config.save()
 
     def onCellClicked(self, nr, nc):
         if nc == 4:
@@ -322,7 +318,10 @@ class RadioDlg(QDialog):
         self.radio_signal.emit(url, fav)
 
     def last_searches(self):
-        return self.appContext.config.get('radio-searches', 'recent').split(',')
+        recent = self.appContext.config.get('radio-searches', 'recent')
+        if recent:
+            return  recent.split(',')
+        return []
 
     def update_last_searches(self):
         txt = self.ed.text()

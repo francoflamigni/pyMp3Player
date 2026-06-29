@@ -66,7 +66,8 @@ def get_all_data(address):
         elif "SHOUTcast" in shoutcast:
             status = 1
             metadata = shoutcast_check(response, headers, False)
-        elif "Icecast" or "137" or "StreamMachine" in shoutcast:
+        #elif "Icecast" or "137" or "StreamMachine" in shoutcast:
+        elif any(x in shoutcast for x in ["Icecast", "137", "StreamMachine"]):
             status = 1
             metadata = shoutcast_check(response, headers, True)
         elif shoutcast:
@@ -153,7 +154,8 @@ def shoutcast_check(response, headers, is_old):
             title.rstrip()
         except Exception as err:
             logger.exception("songtitle error: ")
-            title = content[metaint:].split(b"'")[1]
+            parts = content[metaint:].split(b"'")
+            title = parts[1] if len(parts) > 1 else b"Titolo Sconosciuto"
 
         return {"song": title, "bitrate": bitrate, "contenttype": contenttype}
     else:
@@ -176,7 +178,7 @@ def strip_tags(text):
 def get_thumbnail(url):
     if len(url) > 0:
         try:
-            im = urllib.request.urlopen(url).read()
+            im = urllib.request.urlopen(url, timeout=5).read()
             if "DOCTYPE" in str(im):
                 return None
             return im
@@ -265,6 +267,7 @@ class LyricsWorker(QObject):
         secret = 'zk23Q4-jYVg5XlSy74b8O2HCHBFdSplOngNByVkM2V6oz38Bf3tdNc0hKw29A9eJVHWooKkSEMpiPenLXSBGsg'
         token = '820kVTvq2j69BfzKyrC8Viw6aa3HewHKUnps85vjvYLRuS3YjVeEktkWsbUdzwLI'
         """
+
     def _song_text(self):
         from lyricsgenius import Genius
 
@@ -281,11 +284,12 @@ class LyricsWorker(QObject):
                 txt = re.sub(r'.*(?=[\[{])', r'\n', txt)
 
                 lines = txt.strip().split('\n')
-                lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
-                lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
-                lines[-1] = re.sub(r'\d+$', '', lines[-1])
-                lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
-                txt =  '\n'.join(lines)
+                if len(lines) > 0:
+                    lines[-1] = re.sub(r'embed', '', lines[-1], flags=re.IGNORECASE)
+                    lines[-1] = re.sub(r'You might.*', '', lines[-1], flags=re.IGNORECASE)
+                    lines[-1] = re.sub(r'\d+$', '', lines[-1])
+                    lines[0] = re.sub(r'.*lyrics', '', lines[0], flags=re.IGNORECASE)
+                    txt =  '\n'.join(lines)
 
                 a = 0
         except ConnectionError as err:
@@ -330,12 +334,17 @@ class Speaker:
             self.voce = "it-IT-IsabellaNeural"
 
     def detect_lingua(self, frase):
-        from langdetect import detect
-        lingua_rilevata = detect(frase)
-        if lingua_rilevata is None:
+        from langdetect import detect, lang_detect_exception
+        try:
+            # Controllo preventivo se la stringa è vuota o troppo corta
+            if not frase or len(frase.strip()) < 2:
+                lingua = "it"
+            else:
+                lingua_rilevata = detect(frase)
+                lingua = lingua_rilevata.lower() if lingua_rilevata else "it"
+        except Exception:  # Cattura LangDetectException
             lingua = "it"
-        else:
-            lingua = lingua_rilevata.lower()
+
         try:
             self.codice_lingua = f"{lingua}-{self.slang[lingua]}"
         except:

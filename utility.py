@@ -337,10 +337,6 @@ class WikipediaWorker(QRunnable):
             base64_encoded_data = base64.b64encode(R.content).decode('utf-8')
 
             return base64_encoded_data
-
-            # Crea il tag <img> con i dati incorporati
-            return f'<img src="data:{self.content_type};base64,{base64_encoded_data}" style="max-width:200px; max-height:200px; display:block; margin:auto; p align="center">'
-
         except requests.exceptions.RequestException as e:
             return None  # Fallimento nel download dell'immagine
         except Exception:
@@ -700,8 +696,13 @@ class Cache:
         lista, size = lista_file_per_ultimo_accesso(self.dir)
         while size + sz > self.max_size_byte:
             it = lista.pop(0)
-            os.remove(os.path.join(self.dir, it))
-            size -= it[2]
+            dimensione_file = it[1]  # Indice 1: dimensione in byte
+            percorso_completo = it[2]
+            try:
+                os.remove(percorso_completo)
+                size -= dimensione_file
+            except OSError:
+                pass
             if size < 0:
                 size = 0
 
@@ -815,7 +816,7 @@ class ArtistInfoDlg(HtmlInfoDlg):
         ArtistInfoDlg(parent, artist=artist, cache=cache).exec()
 
     def initWorker(self, kwargs):
-        self.threadpool = QThreadPool()
+        self.threadpool = QThreadPool().globalInstance()
         artist = kwargs.get('artist')
         cache = kwargs.get('cache')
         worker = WikipediaWorker(artist, cache=cache)
