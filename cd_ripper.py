@@ -41,7 +41,7 @@ class FFmpegWorker(QThread):
         self.is_running = True
         self.current_process  = None
         #self.timer = QTimer()
-        self.timer.timeout.connect(self.watch)
+        #self.timer.timeout.connect(self.watch)
         self.last_time = 0
         self.cover_path = cover_path
         #self.timer.start(1000)
