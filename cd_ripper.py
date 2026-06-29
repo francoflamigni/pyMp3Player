@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+import threading
 import re
 import time
 from pathlib import Path
@@ -39,18 +40,20 @@ class FFmpegWorker(QThread):
         self.format = format
         self.is_running = True
         self.current_process  = None
-        self.timer = QTimer()
+        #self.timer = QTimer()
         self.timer.timeout.connect(self.watch)
         self.last_time = 0
         self.cover_path = cover_path
-        self.timer.start(1000)
+        #self.timer.start(1000)
 
+    '''
     def watch(self):
         TIMEOUT = 20
         if self.last_time and self.current_process:
             elapsed = time.monotonic() - self.last_time
             if elapsed > TIMEOUT:
                 self.current_process.terminate()
+    '''
 
     def stop(self):
         self.is_running = False
@@ -109,6 +112,7 @@ class FFmpegWorker(QThread):
                 offset = track["start"]
                 cmd = [
                     'ffmpeg', '-y',
+                    '-nostdin',
                     '-v', 'debug',
                     '-ss', f'{offset}',
                     '-f', 'libcdio',
@@ -150,7 +154,24 @@ class FFmpegWorker(QThread):
                     output_file
                 ])
 
-                self.last_time = 0
+                self.last_time = time.monotonic()
+                self.watchdog_active = True
+
+                def check_timeout():
+                    while self.watchdog_active:
+                        if self.current_process and self.last_time:
+                            elapsed = time.monotonic() - self.last_time
+                            if elapsed > 20:  # TIMEOUT di 20 secondi
+                                print("Timeout di ffmpeg rilevato! Terminazione forzata...")
+                                try:
+                                    self.current_process.terminate()
+                                except Exception as e:
+                                    print(f"Errore kill ffmpeg: {e}")
+                                break  # Ucciso il processo, il watchdog ha finito il suo lavoro
+                        time.sleep(1)  # Controlla ogni secondo senza affaticare la CPU
+
+                watchdog_thread = threading.Thread(target=check_timeout, daemon=True)
+                watchdog_thread.start()
 
                 # Esegui ffmpeg
                 process = subprocess.Popen(
@@ -179,11 +200,12 @@ class FFmpegWorker(QThread):
                 process.wait()  # Aspetta al massimo durata + 30 secondi
 
                 self.current_process = None
+                self.watchdog_active = False
 
                 if not self.is_running:
                     continue  # Salta alla prossima traccia (o esci dal loop)
 
-                if process.returncode == 0 or self.is_running:
+                if process.returncode == 0 and self.is_running:
                     self.finished_track.emit(track_num, output_file)
                     progress = int((i + 1) / total_tracks * 100)
                     self.progress_updated.emit(progress)
@@ -453,7 +475,11 @@ class CDRipperMainWindow(QDialog):
     def init_cd_drives(self):
         from utility import detect_cd_drives
         sel = self.cd_drive_combo.currentText()
-        self.cd_drive_combo.currentIndexChanged.disconnect(self.detect_tracks)
+
+        try:
+            self.cd_drive_combo.currentIndexChanged.disconnect(self.detect_tracks)
+        except TypeError:
+            pass  # Ignora se non era ancora connesso
         self.cd_drive_combo.clear()
         """Rileva i drive CD disponibili"""
         for letter in detect_cd_drives():
@@ -605,8 +631,18 @@ class CDRipperMainWindow(QDialog):
             return
 
         self.update_track_data()
-        output_dir = os.path.join(output_dir, f"{self.tracks_data['artisti']}".replace(':', '_'))
-        output_dir = os.path.join(output_dir, f"{self.tracks_data['album']}".replace(':', '_'))
+
+        def sanitize_dir(name):
+            invalid_chars = '<>:"/\\|?*'
+            for char in invalid_chars:
+                name = name.replace(char, '_')
+            return name.strip()
+
+        safe_artist = sanitize_dir(str(self.tracks_data.get('artisti', 'Unknown Artist')))
+        safe_album = sanitize_dir(str(self.tracks_data.get('album', 'Unknown Album')))
+
+        output_dir = os.path.join(output_dir, safe_artist)
+        output_dir = os.path.join(output_dir, safe_album)
         # Crea directory se non esiste
         os.makedirs(output_dir, exist_ok=True)
 

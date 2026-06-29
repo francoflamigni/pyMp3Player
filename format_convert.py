@@ -817,9 +817,9 @@ class AudioConverter(QDialog):
         self.status_label.setText("Ricerca copertina....")
         QApplication.processEvents()
         from music_brainz import CoverDownloader
-        cdi = CoverDownloader()
-        cdi.cover_ready.connect(self.on_download_success)
-        cdi.download_cover(artista, album)
+        self.cdi = CoverDownloader()
+        self.cdi.cover_ready.connect(self.on_download_success)
+        self.cdi.download_cover(artista, album)
 
     def on_download_success(self, mes, image_data):
         if image_data:
@@ -894,7 +894,7 @@ class AudioConverter(QDialog):
 
         off = 0 if self.mode == Mode.TAG_EDIT else 1
 
-        if row < len(self.audio_files):
+        if 0 <= row < len(self.audio_files):
             audio_file = self.audio_files[row]
             value = item.text()
 
