@@ -100,11 +100,13 @@ class Player(FramelessDialog):
         """)
 
         self.background_mode = False
+        self.bt_connected = False
         self.create_ui()
 
         self.init_server()
 
-        #self.Install_idle_fun()
+        self.start_bt_monitoring()
+
         self.show()
         self.Install_idle_fun()
 
@@ -140,6 +142,33 @@ class Player(FramelessDialog):
         except Exception as e:
             print(f"Errore caricamento brano: {e}")
             informMessage(f"Impossibile riprodurre il file:\n{path}", 'Errore File', 10, False)
+
+    def start_bt_monitoring(self):
+        """Imposta un timer per controllare ciclicamente lo stato del Bluetooth"""
+        self.bt_status_timer = QTimer(self)
+        self.bt_status_timer.timeout.connect(self.check_bt_status)
+        self.bt_status_timer.start(15000)  # Controlla ogni 15 secondi (regolabile)
+        self.check_bt_status()  # Fai un primo controllo immediatamente all'avvio
+
+    def check_bt_status(self):
+        """Avvia il thread per leggere lo stato dei dispositivi"""
+        from bluetooth import BluetoothWorker, BluetoothAudioManager
+
+        # Evita di lanciare un nuovo thread se il precedente sta ancora lavorando
+        if hasattr(self, 'bt_menu_worker') and self.bt_menu_worker.isRunning():
+            return
+
+        self.bt_menu_worker = BluetoothWorker(BluetoothAudioManager.get_bluetooth_devices_real_status)
+        self.bt_menu_worker.finished.connect(self.update_bt_status)
+        self.bt_menu_worker.start()
+
+    def update_bt_status(self, devices):
+        """Aggiorna la variabile di stato quando il thread ha finito"""
+        if devices:
+            # Controlla se almeno un dispositivo ha lo stato 'Connected' a True
+            self.bt_connected = any(device.get('Connected', False) for device in devices)
+        else:
+            self.bt_connected = False
 
     def set_windows_animations(self, enabled=True):
         import sys
@@ -350,9 +379,12 @@ class Player(FramelessDialog):
                 d1 = QAction(d, self)
                 d1.triggered.connect(lambda checked, drive_letter=d: self._open_cd(drive_letter))
                 cd.addAction(d1)
+
+        bt_label = "Dispositivi Bluetooth ✔" if getattr(self, 'bt_connected', False) else "Dispositivi Bluetooth"
+
         actions = [
-            AddMenuItem("Dispositivi Bluetooth", fun=self.bluetooth,
-                            ico=get_resource_file(__file__, 'icone', 'Bluetooth.png')),
+            AddMenuItem(bt_label, fun=self.bluetooth,  # <--- Usiamo bt_label invece della stringa fissa
+                        ico=get_resource_file(__file__, 'icone', 'Bluetooth.png')),
             AddMenuItem("Converti da altri formati", fun=self.convert,
                             ico=get_resource_file(__file__, 'icone', 'tag-edit.png')),
             AddMenuItem("CD ripper", fun=self.cd_ripper,
