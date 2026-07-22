@@ -447,7 +447,7 @@ class MusicIndexDlg(QDialog):
 
     def info_album(self, artist, album, tracks):
         from music_brainz import AlbumInfoDlg
-        AlbumInfoDlg.run(self.appctx.mainWindow, artist, album, tracks)
+        AlbumInfoDlg.run(self.appctx.mainWindow, artist, album, tracks, self.appctx.cache)
 
     def clear_playlist(self):
         self.plst.clear()
@@ -532,6 +532,7 @@ class MusicIndexDlg(QDialog):
     def process(self):
         t0 = time.monotonic()
 
+        self.music.artists_ready.connect(self.set_artists)
         self.res = self.music.init(self.last_folder)
         if self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
             self.print('La cartella indicata non esiste o non contiene file')
@@ -547,7 +548,7 @@ class MusicIndexDlg(QDialog):
         '''
 
         self.artists_sav = copy.deepcopy(self.music.artists)
-        self.set_artists()
+        self.set_artists() #popola la lista
 
         t1 = time.monotonic()
         #print(f"elaborazione: {(t1-t0):.2f}")

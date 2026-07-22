@@ -1,3 +1,5 @@
+import os.path
+
 import musicbrainzngs
 
 from pyMyLib.utils import get_resource_file
@@ -47,8 +49,9 @@ def to_sec(time_str):
 
 class MusicInfo(QObject):
     info_signal = pyqtSignal(str, str)
-    def __init__(self, artist_name, album_title):
+    def __init__(self, artist_name, album_title, cache):
         super().__init__()
+        self.cache = cache
         self.artist_name = artist_name
         self.album_title = album_title
         self.album = {}
@@ -63,7 +66,7 @@ class MusicInfo(QObject):
         musicbrainzngs.set_useragent(
             "Euterpe",
             "1.5",
-            "tuaemail@example.com"
+            "mario.flamigni@gmail.com"
         )
 
     ''' Ricerca artista dato il nome '''
@@ -83,6 +86,7 @@ class MusicInfo(QObject):
                     self.id_artist = artist['id']
                     return True
         except Exception as e:
+            print(f"get_artist error: {e}")
             self.errMes = e
         return False
 
@@ -128,6 +132,7 @@ class MusicInfo(QObject):
                     break
                 offset += limit
         except Exception as e:
+            print(f"get_album error: {e}")
             self.errMes = e
 
         return False
@@ -185,6 +190,7 @@ class MusicInfo(QObject):
                 self.album['tracks'] = tracks
                 return True
         except Exception as e:
+            print(f"get_tracks error: {e}")
             self.errMes = e
         return False
 
@@ -212,6 +218,7 @@ class MusicInfo(QObject):
 
         try:
             while True:
+                time.sleep(1)
                 result = musicbrainzngs.browse_works(
                     artist=self.id_artist,
                     includes=["release-rels", "artist-rels", "recording-rels"],
@@ -224,6 +231,7 @@ class MusicInfo(QObject):
                     break
                 offset += limit
         except Exception as e:
+            print(f"get_tracks_info error: {e}")
             self.errMes = e
             return False
 
@@ -257,8 +265,13 @@ class MusicInfo(QObject):
                     self.album_info_html()
 
                     if self.get_tracks_info():
-                        self.album_info_html()
+                        import json
+                        self.album_info_html(True)
+                        if self.cache:
+                            self.cache.set(f"{self.artist_name}@{self.album_title}.info",
+                                           json.dumps(self.album, ensure_ascii=False, indent=4))
                         return True
+        self.album_info_html(True)
         return False
 
     def get_html_mes(self, color, size, mes, pos='left', indent=0):
@@ -267,11 +280,12 @@ class MusicInfo(QObject):
         </P>'''
 
     ''' testo html da info struttura '''
-    def album_info_html(self):
+    def album_info_html(self, final=False):
         hr_style = f"border: 0; height: 2px; background-color: white; width: 80%;"
         html1 = []
 
-        html1.append(self.get_html_mes('red', 26, f"Titolo: {self.album['title']}", pos='center'))
+        color = 'green' if not final else 'red'
+        html1.append(self.get_html_mes(color, 26, f"Titolo: {self.album['title']}", pos='center'))
         html1.append(self.get_html_mes('white', 20, f"Artista: {self.album['artist']}", pos='center'))
         html1.append(self.get_html_mes('yellow', 14, f"Pubblicato il: {self.album['date']}", pos='center'))
         html1.append(f'<hr style="{hr_style}">')
@@ -485,7 +499,7 @@ class CDinfo:
         return df
 
 
-    def detect_info_by_metadata(self, df, artist=None, album=None):
+    def detect_info_by_metadataX(self, df, artist=None, album=None):
         """
         Cerca informazioni su MusicBrainz usando artista e/o titolo album
 
@@ -496,6 +510,8 @@ class CDinfo:
         Returns:
             dict: Informazioni sui release trovati
         """
+
+        release_info = []
         try:
             # Costruisce la query di ricerca
             query_parts = []
@@ -510,18 +526,28 @@ class CDinfo:
             query = ' AND '.join(query_parts)
 
             # Esegue la ricerca
+
             result = musicbrainzngs.search_releases(
                 query=query,
                 limit=10,  # Limita i risultati
                 strict=False  # Ricerca fuzzy
             )
 
+
+            '''
+            result = musicbrainzngs.search_releases(
+                artist=artist,
+                release=album,
+                limit=10
+            )
+            '''
+
             if 'release-list' in result:
                 releases = result['release-list']
-                release_info = []
+                #release_info = []
 
                 for rel in releases:
-                    # Per ogni release trovato, ottiene i dettagli completi
+                      # Per ogni release trovato, ottiene i dettagli completi
                     detailed_release = musicbrainzngs.get_release_by_id(
                         rel['id'],
                         includes=['artists', 'recordings', 'release-groups']
@@ -547,9 +573,100 @@ class CDinfo:
                 return df
         except musicbrainzngs.WebServiceError as e:
             print(f"Errore API MusicBrainz: {e}")
+            if release_info:
+                if df:
+                    self.integrateinfo(df, release_info)
+                    return df
+                else:
+                    ID_ARTISTA = release_info[0]['artists'][0]['id']
+                    ID_RELEASE = release_info[0]['id']
+                    query = f"arid:{ID_ARTISTA} "#AND reid:{ID_RELEASE}"
+                    try:
+                        ress = musicbrainzngs.search_works(query=query, limit=100, offset=0)
+                    except Exception as e:
+                        b = 1
+                    a = 0
             return None
         except Exception as e:
             print(f"Errore ricerca: {e}")
+            return None
+
+    import time  # Assicurati di importarlo all'inizio del file
+
+    def detect_info_by_metadata(self, df, artist=None, album=None):
+        """
+        Cerca informazioni su MusicBrainz usando artista e/o titolo album
+
+        Args:
+            artist: Nome dell'artista
+            album: Titolo dell'album
+            df: Oggetto dati (es. DataFrame) da aggiornare
+
+        Returns:
+            df aggiornato con le info, oppure df originale se non trova nulla
+        """
+        # 1. COSTRUZIONE DELLA QUERY
+        query_parts = []
+        if artist: query_parts.append(f'artist:"{artist}"')
+        if album:  query_parts.append(f'release:"{album}"')
+
+        if not query_parts:
+            return df
+
+        query = ' AND '.join(query_parts)
+        release_info = []
+
+        # 2. CHIAMATE API CON RATE LIMITING PREVENTIVO
+        try:
+            result = musicbrainzngs.search_releases(
+                query=query,
+                limit=10,
+                strict=False
+            )
+
+            if 'release-list' in result:
+                for rel in result['release-list']:
+                    # PAUSA CRITICA: previene il blocco 'UNEXPECTED_EOF_WHILE_READING'
+                    #time.sleep(1)
+
+                    detailed_release = musicbrainzngs.get_release_by_id(
+                        rel['id'],
+                        includes=['artists', 'recordings', 'release-groups']
+                    )
+
+                    release = detailed_release['release']
+                    info = self.decode_release(release)
+                    release_info.append(info)
+
+        except musicbrainzngs.WebServiceError as e:
+            # Se capita un errore, lo notifichiamo ma continuiamo con i dati parziali raccolti
+            print(f"Errore API MusicBrainz parziale: {e}")
+        except Exception as e:
+            print(f"Errore ricerca generico: {e}")
+            return None
+
+        # 3. ELABORAZIONE DATI (Eseguita una volta sola, fuori dal try/except)
+        if not release_info:
+            return df  # Ritorna df intatto se non abbiamo trovato nulla
+
+        if df is not None:
+            # Se df esiste, lo integriamo
+            self.integrateinfo(df, release_info)
+            return df
+        else:
+            # Se df non esiste, procediamo con la ricerca works
+            ID_ARTISTA = release_info[0]['artists'][0]['id']
+            work_query = f"arid:{ID_ARTISTA}"
+
+            try:
+                # Altra pausa prima di una nuova chiamata API
+                #time.sleep(1)
+                ress = musicbrainzngs.search_works(query=work_query, limit=100, offset=0)
+                # Aggiungi qui la logica per gestire 'ress' se necessario
+            except Exception as e:
+                print(f"Errore durante search_works: {e}")
+
+            # Cosa dovrebbe ritornare il metodo in questo caso? (Opzionale: return ress)
             return None
 
 
@@ -790,8 +907,11 @@ class HtmlInfoDlg(QDialog):
 
 class AlbumInfoDlg(HtmlInfoDlg):
     @staticmethod
-    def run(parent, artist, album, tracks):
-        mi = MusicInfo(artist, album.title)
+    def run(parent, artist, album, tracks, cache):
+        mi = MusicInfo(artist, album.title, cache)
+        mi.cache = cache
+        mi.parent = parent
+
         mi.album['title'] = album.title
         mi.album['artist'] = artist
         mi.album['date'] = album.year
@@ -806,8 +926,14 @@ class AlbumInfoDlg(HtmlInfoDlg):
 
     def initWorker(self, kwargs):
         mi = kwargs.get('info_music')
-        #mi = args[1]
         mi.info_signal.connect(self.update)
+        if mi.cache:
+            import json
+            dati = mi.cache.get( f"{mi.album['artist']}@{mi.album['title']}.info")
+            if dati:
+                mi.album = json.loads(dati)
+                mi.album_info_html(True)
+                return
 
         self.worker = Worker(mi.get_album_details)  # Create the worker thread
         self.worker.finished.connect(self.completed)

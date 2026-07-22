@@ -1,3 +1,4 @@
+from PyQt6.QtCore import QObject, pyqtSignal
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from tinytag import TinyTag
@@ -22,13 +23,15 @@ GENRE = [
     'Rap', 'Reggae', 'Techno', 'Fusion', 'Musical', 'Audiobook', 'Soundtrack'
 ]
 
-class Music:
+class Music(QObject):
     NO_INDEX = -1  # manca l'indice
     INDEX_LOADED = 0  # indice caricacato
     NO_FILE = 1  # la cartella indicata non contiene file
     NO_FOLDER = 2  # manca il nome della cartella o questa non è una cartella
     OLD_INDEX = 3  # indice presente ma non aggiornato
+    artists_ready = pyqtSignal()
     def __init__(self, conf: iniConf, path=''):
+        super().__init__()
         self.conf = conf
         self.path = path
         self.print = None
@@ -282,14 +285,7 @@ class Music:
             "albums": self.albums.save(),
             "tracks": self.tracks.save()
         }
-        '''
-        r = []
-        r.append(self.artists.save())
-        r.append(self.albums.save())
-        r.append(self.album_artist.save())
-        r.append(self.tracks.save())
-        r.append(self.album_track.save())
-        '''
+
         with open(path, 'w', encoding='utf-8') as fp:
             json.dump(data, fp, indent=4, ensure_ascii=False)
         #fp.close
@@ -302,6 +298,7 @@ class Music:
                 return
 
         self.artists.load(data.get("artists", {}))
+        self.artists_ready.emit()
         self.albums.load(data.get("albums", {}))
         self.tracks.load(data.get("tracks", {}))
 
@@ -323,18 +320,6 @@ class Music:
                 self.album_artist.add(alb.id, art_id)
                 self.album_track.add(alb.id, trk.id)
 
-        '''
-        # Verifica della validità strutturale
-        if not isinstance(data, list) or len(data) < 5:
-            return  # JSON incompleto, ignora o logga l'errore
-        self.artists.load(data[0])
-        self.albums.load(data[1])
-        self.album_artist.load(data[2])
-        self.tracks.load(data[3])
-        self.album_track.load(data[4])
-        '''
-
-        #fp.close
         self.get_generi()
 
 
