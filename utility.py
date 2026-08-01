@@ -215,7 +215,7 @@ class WikipediaWorker(QRunnable):
 
     def get_musical_summary(self, wikipedia):
         # 1. Definiamo i suffissi musicali tipici di Wikipedia
-        musical_suffixes = [" (cantante)", " (gruppo musicale)", " (musicista)"]
+        musical_suffixes = [" (cantante)", " (musician)", " (gruppo musicale)", " (musicista)"]
 
         wikipedia.set_user_agent("Euterpe/1.0 (contatto@tuodominio.com)")
 
@@ -241,7 +241,7 @@ class WikipediaWorker(QRunnable):
                     return wikipedia.summary(option, sentences=5)
 
             return "Artista trovato ma con troppe ambiguità non musicali."
-        except wikipedia.exceptions.PageError:
+        except wikipedia.exceptions.PageError as e:
             return "Artista non trovato su Wikipedia."
 
     def run(self):
@@ -892,3 +892,8 @@ def human_size(n: int) -> str:
         n /= 1024
         i += 1
     return f"{n:3.1f} {units[i]}"
+
+def sanificate_name(nome):
+    import re
+    """Rimuove i caratteri che non sono ammessi nei nomi dei file da Windows/Mac/Linux"""
+    return re.sub(r'[\\/*?:"<>|]', "", str(nome))

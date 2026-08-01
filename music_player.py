@@ -159,6 +159,8 @@ class MusicPlayerDlg(QDialog):
         v2.addLayout(h2)
         v2.setContentsMargins(2, 0, 2, 2)
 
+        QApplication.instance().aboutToQuit.connect(self.cleanup_resources)
+
     def position_slider_ui(self):
         self.positionslider = QSlider(Qt.Orientation.Horizontal, self)
         self.positionslider.setObjectName('slipos')
@@ -475,6 +477,14 @@ class MusicPlayerDlg(QDialog):
                 self.cover.animation.stop()
                 # Scala l'immagine mantenendo le proporzioni
                 self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
+
+    def cleanup_resources(self):
+        """
+        Metodo garantito per essere eseguito alla chiusura dell'intera applicazione.
+        Libera le risorse di VLC prima che Python distrugga gli oggetti.
+        """
+        self.stop()
+        self.busy = False
 
     def on_track_end(self, event):
         if self.mode != MusicPlayerDlg.Mode_Cd:

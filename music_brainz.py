@@ -266,9 +266,10 @@ class MusicInfo(QObject):
 
                     if self.get_tracks_info():
                         import json
+                        from utility import sanificate_name
                         self.album_info_html(True)
                         if self.cache:
-                            self.cache.set(f"{self.artist_name}@{self.album_title}.info",
+                            self.cache.set(sanificate_name(f"{self.artist_name}@{self.album_title}.info"),
                                            json.dumps(self.album, ensure_ascii=False, indent=4))
                         return True
         self.album_info_html(True)
@@ -929,7 +930,8 @@ class AlbumInfoDlg(HtmlInfoDlg):
         mi.info_signal.connect(self.update)
         if mi.cache:
             import json
-            dati = mi.cache.get( f"{mi.album['artist']}@{mi.album['title']}.info")
+            from utility import sanificate_name
+            dati = mi.cache.get( sanificate_name(f"{mi.album['artist']}@{mi.album['title']}.info"))
             if dati:
                 mi.album = json.loads(dati)
                 mi.album_info_html(True)
