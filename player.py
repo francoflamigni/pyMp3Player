@@ -89,6 +89,7 @@ class Player(FramelessDialog):
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
         #self.file_da_riprodurre = file_da_riprodurre
         self.splash = splash
+        self.mi = None
 
         # Imposta lo sfondo nero e, opzionalmente, il testo bianco per leggibilità
         self.setObjectName("MainFrame")
@@ -450,6 +451,7 @@ class Player(FramelessDialog):
             self.background_mode = False
             self.titleBar.setTitle("Euterpe")
             self.setWindowOpacity(1.)
+            self.mi = None
             try:
                 self.ply.next_song_signal.disconnect(self._background)
                 self.ply.stop()
@@ -467,6 +469,7 @@ class Player(FramelessDialog):
     def _background(self, index):
         if index == 0:
             self.background(True) # forza l'uscita dal background mode
+            self.mi = None
 
         import random
         from scrobbler import Speaker
@@ -476,22 +479,31 @@ class Player(FramelessDialog):
                 spk = {}
             gender = spk.get('gender', 'Donna')
             volume = spk.get('volume', '50')
-            mi = self.dlg.music.tracks.name
-            if not mi:
+
+            if not self.mi:
+                sel_gen = self.genre_combo.currentText()
+                if sel_gen:
+                    self.mi = {}
+                    for k, v in self.dlg.music.tracks.name.items():
+                        if v.genre == sel_gen:
+                            self.mi[k] = v
+                else:
+                    self.mi = self.dlg.music.tracks.name
+            if not self.mi:
                 print("Libreria vuota. Impossibile avviare il background.")
                 self.background(True)  # Forza l'uscita
                 return
-            key = random.choice(list(mi.keys()))
-            mstr = mi[key]
+            key = random.choice(list(self.mi.keys()))
+            mstr = self.mi[key]
             annuncio = Speaker(gender, self.appCtx.tmpDir).pronuncia(','.join([mstr.artist, mstr.album, mstr.title]), volume)
 
             v = []
             if annuncio:
                 import copy
-                ann = copy.deepcopy(mi[key])
+                ann = copy.deepcopy(self.mi[key])
                 ann.file = annuncio
                 v.append(ann)
-            v.append(mi[key])
+            v.append(self.mi[key])
             self.ply.open_file(v)
 
     def close_modal(self):
