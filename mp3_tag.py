@@ -39,7 +39,13 @@ class Music(QObject):
 
         self.nth = 12
         self.inp = Queue(self.nth)
-        self._anomalie = Queue(9000)
+        self._anomalie = Queue()
+        self._no_cover = Queue()
+
+        self.stats_lock = Lock()  # Nuovo lock per incrementare i contatori in sicurezza
+        self.count_analyzed = 0  # Totale mp3/flac trovati
+        self.count_inserted = 0  # Totale file finiti nel json
+        self.count_failed = 0  # Totale file scartati
         self.lock = Lock()
 
     def clear(self):
@@ -82,14 +88,74 @@ class Music(QObject):
         return Music.INDEX_LOADED  # non ci sono state modifiche si può caricare l'indice
 
     def index(self, print, folder):
-        '''
-        print('Attendi...')
-        if self.init(folder) == Music.INDEX_LOADED:
-            print(folder)
-            return
-        if folder == '':
-            return
-        '''
+        self.path = folder
+
+        # --- RESET STATISTICHE E CODE ---
+        with self.stats_lock:
+            self.count_analyzed = 0
+            self.count_inserted = 0
+            self.count_failed = 0
+        while not self._anomalie.empty(): self._anomalie.get()
+        while not self._no_cover.empty(): self._no_cover.get()
+        # --------------------------------
+
+        self.print = print
+        self.searchers = []
+        for i in range(self.nth):
+            name = 'searcher {}'.format(i)
+            searcher = Thread(target=self.process, args=(name,))
+            searcher.start()
+            self.searchers.append(searcher)
+
+        self.print('Start')
+
+        t0 = time.monotonic()
+        self.get_mp3(self.path)
+
+        for searcher in self.searchers:
+            self.inp.put(('kill', ''))
+
+        for searcher in self.searchers:
+            searcher.join()
+
+        t1 = time.monotonic()
+        self.print('end ' + str(t1 - t0))
+
+        # --- CREAZIONE E SCRITTURA DEL FILE DI LOG ---
+        log_path = os.path.join(folder, 'index_log.txt')
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write("=== LOG CREAZIONE INDICE EUTERPE ===\n\n")
+
+            f.write("--- FILE NON INSERITI NELL'INDICE (ANOMALIE/ERRORI) ---\n")
+            if self._anomalie.empty():
+                f.write("Nessuna anomalia. Tutti i file validi sono stati inseriti.\n")
+            else:
+                while not self._anomalie.empty():
+                    f.write(str(self._anomalie.get()) + "\n\n")
+
+            f.write("\n--- FILE INSERITI NELL'INDICE MA SENZA COPERTINA ---\n")
+            if self._no_cover.empty():
+                f.write("Tutti i file inseriti sono provvisti di copertina.\n")
+            else:
+                while not self._no_cover.empty():
+                    f.write(str(self._no_cover.get()) + "\n")
+
+            f.write("\n--- RIEPILOGO FINALE ---\n")
+            f.write(f"Totale file (mp3/flac) analizzati: {self.count_analyzed}\n")
+            f.write(f"File inseriti nell'indice: {self.count_inserted}\n")
+            f.write(f"File NON inseriti (scartati): {self.count_failed}\n")
+        # ---------------------------------------------
+
+        # Salvataggio del JSON
+        jf = os.path.join(folder, 'index.json')
+        self.save(jf)
+        v = os.path.getmtime(jf)
+        hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
+        self.conf.set('CONF', hash, str(v))
+        self.conf.save()
+    '''
+    def index(self, print, folder):
+
         self.path = folder
 
         self.print = print
@@ -120,6 +186,7 @@ class Music(QObject):
         hash = hashlib.md5(folder.encode('utf-8')).hexdigest()
         self.conf.set('CONF', hash, str(v))
         self.conf.save()
+    '''
 
     def get_generi(self):
         for t in self.tracks.name.values():
@@ -127,6 +194,50 @@ class Music(QObject):
                 self.genre.add(t.genre)
                 self.artist_genre[t.artist].add(t.genre)
 
+    def process(self, nome):
+        while True:
+            try:
+                t = self.inp.get(timeout=0.1)
+                self.inp.task_done()
+                if t[0] == 'kill':
+                    break
+
+                path = os.path.join(t[0], t[1])
+                ext = os.path.splitext(path)[1].lower()
+
+                # Conta e processa SOLO se è un file audio compatibile
+                if ext not in ('.mp3', '.flac'):
+                    continue
+
+                with self.stats_lock:
+                    self.count_analyzed += 1
+
+                try:
+                    brano = self._load_tag(path)
+                except Exception as e:
+                    # _load_tag inserisce già i dettagli in _anomalie (la stringa inizia col path).
+                    # Aggiungiamo questo controllo per catturare eccezioni impreviste senza creare duplicati.
+                    if not str(e).startswith(path):
+                        self._anomalie.put(f"{path}\nErrore generico/lettura tag: {str(e)}")
+
+                    with self.stats_lock:
+                        self.count_failed += 1
+                    continue
+
+                # --- Controllo presenza copertina ---
+                if self.find_pic_by_file(path) is None:
+                    self._no_cover.put(path)
+
+                self.add_track(brano, path)
+
+                with self.stats_lock:
+                    self.count_inserted += 1
+
+            except Empty:
+                continue
+            except Exception as e:
+                pass
+    '''
     def process(self, nome):
         count = 0
         while True:
@@ -151,6 +262,8 @@ class Music(QObject):
             except Exception as e:
                 a = 0
         a = 0
+    '''
+
     def _load_tag(self, path):
         if path.endswith('.flac'):
             b = FLAC(path)
