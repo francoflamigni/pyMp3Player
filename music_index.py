@@ -628,7 +628,9 @@ class MusicIndexDlg(QDialog):
             self.tracks.clear()
             t = items[0].text()
             albums = self.music.find_albums(t)
-            albums_title = [d.title for d in sorted(albums, key=lambda x: int(x.year))]
+            albums_title = [d.title for d in
+                            sorted(albums, key=lambda x: int(x.year) if (x.year and str(x.year).isdigit()) else 0)]
+            #albums_title = [d.title for d in sorted(albums, key=lambda x: int(x.year))]
             self.albums.addItems(albums_title)
 
     def album_changed(self):

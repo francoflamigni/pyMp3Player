@@ -87,8 +87,9 @@ class Music(QObject):
         self.path = folder
         return Music.INDEX_LOADED  # non ci sono state modifiche si può caricare l'indice
 
-    def index(self, print, folder):
+    def index(self, print, folder, enable_log=True):
         self.path = folder
+        self.enable_log = enable_log
 
         # --- RESET STATISTICHE E CODE ---
         with self.stats_lock:
@@ -121,30 +122,31 @@ class Music(QObject):
         t1 = time.monotonic()
         self.print('end ' + str(t1 - t0))
 
-        # --- CREAZIONE E SCRITTURA DEL FILE DI LOG ---
-        log_path = os.path.join(folder, 'index_log.txt')
-        with open(log_path, 'w', encoding='utf-8') as f:
-            f.write("=== LOG CREAZIONE INDICE EUTERPE ===\n\n")
+        # --- CREAZIONE E SCRITTURA DEL FILE DI LOG CONDIZIONATA ---
+        if self.enable_log:
+            log_path = os.path.join(folder, 'index_log.txt')
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write("=== LOG CREAZIONE INDICE EUTERPE ===\n\n")
 
-            f.write("--- FILE NON INSERITI NELL'INDICE (ANOMALIE/ERRORI) ---\n")
-            if self._anomalie.empty():
-                f.write("Nessuna anomalia. Tutti i file validi sono stati inseriti.\n")
-            else:
-                while not self._anomalie.empty():
-                    f.write(str(self._anomalie.get()) + "\n\n")
+                f.write("--- FILE NON INSERITI NELL'INDICE (ANOMALIE/ERRORI) ---\n")
+                if self._anomalie.empty():
+                    f.write("Nessuna anomalia. Tutti i file validi sono stati inseriti.\n")
+                else:
+                    while not self._anomalie.empty():
+                        f.write(str(self._anomalie.get()) + "\n\n")
 
-            f.write("\n--- FILE INSERITI NELL'INDICE MA SENZA COPERTINA ---\n")
-            if self._no_cover.empty():
-                f.write("Tutti i file inseriti sono provvisti di copertina.\n")
-            else:
-                while not self._no_cover.empty():
-                    f.write(str(self._no_cover.get()) + "\n")
+                f.write("\n--- FILE INSERITI NELL'INDICE MA SENZA COPERTINA ---\n")
+                if self._no_cover.empty():
+                    f.write("Tutti i file inseriti sono provvisti di copertina.\n")
+                else:
+                    while not self._no_cover.empty():
+                        f.write(str(self._no_cover.get()) + "\n")
 
-            f.write("\n--- RIEPILOGO FINALE ---\n")
-            f.write(f"Totale file (mp3/flac) analizzati: {self.count_analyzed}\n")
-            f.write(f"File inseriti nell'indice: {self.count_inserted}\n")
-            f.write(f"File NON inseriti (scartati): {self.count_failed}\n")
-        # ---------------------------------------------
+                f.write("\n--- RIEPILOGO FINALE ---\n")
+                f.write(f"Totale file (mp3/flac) analizzati: {self.count_analyzed}\n")
+                f.write(f"File inseriti nell'indice: {self.count_inserted}\n")
+                f.write(f"File NON inseriti (scartati): {self.count_failed}\n")
+            # ---------------------------------------------
 
         # Salvataggio del JSON
         jf = os.path.join(folder, 'index.json')
@@ -224,9 +226,10 @@ class Music(QObject):
                         self.count_failed += 1
                     continue
 
-                # --- Controllo presenza copertina ---
-                if self.find_pic_by_file(path) is None:
-                    self._no_cover.put(path)
+                # --- Controllo presenza copertina CONDIZIONATO ---
+                if getattr(self, 'enable_log', False):
+                    if self.find_pic_by_file(path) is None:
+                        self._no_cover.put(path)
 
                 self.add_track(brano, path)
 
