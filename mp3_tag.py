@@ -619,12 +619,16 @@ class albums:
 
 class album_artist:
     def __init__(self):
-        self.a_a = []
+        #self.a_a = []
+        self.a_a = set()
 
     def add(self, album, artist):
+        self.a_a.add((album, artist))
+        '''
         t = (album, artist)
         if t not in self.a_a:
             self.a_a.append(t)
+        '''
 
     ''' Ritorna gli id degli album del''artista individuato dal suo id'''
     def find_albums(self, id):
@@ -643,12 +647,16 @@ class album_artist:
 
 class album_track:
     def __init__(self):
-        self.a_t = []
+        #self.a_t = []
+        self.a_t = set()
 
     def add(self, album, trck):
+        self.a_t.add((album, trck))
+        '''
         t = (album, trck)
         if t not in self.a_t:
             self.a_t.append(t)
+        '''
 
     ''' Ritorna tutte le tracce di un album'''
     def find_tracks(self, album_id):

@@ -187,6 +187,7 @@ class HiFiToggle(QAbstractButton):
 
 class MusicIndexDlg(QDialog):
     play_signal = pyqtSignal(list, bool)
+    update_stat_signal = pyqtSignal(str)
     def __init__(self, appCtx:AppContext):
         super().__init__()
         self.appctx = appCtx
@@ -207,6 +208,8 @@ class MusicIndexDlg(QDialog):
         v.setSpacing(0)
 
         self.prog = QLineEdit() #QLabel('')
+        self.update_stat_signal.connect(self.prog.setToolTip)
+
         self.prog.setReadOnly(True)
 
         icone_folder = QIcon(get_resource_file(__file__, 'icone', 'folder_open.png'))
@@ -522,12 +525,20 @@ class MusicIndexDlg(QDialog):
             self.plst.addItem(qi)
 
     def library_info(self):
-        sz = int(get_folder_size(self.last_folder))
-        self.stat = f"""
-                {len(self.music.artists.name)} Artisti\n
-                {len(self.music.albums.title)} Album\n 
-                {len(self.music.tracks.name)} Tracce\n
-                {human_size(sz)} Su disco"""
+        def worker():
+            import threading
+            sz = int(get_folder_size(self.last_folder))
+            stat = f"""
+                    {len(self.music.artists.name)} Artisti\n
+                    {len(self.music.albums.title)} Album\n 
+                    {len(self.music.tracks.name)} Tracce\n
+                    {human_size(sz)} Su disco"""
+            # Usa il segnale per aggiornare la UI in modo sicuro dal thread secondario
+            self.update_stat_signal.emit(stat)
+
+        # Lancia il conteggio in un thread separato
+        import threading
+        threading.Thread(target=worker, daemon=True).start()
 
     def process(self):
         t0 = time.monotonic()
@@ -541,20 +552,18 @@ class MusicIndexDlg(QDialog):
             if not yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
                 return
             self.music.index(self.print, self.last_folder)
-        '''
-        elif self.res == self.music.INDEX_LOADED:
-            self.artists_sav = copy.deepcopy(self.music.artists)
-            self.set_artists()
-        '''
 
-        self.artists_sav = copy.deepcopy(self.music.artists)
+        #self.artists_sav = copy.deepcopy(self.music.artists)
+
+        self.artists_sav = copy.copy(self.music.artists)
+        self.artists_sav.name = self.music.artists.name.copy()
         self.set_artists() #popola la lista
 
         t1 = time.monotonic()
         #print(f"elaborazione: {(t1-t0):.2f}")
         self.library_info()
 
-        self.prog.setToolTip(self.stat)
+        #self.prog.setToolTip(self.stat)
         self.print(self.last_folder)
 
     ''' Cerca canzone artista album'''
@@ -605,7 +614,10 @@ class MusicIndexDlg(QDialog):
             self.tracks.scrollToItem(item[0])
 
     def filter(self, genere):
-        self.music.artists = copy.deepcopy(self.artists_sav)
+        #self.music.artists = copy.deepcopy(self.artists_sav)
+
+        self.music.artists = copy.copy(self.artists_sav)
+        self.music.artists.name = self.artists_sav.name.copy()
         if genere:
             g_a = self.get_generi_artist()
             if genere in g_a.keys():
@@ -672,14 +684,6 @@ class MusicIndexDlg(QDialog):
         if folder:
             self.last_folder = folder
             self.process()
-
-    '''
-    def index(self, folder=''):
-        if folder != '':
-            self.music.index(self.print, folder)
-            self.artists_sav = copy.deepcopy(self.music.artists)
-            self.set_artists()
-    '''
 
     def print(self, t):
         self.prog.setText(t)

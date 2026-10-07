@@ -1,13 +1,12 @@
-from PyQt6.QtGui import QPixmap, QCursor, QColor, QIcon, QPalette, QFontMetrics
 import io
 import sys
 import os
 import base64
 from PyQt6.QtCore import Qt, QRunnable, QObject, QPoint, pyqtSignal, QTimer, QEvent, QBuffer, QIODevice, \
-    QEasingCurve, QThreadPool
+        QThreadPool
 from PyQt6.QtWidgets import (QAbstractItemView, QTableWidget, QMenu, QApplication, QLabel, QListWidget,
-                             QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget, QPlainTextEdit)
-from PyQt6.QtGui import QImage, QColor
+        QGraphicsColorizeEffect, QDialog, QVBoxLayout, QWidget, QPlainTextEdit)
+from PyQt6.QtGui import QPixmap, QCursor, QImage, QIcon, QColor, QFontMetrics
 
 from enum import Enum
 from pyMyLib.utils import iniConf, get_resource_file

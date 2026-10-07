@@ -1,9 +1,22 @@
 import os
 import sys
 
+# --- AVVIO IMMEDIATO DELLO SPLASH SCREEN ---
+if __name__ == "__main__":
+    from PyQt6.QtWidgets import QApplication, QSplashScreen
+    from PyQt6.QtGui import QPixmap
+    from pyMyLib.utils import get_resource_file
+
+    app = QApplication(sys.argv)
+    pixmap = QPixmap(get_resource_file(__file__, 'icone', 'splash.bmp'))
+    splash = QSplashScreen(pixmap)
+    splash.show()
+    app.processEvents()  # Forza il disegno immediato a schermo
+# -------------------------------------------
+
 from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QVBoxLayout, QLabel,
-                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox, QDialog, QSplashScreen)
-from PyQt6.QtGui import QIcon, QCursor, QAction, QColor, QPixmap
+                             QApplication, QTabBar, QPushButton, QToolBar, QMenu, QComboBox, QDialog)
+from PyQt6.QtGui import QIcon, QCursor, QAction, QColor
 from PyQt6.QtCore import Qt, QTimer, QEasingCurve, QPropertyAnimation
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
@@ -15,11 +28,11 @@ from pyMyLib.utils import iniConf, get_resource_file, get_resource_path_pathlib
 from dialogs import AppConfig, Version, ReleaseDate
 from utility import AppContext
 
-from music_index import MusicIndexDlg
-from music_player import MusicPlayerDlg
-from music_radio import RadioDlg
+#from music_index import MusicIndexDlg
+#from music_player import MusicPlayerDlg
+#from music_radio import RadioDlg
 from utility import detect_cd_drives, close_splash, Cache
-from mp3_tag import GENRE
+#from mp3_tag import GENRE
 from contextlib import contextmanager
 
 INFO_MES = f'{AppConfig}\nMusic manager\nVersione {Version}\n{ReleaseDate}'
@@ -204,17 +217,22 @@ class Player(FramelessDialog):
             self.idle_timer = IdleTimeout(self, idle_time, self.idle_background, clic_exit)
 
     def show(self):
+        # 1. Esegui il caricamento pesante MENTRE lo splash è l'unica cosa visibile
+        self.dlg.process()
+
+        # 2. Ora che i widget sono popolati in memoria, mostra la finestra principale
         QMainWindow.show(self)
         self.raise_()  # Porta in primo piano
         self.activateWindow()  # Attiva la finestra
         self.setWindowState(
             self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+
+        # 3. Forza PyQt a disegnare immediatamente a schermo la finestra popolata
         QApplication.processEvents()
+
+        # 4. Solo ora chiudi lo splash screen passandogli il "testimone" (la main window)
         if self.splash:
             self.splash.finish(self)
-        #close_splash()
-
-        self.dlg.process()
 
     def createTabBar(self):
         tool = QToolBar()
@@ -334,6 +352,7 @@ class Player(FramelessDialog):
             }}        
         """)
         v = [""]
+        from mp3_tag import GENRE
         v.extend((GENRE))
         self.genre_combo.addItems(v)
         self.genre_combo.currentIndexChanged.connect(self.filter_genre)
@@ -355,14 +374,17 @@ class Player(FramelessDialog):
         v.addSpacing(20)
         self.tab = QStackedWidget(self)
 
+        from music_index import MusicIndexDlg
         self.dlg = MusicIndexDlg(self.appCtx)
         self.dlg.play_signal.connect(self.open_file)
         self.tab.addWidget(self.dlg)
 
+        from music_radio import RadioDlg
         rd = RadioDlg(self.appCtx)
         rd.radio_signal.connect(self.open_radio)
         self.tab.addWidget(rd)
 
+        from music_player import MusicPlayerDlg
         self.ply = MusicPlayerDlg(self.appCtx)
         self.tab.addWidget(self.ply)
 
@@ -597,7 +619,7 @@ class Player(FramelessDialog):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    #app = QApplication(sys.argv)
     set_application_icon(app, f'Mysoft.{AppConfig}.v1', get_resource_file(__file__, 'icone', 'player.ico'))
 
     has_file = len(sys.argv) > 1
@@ -615,18 +637,14 @@ if __name__ == "__main__":
                 socket.disconnectFromServer()
                 sys.exit(0)
 
+    '''
     pixmap = QPixmap( get_resource_file(__file__, 'icone', 'splash.bmp') )  # Carica la tua immagine
     splash = QSplashScreen(pixmap)
     splash.show()
     app.processEvents()
+    '''
 
     file_da_riprodurre = None
-    '''
-    if len(sys.argv) > 1:
-        percorso_file = sys.argv[1]
-        if os.path.exists(percorso_file) and (percorso_file.lower().endswith(".mp3") or percorso_file.lower().endswith(".flac")):
-            file_da_riprodurre = percorso_file
-    '''
 
     player = Player(splash)
     #splash.finish(player)
