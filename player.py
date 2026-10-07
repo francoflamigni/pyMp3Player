@@ -123,6 +123,7 @@ class Player(FramelessDialog):
 
         self.show()
         self.Install_idle_fun()
+        QApplication.instance().aboutToQuit.connect(self.cleanup_resources)
 
     def init_server(self):
         self.server_name = AppConfig
@@ -602,20 +603,36 @@ class Player(FramelessDialog):
                 self.dlg.setPlaylist(lst)
 
     def closeEvent(self, event):
+        '''
         self.server.close()  # Smette di accettare nuove connessioni
         QLocalServer.removeServer(self.server_name)
         self.appCtx.temp_dir_obj.cleanup()
+        '''
         super().closeEvent(event)
 
-    '''
-    def get_generi(self):
-        from collections import defaultdict
-        musica = self.dlg.music
-        art_gen = defaultdict(set)
-        for t in musica.tracks.name.values():
-            if t.genre:
-                art_gen[t.artist].add(t.genre)
-    '''
+    def cleanup_resources(self):
+        # 1. Ferma il timer e il thread del Bluetooth
+        if hasattr(self, 'bt_status_timer'):
+            self.bt_status_timer.stop()
+
+        if hasattr(self, 'bt_menu_worker') and self.bt_menu_worker.isRunning():
+            self.bt_menu_worker.quit()
+            self.bt_menu_worker.wait(500)
+
+        # 2. Ferma il timer di inattività
+        if hasattr(self, 'idle_timer') and self.idle_timer:
+            self.idle_timer.stop_idle_timer()
+
+        # 3. Chiudi il server IPC
+        if hasattr(self, 'server'):
+            self.server.close()
+        QLocalServer.removeServer(self.server_name)
+
+        # 4. Pulisci la cartella temporanea in sicurezza
+        try:
+            self.appCtx.temp_dir_obj.cleanup()
+        except:
+            pass
 
 
 if __name__ == "__main__":
