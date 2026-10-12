@@ -5,7 +5,7 @@ import time
 
 from PyQt6.QtCore import (Qt, QRect, QThreadPool, pyqtSignal, QRectF, QPropertyAnimation, pyqtProperty,
                           QEasingCurve, QPoint, QParallelAnimationGroup)
-from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QFont, QEnterEvent, QPainter, QColor, QLinearGradient, QPen, QImage
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QFileDialog, QLabel,
                              QApplication, QPushButton, QLineEdit, QListWidgetItem, QAbstractButton,
                              QAbstractItemView, QMenu, QToolTip, QGraphicsOpacityEffect, QStackedWidget,
@@ -194,7 +194,6 @@ class MusicIndexDlg(QDialog):
         self.play_cur = False
         self._current_worker = None
         self.artists_sav = None
-        #self.threadpool = QThreadPool()
 
         self.setObjectName("mp3_widget")
         set_background(self)
@@ -233,16 +232,26 @@ class MusicIndexDlg(QDialog):
         )
         self.te.setClearButtonEnabled(True)
         stile_comune = """
-            QLineEdit {
-                height: 18px;       /* Forza un'altezza specifica */
-                padding: 2px 5px;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-            }
-            QLineEdit:read-only {
-                background-color: #e0e0e0; /* Grigio chiaro per il read-only */
-            }
-        """
+                    QLineEdit {
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #e8e8e8, stop:1 #d4d4d4);
+                        color: #111111;
+                        font-size: 14px;
+                        height: 20px;
+                        padding: 2px 5px;
+                        /* Effetto incasso */
+                        border: 2px solid;
+                        border-top-color: #666666;
+                        border-left-color: #666666;
+                        border-bottom-color: #ffffff;
+                        border-right-color: #ffffff;
+                    }
+                    QLineEdit:read-only {
+                        /* Leggermente più scuro per indicare che non è scrivibile */
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #d0d0d0, stop:1 #bcbcbc); 
+                        color: #333333;
+                    }
+                """
+
         self.prog.setStyleSheet(stile_comune)
         self.te.setStyleSheet(stile_comune)
 
@@ -252,24 +261,38 @@ class MusicIndexDlg(QDialog):
         h0.addWidget(self.te, stretch=2)
         h0.addStretch()
 
+        stile_liste = """
+                    QListWidget {
+                        /* Sfondo grigio/argento chiarissimo */
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #e8e8e8, stop:1 #d4d4d4);
+                        color: #222222; /* Testo quasi nero per massima leggibilità */
+                        /* Bordo effetto "incasso" nel telaio metallico */
+                        border: 2px solid;
+                        border-top-color: #666666;
+                        border-left-color: #666666;
+                        border-bottom-color: #ffffff;
+                        border-right-color: #ffffff;
+                        font-size: 13px;
+                    }
+                    QListWidget::item {
+                        padding: 1px 4px;
+                    }
+                    QListWidget::item:selected {
+                        /* Selezione in stile LCD o LED blu */
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #88ccff, stop:1 #55aaff);
+                        color: black;
+                        border: 1px solid #2277cc;
+                    }
+                """
+
         self.artists = myList(self, 'artisti', cursor=1)
-        self.artists.setStyleSheet("""
-            QListWidget::item:selected {
-                background-color: #FFFF77; /* Colore di sfondo della selezione */
-                color: black;            /* Colore del testo della selezione */
-            }
-        """)
+        self.artists.setStyleSheet(stile_liste)
         self.artists.setSortingEnabled(True)
         self.artists.itemSelectionChanged.connect(self.artist_changed)
         self.artists.setMinimumHeight(200)
 
         self.albums = myList(self, 'album')
-        self.albums.setStyleSheet("""
-              QListWidget::item:selected {
-                  background-color: #77FFFF; /* Colore di sfondo della selezione */
-                  color: black;            /* Colore del testo della selezione */
-              }
-          """)
+        self.albums.setStyleSheet(stile_liste)
         self.albums.setSortingEnabled(False)
         self.albums.itemSelectionChanged.connect(self.album_changed)
         self.albums.doubleClicked.connect(self.play_album)
@@ -282,12 +305,7 @@ class MusicIndexDlg(QDialog):
         splitter1.addWidget(self.albums)
 
         self.tracks = myList(self, 'tracce')
-        self.tracks.setStyleSheet("""
-              QListWidget::item:selected {
-                  background-color: #FF77FF; /* Colore di sfondo della selezione */
-                  color: black;            /* Colore del testo della selezione */
-              }
-          """)
+        self.tracks.setStyleSheet(stile_liste)
         self.tracks.setMinimumWidth(250)
         self.tracks.setSortingEnabled(False)
         self.tracks.itemSelectionChanged.connect(self.track_changed)
@@ -315,12 +333,7 @@ class MusicIndexDlg(QDialog):
         vl.setSpacing(1)
         self.plst = myList(self, cursor=1)
         self.plst.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.plst.setStyleSheet("""
-            QListWidget::item:selected {
-                background-color: #77FF77; /* Colore di sfondo della selezione */
-                color: black;            /* Colore del testo della selezione */
-            }
-        """)
+        self.plst.setStyleSheet(stile_liste)
         self.playPlaylist = QPushButton(self)
         self.playPlaylist.setIcon(QIcon(get_resource_file(__file__, 'icone', 'play.png')))
         self.playPlaylist.clicked.connect(self.play_playlist)
@@ -333,6 +346,10 @@ class MusicIndexDlg(QDialog):
 
         self.tab.addWidget(self.pix)
         self.tab.addWidget(wd)
+        self.toggle_switch.setEnabled(False)
+        self.plst.model().rowsInserted.connect(self.check_playlist_state)
+        self.plst.model().rowsRemoved.connect(self.check_playlist_state)
+        self.plst.model().modelReset.connect(self.check_playlist_state)
 
         wd1 = QWidget(self)
         hv = QHBoxLayout(wd1)
@@ -351,10 +368,28 @@ class MusicIndexDlg(QDialog):
 
         self.te.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+        self.setStyleSheet("""
+                    MusicIndexDlg {
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                                                    stop:0 #f0f0f0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
+                    }
+                    QSplitter::handle {
+                        background-color: #b0b0b0;
+                        border-left: 1px solid #777777; /* Ombra interna a sinistra */
+                        border-right: 1px solid #ffffff; /* Luce a destra per l'effetto 3D */
+                        width: 4px;
+                        height: 4px;
+                    }
+                """)
+
+
     def showEvent(self, event):
         super().showEvent(event)
         # Ogni volta che questa pagina viene mostrata, prendi il fuoco
         self.te.setFocus()
+        if not self.albums.selectedItems():
+            self.set_placeholder(self.pix)
+
 
     def list_search(self):
         txt = self.te.text()
@@ -546,9 +581,11 @@ class MusicIndexDlg(QDialog):
         self.music.artists_ready.connect(self.set_artists)
         self.res = self.music.init(self.last_folder)
         if self.res == self.music.NO_FOLDER or self.res == self.music.NO_FILE:
+            self.appctx.mainWindow.finalize_show()
             self.print('La cartella indicata non esiste o non contiene file')
             return
         elif self.res == Music.NO_INDEX or self.res == Music.OLD_INDEX:
+            self.appctx.mainWindow.finalize_show()
             if not yesNoMessage('indice non valido', "vuoi rigenerare l'indice?"):
                 return
             self.music.index(self.print, self.last_folder)
@@ -638,6 +675,7 @@ class MusicIndexDlg(QDialog):
         if len(items) > 0:
             self.albums.clear()
             self.tracks.clear()
+            self.set_placeholder(self.pix)
             t = items[0].text()
             albums = self.music.find_albums(t)
             albums_title = [d.title for d in
@@ -656,6 +694,32 @@ class MusicIndexDlg(QDialog):
             tracks = self.music.find_tracks(album_title, artist_name)
             self.get_track_pix(album_title, artist_name, self.pix)
             self.tracks.addItems(a for a in tracks)
+            self.switch_to_page(0)
+
+    def set_placeholder(self, pix_label):
+        # Cambia 'cd.png' con il nome esatto del tuo file nella cartella 'icone'
+        placeholder_path = get_resource_file(__file__, 'icone', 'vinyl.png')
+        #placeholder_path = get_resource_file(__file__, 'icone', 'cd.png')
+        qp = QPixmap(placeholder_path)
+
+        if not qp.isNull():
+            # Aggiunto SmoothTransformation per una migliore resa visiva dell'icona
+            pix_label.setPixmap(qp.scaled(pix_label.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                          Qt.TransformationMode.SmoothTransformation))
+            pix_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        else:
+            # Fallback se non trova il file immagine
+            pix_label.clear()
+            pix_label.setText("Nessun album")
+            pix_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def check_playlist_state(self, *args):
+        has_items = self.plst.count() > 0
+        self.toggle_switch.setEnabled(has_items)
+
+        # Se la playlist si svuota e ci troviamo sulla vista playlist (1),
+        # forziamo il ritorno alla vista copertina (0)
+        if not has_items and self.tab.currentIndex() == 1:
             self.switch_to_page(0)
 
     def get_track_pix(self, album_title, artist_name, pix):

@@ -100,18 +100,21 @@ class Player(FramelessDialog):
         ini = iniConf(AppConfig, case_sensitive=True)
         cache = Cache(ini)
         self.appCtx = AppContext(ini, cache, tmpObj=TemporaryDirectory, mainW=self)
-        #self.file_da_riprodurre = file_da_riprodurre
         self.splash = splash
         self.mi = None
 
         # Imposta lo sfondo nero e, opzionalmente, il testo bianco per leggibilità
         self.setObjectName("MainFrame")
         self.setStyleSheet("""
-            #MainFrame {
-                background-color: white;
-                border: 1px black;
-            }
-        """)
+                    #MainFrame {
+                        /* Se vuoi che anche lo sfondo dietro ai tab sia metallico */
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                                                    stop:0 #f0f0f0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
+
+                        /* Bordo grigio metallizzato scuro che si integra con lo sfondo */
+                        border: 1px solid #777777; 
+                    }
+                """)
 
         self.background_mode = False
         self.bt_connected = False
@@ -220,20 +223,24 @@ class Player(FramelessDialog):
     def show(self):
         # 1. Esegui il caricamento pesante MENTRE lo splash è l'unica cosa visibile
         self.dlg.process()
+        self.finalize_show()
 
-        # 2. Ora che i widget sono popolati in memoria, mostra la finestra principale
-        QMainWindow.show(self)
-        self.raise_()  # Porta in primo piano
-        self.activateWindow()  # Attiva la finestra
-        self.setWindowState(
-            self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+    def finalize_show(self):
+        """Mostra la finestra principale e chiude lo splash screen."""
+        if not self.isVisible():
+            # 2. Ora che i widget sono popolati in memoria, mostra la finestra principale
+            QMainWindow.show(self)
+            self.raise_()  # Porta in primo piano
+            self.activateWindow()  # Attiva la finestra
+            self.setWindowState(
+                self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
 
-        # 3. Forza PyQt a disegnare immediatamente a schermo la finestra popolata
-        QApplication.processEvents()
+            # 3. Forza PyQt a disegnare immediatamente a schermo la finestra popolata
+            QApplication.processEvents()
 
-        # 4. Solo ora chiudi lo splash screen passandogli il "testimone" (la main window)
-        if self.splash:
-            self.splash.finish(self)
+            # 4. Solo ora chiudi lo splash screen passandogli il "testimone" (la main window)
+            if self.splash:
+                self.splash.finish(self)
 
     def createTabBar(self):
         tool = QToolBar()
