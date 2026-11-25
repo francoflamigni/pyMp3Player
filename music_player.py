@@ -377,11 +377,15 @@ class MusicPlayerDlg(QDialog):
                 self.listplayer.pause()
             else:
                 self.mediaplayer.pause()
+                self.mediaplayer.set_hwnd(0)
             self.set_play_icon(MusicPlayerDlg.Status_Play)
             self.is_paused = True
             self.timer.stop()
             self.animation_pause()
+            self._release_windows_sleep_lock()
         else:
+            # Riaggancia la finestra dello spettro prima di riprendere
+            self.mediaplayer.set_hwnd(int(self.videoframe.winId()))
             if self.mode == MusicPlayerDlg.Mode_Cd:
                 self.listplayer.play()
             else:
@@ -410,6 +414,8 @@ class MusicPlayerDlg(QDialog):
         self.animation_pause()
         if self.radio_info:
             self.radio_info.stop()
+
+        self._release_windows_sleep_lock()
 
     def skip(self, inc):
         self.mediaplayer.stop()
@@ -479,12 +485,30 @@ class MusicPlayerDlg(QDialog):
                 self.cover.setPixmap(pixmap.scaled(self.cover.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
     def cleanup_resources(self):
-        """
-        Metodo garantito per essere eseguito alla chiusura dell'intera applicazione.
-        Libera le risorse di VLC prima che Python distrugga gli oggetti.
-        """
+        """Libera le risorse di VLC prima che Python distrugga gli oggetti."""
+        self.mediaplayer.set_hwnd(0)
         self.stop()
         self.busy = False
+        try:
+            if self.listplayer:
+                self.listplayer.release()
+                self.listplayer = None
+            if self.mediaplayer:
+                self.mediaplayer.release()
+                self.mediaplayer = None
+            if self.instance:
+                self.instance.release()
+                self.instance = None
+        except Exception:
+            pass
+        self._release_windows_sleep_lock()
+
+    def _release_windows_sleep_lock(self):
+        """Resetta eventuali flag DISPLAY_REQUIRED / SYSTEM_REQUIRED su Windows."""
+        import sys
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)  # ES_CONTINUOUS
 
     def on_track_end(self, event):
         if self.mode != MusicPlayerDlg.Mode_Cd:

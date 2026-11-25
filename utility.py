@@ -628,8 +628,9 @@ class IdleTimeout:
 
     def stop_idle_timer(self):
         try:
-            self.idle_timer.timeout.disconnect()
-            #self.idle_timer.stop()
+            if self.idle_timer:
+                self.idle_timer.stop()
+                self.idle_timer.timeout.disconnect()
         except:
             pass
 

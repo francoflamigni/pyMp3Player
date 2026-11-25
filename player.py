@@ -610,32 +610,46 @@ class Player(FramelessDialog):
                 self.dlg.setPlaylist(lst)
 
     def closeEvent(self, event):
-        '''
-        self.server.close()  # Smette di accettare nuove connessioni
-        QLocalServer.removeServer(self.server_name)
-        self.appCtx.temp_dir_obj.cleanup()
-        '''
-        super().closeEvent(event)
+        # 1. Nasconde immediatamente la finestra per un feedback visivo istantaneo
+        self.hide()
+        QApplication.processEvents()
+
+        self.cleanup_resources()
+        event.accept()
+        QApplication.quit()
+        # Garanzia definitiva contro processi fantasma su Windows
+        os._exit(0)
 
     def cleanup_resources(self):
-        # 1. Ferma il timer e il thread del Bluetooth
+        # Evita doppia esecuzione (da closeEvent e aboutToQuit)
+        if getattr(self, '_cleaned_up', False):
+            return
+        self._cleaned_up = True
+
+        # 1. Ferma e rilascia subito VLC (sblocca DISPLAY e SYSTEM su Windows)
+        if hasattr(self, 'ply') and self.ply:
+            self.ply.cleanup_resources()
+
+        # 2. Ferma il timer e il thread del Bluetooth
         if hasattr(self, 'bt_status_timer'):
             self.bt_status_timer.stop()
 
         if hasattr(self, 'bt_menu_worker') and self.bt_menu_worker.isRunning():
             self.bt_menu_worker.quit()
-            self.bt_menu_worker.wait(500)
+            #self.bt_menu_worker.wait(500)
 
-        # 2. Ferma il timer di inattività
+        # 3. Ferma il timer di inattività
         if hasattr(self, 'idle_timer') and self.idle_timer:
             self.idle_timer.stop_idle_timer()
+            if hasattr(self.idle_timer, 'global_event_filter'):
+                QApplication.instance().removeEventFilter(self.idle_timer.global_event_filter)
 
-        # 3. Chiudi il server IPC
+        # 4. Chiudi il server IPC
         if hasattr(self, 'server'):
             self.server.close()
         QLocalServer.removeServer(self.server_name)
 
-        # 4. Pulisci la cartella temporanea in sicurezza
+        # 5. Pulisci la cartella temporanea in sicurezza
         try:
             self.appCtx.temp_dir_obj.cleanup()
         except:
